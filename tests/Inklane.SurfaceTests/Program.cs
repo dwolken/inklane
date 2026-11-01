@@ -46,6 +46,7 @@ internal static class Program
         Run("Typed text edits persist Unicode and multiline content", EditableText);
         Run("Expanded note text and anchor survive collapse and reload", NoteRoundTrip);
         Run("Note marker and editor retain readable size at different zooms", NoteReadability);
+        Run("Expanded lower-page notes stay inside the visible viewport during fit, resize and pan", NoteViewportPlacement);
         Run("Object drag uses page coordinates and canceled drag rolls back", ObjectMovement);
         Run("Selected ink deletion updates editable model", InkDeletion);
         Run("Collected native ink serializes an accepted RGB color", InkCollection);
@@ -202,6 +203,38 @@ internal static class Program
         grip.RaiseEvent(new DragDeltaEventArgs(100, 100) { RoutedEvent = Thumb.DragDeltaEvent });
         grip.RaiseEvent(new DragCompletedEventArgs(100, 100, true) { RoutedEvent = Thumb.DragCompletedEvent });
         Near(x + 20, item.X); Near(y + 30, item.Y); Equal(1, changes);
+    }
+
+    private static void NoteViewportPlacement()
+    {
+        var page = Sample(); page.Items[1].Y = 550;
+        var surface = Surface(page); var original = State(page); var changes = 0;
+        surface.Changed += (_, _) => changes++;
+        var editor = Editor(surface, "Note");
+        var card = (Border)VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(editor));
+        var marker = Descendants(surface).OfType<Button>().Single(b => AutomationProperties.GetName(b) == L.T("Note"));
+        var scroll = (ScrollViewer)Field(surface, "_scroll")!;
+        void CheckBounds()
+        {
+            surface.UpdateLayout();
+            var bounds = card.TransformToAncestor(surface).TransformBounds(new Rect(card.RenderSize));
+            Assert(bounds.Left >= 7.9 && bounds.Top >= 7.9 && bounds.Right <= scroll.ViewportWidth - 7.9 && bounds.Bottom <= scroll.ViewportHeight - 7.9,
+                $"Expanded card is outside the viewport: card={bounds}, viewport={scroll.ViewportWidth}×{scroll.ViewportHeight}.");
+            var markerBounds = marker.TransformToAncestor(surface).TransformBounds(new Rect(marker.RenderSize));
+            Assert(!bounds.IntersectsWith(markerBounds), "Card covers its marker despite available horizontal room.");
+        }
+        foreach (var size in new[] { new Size(960, 440), new Size(760, 240), new Size(760, 180) })
+        {
+            surface.Width = size.Width; surface.Height = size.Height;
+            surface.Measure(size); surface.Arrange(new Rect(size)); surface.UpdateLayout();
+            surface.FitToPage(); CheckBounds();
+        }
+        surface.Height = 440; surface.Measure(new Size(760, 440)); surface.Arrange(new Rect(0, 0, 760, 440));
+        surface.Zoom = 1.5; surface.UpdateLayout();
+        scroll.ScrollToVerticalOffset(450); scroll.ScrollToHorizontalOffset(200); surface.UpdateLayout(); CheckBounds();
+        Equal(original, State(page)); Equal(0, changes);
+        surface.FitToPage(); surface.UpdateLayout(); CheckBounds();
+        RenderContent(surface, Brushes.LightGray, "note-viewport-placement.png");
     }
 
     private static void InkDeletion()

@@ -109,6 +109,7 @@ public sealed class DocumentSurface : UserControl
             Focusable = false
         };
         Content = _scroll;
+        _scroll.ScrollChanged += (_, e) => { if (e.OriginalSource == _scroll) PositionNotes(); };
         _ink.StrokeCollected += (_, _) => SyncInkAndNotify();
         _ink.StrokeErased += (_, _) => SyncInkAndNotify();
         _ink.SelectionMoved += (_, _) => SyncInkAndNotify();
@@ -219,13 +220,14 @@ public sealed class DocumentSurface : UserControl
         _zoom = next;
         _scale.ScaleX = next;
         _scale.ScaleY = next;
-        foreach (var visual in _items.Values.Where(v => v.Item.IsNote)) PositionItem(visual);
+        _scroll.UpdateLayout();
         if (focus is { } anchor)
         {
-            _scroll.UpdateLayout();
             _scroll.ScrollToHorizontalOffset((oldX + anchor.X) * ratio - anchor.X);
             _scroll.ScrollToVerticalOffset((oldY + anchor.Y) * ratio - anchor.Y);
         }
+        _scroll.UpdateLayout();
+        PositionNotes();
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -662,6 +664,12 @@ public sealed class DocumentSurface : UserControl
         NotifyChanged();
     }
 
+    private void PositionNotes()
+    {
+        foreach (var visual in _items.Values)
+            if (visual.Item.IsNote) PositionItem(visual);
+    }
+
     private void PositionItem(ItemVisual visual)
     {
         if (_page is null) return;
@@ -679,26 +687,33 @@ public sealed class DocumentSurface : UserControl
         // the document while the marker and editor remain a readable UI size.
         visual.Root.RenderTransform = new ScaleTransform(1 / _zoom, 1 / _zoom);
         visual.Marker!.RenderTransform = new ScaleTransform(1 / _zoom, 1 / _zoom);
-        var cardWidth = item.Width / _zoom;
-        var cardHeight = (item.Height + 32) / _zoom;
+        // A readable card can be larger than a fitted page. Constrain it to
+        // the visible workspace, not to the physical paper, so it cannot fall
+        // behind the status bar. All placement remains in page coordinates.
+        var origin = _pageHost.TranslatePoint(default, _scroll);
+        var viewportWidth = _scroll.ViewportWidth > 0 ? _scroll.ViewportWidth : _page.Width * _zoom + 64;
+        var viewportHeight = _scroll.ViewportHeight > 0 ? _scroll.ViewportHeight : _page.Height * _zoom + 64;
+        var view = new Rect((8 - origin.X) / _zoom, (8 - origin.Y) / _zoom,
+            Math.Max(1, viewportWidth - 16) / _zoom, Math.Max(1, viewportHeight - 16) / _zoom);
+        visual.Root.Width = Math.Min(item.Width, Math.Max(40, viewportWidth - 16));
+        visual.Editor.Height = Math.Min(Math.Clamp(item.Height, 100, 300), Math.Max(32, viewportHeight - 48));
+        var cardWidth = visual.Root.Width / _zoom;
+        var cardHeight = (visual.Editor.Height + 32) / _zoom;
         var gap = 8 / _zoom;
-        var cardX = item.X + 36 / _zoom;
-        var cardY = Math.Clamp(item.Y, gap, Math.Max(gap, _page.Height - cardHeight - gap));
-        if (cardX + cardWidth > _page.Width - gap)
+        var markerSize = 28 / _zoom;
+        double X(double value) => Math.Clamp(value, view.Left, Math.Max(view.Left, view.Right - cardWidth));
+        double Y(double value) => Math.Clamp(value, view.Top, Math.Max(view.Top, view.Bottom - cardHeight));
+        var candidates = new[]
         {
-            cardX = item.X - cardWidth - gap;
-            if (cardX < gap)
-            {
-                // A fitted portrait page may be narrower than a card plus its
-                // marker. Put the card below/above so neither covers the other.
-                cardX = Math.Clamp(item.X, gap, Math.Max(gap, _page.Width - cardWidth - gap));
-                cardY = item.Y + 36 / _zoom;
-                if (cardY + cardHeight > _page.Height - gap && item.Y - cardHeight - gap >= gap)
-                    cardY = item.Y - cardHeight - gap;
-            }
-        }
-        Canvas.SetLeft(visual.Root, cardX);
-        Canvas.SetTop(visual.Root, cardY);
+            new Point(item.X + markerSize + gap, Y(item.Y)),
+            new Point(item.X - cardWidth - gap, Y(item.Y)),
+            new Point(X(item.X), item.Y + markerSize + gap),
+            new Point(X(item.X), item.Y - cardHeight - gap)
+        };
+        var position = candidates.FirstOrDefault(p => view.Contains(new Rect(p, new Size(cardWidth, cardHeight))),
+            new Point(X(candidates[0].X), Y(candidates[0].Y)));
+        Canvas.SetLeft(visual.Root, position.X);
+        Canvas.SetTop(visual.Root, position.Y);
         visual.Root.Visibility = item.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
         Panel.SetZIndex(visual.Root, item.IsExpanded ? 10 : 0);
         Panel.SetZIndex(visual.Marker!, 11);
