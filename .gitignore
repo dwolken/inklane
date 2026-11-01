@@ -12,3 +12,10 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+
+# .NET build and distribution output
+**/bin/
+**/obj/
+artifacts/
+.vs/
+*.user

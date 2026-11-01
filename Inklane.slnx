@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Inklane.Core/Inklane.Core.csproj" />
+    <Project Path="src/Inklane/Inklane.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Inklane.LifecycleTests/Inklane.LifecycleTests.csproj" />
+    <Project Path="tests/Inklane.SurfaceTests/Inklane.SurfaceTests.csproj" />
+    <Project Path="tests/Inklane.Tests/Inklane.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,64 @@
+using System.Globalization;
+
+namespace Inklane;
+
+public static class L
+{
+    public static string Language { get; private set; } = "en";
+    public static string ResolveLanguage(string requested, string windowsLanguage) =>
+        (requested == "System" ? windowsLanguage : requested).StartsWith("de", StringComparison.OrdinalIgnoreCase) ? "de" : "en";
+    public static void Initialize(string requested) => Language = ResolveLanguage(requested, CultureInfo.InstalledUICulture.Name);
+    public static string T(string key) => Strings.TryGetValue(key, out var value) ? (Language == "de" ? value.De : value.En) : key;
+    public static string F(string key, params object[] values) => string.Format(CultureInfo.CurrentCulture, T(key), values);
+    private static readonly Dictionary<string, (string En, string De)> Strings = new()
+    {
+        ["File"] = ("_File", "_Datei"), ["Edit"] = ("_Edit", "_Bearbeiten"), ["View"] = ("_View", "_Ansicht"), ["Help"] = ("_Help", "_Hilfe"),
+        ["NewNotebook"] = ("New notebook", "Neues Notizbuch"), ["Open"] = ("Open…", "Öffnen…"), ["Save"] = ("Save", "Speichern"),
+        ["SaveAs"] = ("Save as…", "Speichern unter…"), ["ExportImage"] = ("Export annotated PNG…", "Kommentiertes PNG exportieren…"),
+        ["ExportJson"] = ("Export annotation data…", "Anmerkungsdaten exportieren…"), ["Print"] = ("Print…", "Drucken…"), ["Exit"] = ("Exit", "Beenden"),
+        ["Undo"] = ("Undo", "Rückgängig"), ["Redo"] = ("Redo", "Wiederholen"), ["Delete"] = ("Delete selection", "Auswahl löschen"),
+        ["Appearance"] = ("Appearance", "Darstellung"), ["Language"] = ("Language", "Sprache"), ["System"] = ("Use Windows setting", "Windows-Einstellung"),
+        ["Light"] = ("Light", "Hell"), ["Dark"] = ("Dark", "Dunkel"), ["Shortcuts"] = ("Keyboard shortcuts", "Tastenkombinationen"), ["About"] = ("About Inklane", "Über Inklane"),
+        ["Pen"] = ("Pen", "Stift"), ["Select"] = ("Select", "Auswählen"), ["Eraser"] = ("Eraser", "Radierer"), ["Text"] = ("Text", "Text"), ["Note"] = ("Note", "Notiz"), ["Pan"] = ("Pan", "Verschieben"),
+        ["Color"] = ("Color", "Farbe"), ["Width"] = ("Stroke", "Strich"), ["TextSize"] = ("Text size", "Textgröße"),
+        ["Black"] = ("Ink", "Schwarz"), ["Blue"] = ("Blue", "Blau"), ["Red"] = ("Red", "Rot"), ["Green"] = ("Green", "Grün"), ["Purple"] = ("Purple", "Violett"),
+        ["Previous"] = ("Previous", "Zurück"), ["Next"] = ("Next", "Weiter"), ["AddPage"] = ("Add page", "Seite hinzufügen"), ["RemovePage"] = ("Remove page", "Seite entfernen"),
+        ["Paper"] = ("Paper…", "Papier…"), ["Page"] = ("Page {0} of {1}", "Seite {0} von {1}"), ["ImageNumber"] = ("Image {0} of {1}", "Bild {0} von {1}"),
+        ["Untitled"] = ("Untitled notebook", "Unbenanntes Notizbuch"), ["Notebook"] = ("NOTEBOOK", "NOTIZBUCH"), ["Image"] = ("IMAGE", "BILD"),
+        ["Fit"] = ("Fit page", "Seite einpassen"), ["ZoomIn"] = ("Zoom in", "Vergrößern"), ["ZoomOut"] = ("Zoom out", "Verkleinern"), ["Saved"] = ("Saved", "Gespeichert"),
+        ["Ready"] = ("Ready", "Bereit"), ["Unsaved"] = ("Unsaved changes", "Ungespeicherte Änderungen"), ["Saving"] = ("Saving…", "Wird gespeichert…"),
+        ["SavePrompt"] = ("Save changes to “{0}” before continuing?", "Änderungen an „{0}“ vor dem Fortfahren speichern?"),
+        ["Discard"] = ("Discard changes", "Änderungen verwerfen"), ["Cancel"] = ("Cancel", "Abbrechen"), ["Create"] = ("Create notebook", "Notizbuch erstellen"), ["Apply"] = ("Apply", "Übernehmen"),
+        ["Format"] = ("Page size", "Seitenformat"), ["Orientation"] = ("Orientation", "Ausrichtung"), ["Portrait"] = ("Portrait", "Hochformat"), ["Landscape"] = ("Landscape", "Querformat"),
+        ["Pattern"] = ("Paper pattern", "Papiermuster"), ["Blank"] = ("Blank", "Leer"), ["Ruled"] = ("Ruled", "Liniert"), ["Squared"] = ("Squared", "Kariert"),
+        ["Spacing"] = ("Spacing", "Abstand"), ["Custom"] = ("Custom…", "Benutzerdefiniert…"), ["CustomSpacing"] = ("Custom spacing (mm)", "Eigener Abstand (mm)"),
+        ["Margin"] = ("Margin (mm)", "Rand (mm)"), ["InvalidPaper"] = ("Enter spacing from 1 to 100 mm and a margin from 0 to 60 mm.", "Abstand von 1 bis 100 mm und Rand von 0 bis 60 mm eingeben."),
+        ["RemovePagePrompt"] = ("Remove this page and its annotations? You can undo this change.", "Diese Seite und ihre Anmerkungen entfernen? Die Änderung lässt sich rückgängig machen."),
+        ["LastPage"] = ("A notebook must contain at least one page.", "Ein Notizbuch muss mindestens eine Seite enthalten."),
+        ["Error"] = ("Could not complete the operation", "Vorgang konnte nicht abgeschlossen werden"),
+        ["DocumentLimit"] = ("This edit exceeds the document limits. Inklane restored the previous undo checkpoint. Save your work and continue in a new notebook.", "Diese Änderung überschreitet die Dokumentgrenzen. Inklane hat den vorherigen Rückgängig-Stand wiederhergestellt. Speichern Sie Ihre Arbeit und fahren Sie in einem neuen Notizbuch fort."),
+        ["OpenFailed"] = ("The file could not be opened. Your current document is still available.", "Die Datei konnte nicht geöffnet werden. Ihr aktuelles Dokument ist weiterhin verfügbar."),
+        ["SaveFailed"] = ("The document could not be saved. Your changes are still in this window. Try Save as to another folder.", "Das Dokument konnte nicht gespeichert werden. Ihre Änderungen sind weiterhin in diesem Fenster. Versuchen Sie „Speichern unter“ in einem anderen Ordner."),
+        ["UnsupportedPdf"] = ("This document is unsupported or was changed by another application. Inklane reopens its own unmodified notebook PDFs and annotation data. Keep externally edited PDFs in your PDF reader.", "Dieses Dokument wird nicht unterstützt oder wurde von einer anderen Anwendung geändert. Inklane öffnet eigene, unveränderte Notizbuch-PDFs und Anmerkungsdaten. Verwenden Sie für extern bearbeitete PDFs Ihr PDF-Programm."),
+        ["ImageChanged"] = ("The original image has changed or is missing. These annotations belong to the previous image. You can export annotation data to keep work already open in this window.", "Das Originalbild wurde geändert oder fehlt. Diese Anmerkungen gehören zum vorherigen Bild. Bereits geöffnete Arbeit können Sie über „Anmerkungsdaten exportieren“ sichern."),
+        ["WrongExtension"] = ("Use a filename ending in {0} for this operation.", "Verwenden Sie für diesen Vorgang einen Dateinamen mit der Endung {0}."),
+        ["ProtectDocument"] = ("Choose a different filename for the export. Use Save to update the current document.", "Wählen Sie für den Export einen anderen Dateinamen. Mit „Speichern“ aktualisieren Sie das aktuelle Dokument."),
+        ["ExternalChange"] = ("This file has changed outside Inklane. Save a separate copy to keep both versions.", "Diese Datei wurde außerhalb von Inklane geändert. Speichern Sie eine separate Kopie, um beide Versionen zu behalten."),
+        ["ProtectOriginal"] = ("Choose a different filename. The original image is protected.", "Wählen Sie einen anderen Dateinamen. Das Originalbild ist geschützt."),
+        ["Recovery"] = ("Recover unsaved work", "Ungespeicherte Arbeit wiederherstellen"),
+        ["RecoveryPrompt"] = ("Inklane found unsaved work from {0}. Restore it?", "Inklane hat ungespeicherte Arbeit vom {0} gefunden. Wiederherstellen?"),
+        ["Restore"] = ("Restore", "Wiederherstellen"), ["RecoveryFailed"] = ("Recovery could not be written. Save your document to keep your changes.", "Die Wiederherstellungskopie konnte nicht geschrieben werden. Speichern Sie Ihr Dokument."),
+        ["UnexpectedError"] = ("Inklane encountered an unexpected error and needs to close. The latest recovery copy is kept; restart Inklane to restore it.", "Ein unerwarteter Fehler ist aufgetreten. Inklane muss geschlossen werden. Die letzte Wiederherstellungskopie bleibt erhalten; starten Sie Inklane erneut."),
+        ["LanguageRestart"] = ("The language will change the next time Inklane starts.", "Die Sprache wird beim nächsten Start von Inklane geändert."),
+        ["CollapseNote"] = ("Collapse note", "Notiz einklappen"), ["ExpandNote"] = ("Expand note", "Notiz ausklappen"), ["MoveItem"] = ("Move", "Verschieben"), ["DeleteItem"] = ("Delete", "Löschen"), ["PageCanvas"] = ("Document canvas", "Dokumentfläche"),
+        ["OpenFilter"] = ("Supported documents|*.pdf;*.png;*.jpg;*.jpeg;*.json|Inklane notebooks|*.pdf|Images|*.png;*.jpg;*.jpeg|Annotation data|*.json", "Unterstützte Dokumente|*.pdf;*.png;*.jpg;*.jpeg;*.json|Inklane-Notizbücher|*.pdf|Bilder|*.png;*.jpg;*.jpeg|Anmerkungsdaten|*.json"),
+        ["PdfFilter"] = ("PDF notebook|*.pdf", "PDF-Notizbuch|*.pdf"), ["JsonFilter"] = ("Inklane annotation data|*.json", "Inklane-Anmerkungsdaten|*.json"), ["PngFilter"] = ("PNG image|*.png", "PNG-Bild|*.png"),
+        ["PenHint"] = ("Draw with your pen or mouse · Ctrl+wheel to zoom", "Mit Stift oder Maus zeichnen · Strg+Mausrad zum Zoomen"),
+        ["SelectHint"] = ("Drag around ink to select · Drag a text or note handle to move", "Tinte durch Ziehen auswählen · Text und Notizen am Griff verschieben"),
+        ["TextHint"] = ("Click the page to add text · Click existing text to edit", "Auf die Seite klicken für neuen Text · Bestehenden Text anklicken zum Bearbeiten"),
+        ["NoteHint"] = ("Click to anchor a note · Use its marker to expand or collapse", "Klicken, um eine Notiz zu verankern · Über die Markierung ein- und ausklappen"),
+        ["EraserHint"] = ("Touch an ink stroke to erase it", "Einen Tintenstrich berühren, um ihn zu löschen"), ["PanHint"] = ("Drag the page to pan · Ctrl+wheel to zoom", "Seite zum Verschieben ziehen · Strg+Mausrad zum Zoomen"),
+        ["AboutText"] = ("Inklane 0.1.0-alpha.1\nLocal image annotation and printable notebooks.\n\nOriginal images are preserved. Notebook PDFs contain editable Inklane data and standard annotations. Other PDF editors may display annotations differently; third-party edits are not imported.\n\nUnsigned Windows x64 alpha. Pen pressure and physical printer output require device validation.", "Inklane 0.1.0-alpha.1\nLokale Bildanmerkungen und druckbare Notizbücher.\n\nOriginalbilder bleiben erhalten. Notizbuch-PDFs enthalten bearbeitbare Inklane-Daten und Standardanmerkungen. Andere PDF-Programme können Anmerkungen anders darstellen; externe Änderungen werden nicht importiert.\n\nUnsignierte Windows-x64-Alpha. Stiftdruck und physischer Druck müssen noch an Geräten geprüft werden."),
+        ["ShortcutText"] = ("Ctrl+N   New notebook\nCtrl+O   Open image or notebook\nCtrl+S   Save\nCtrl+Shift+S   Save as\nCtrl+P   Print\nCtrl+Z / Ctrl+Y   Undo / Redo\nDelete   Delete selection\nCtrl+0   Fit page\nCtrl+plus / Ctrl+minus   Zoom\nAlt+Left / Alt+Right   Previous / Next\n\nWhen not typing: P Pen · V Select · E Eraser · T Text · N Note · H Pan\nUse Tab and Shift+Tab to move between controls.", "Strg+N   Neues Notizbuch\nStrg+O   Bild oder Notizbuch öffnen\nStrg+S   Speichern\nStrg+Umschalt+S   Speichern unter\nStrg+P   Drucken\nStrg+Z / Strg+Y   Rückgängig / Wiederholen\nEntf   Auswahl löschen\nStrg+0   Seite einpassen\nStrg+Plus / Strg+Minus   Zoom\nAlt+Links / Alt+Rechts   Zurück / Weiter\n\nAußerhalb der Texteingabe: P Stift · V Auswählen · E Radierer · T Text · N Notiz · H Verschieben\nTab und Umschalt+Tab wechseln zwischen Bedienelementen."),
+    };
+}
