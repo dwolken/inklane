@@ -1,11 +1,13 @@
-# Inklane 0.1.0-alpha.1
+# Inklane 1.0.0-rc.1
 
-Initial private Windows 11 x64 evaluation release.
+Windows 11 x64 release candidate for product acceptance.
 
-Includes PNG/JPEG folder viewing with editable JSON annotations; A4/A5 PDF notebooks with millimeter-based paper patterns; mouse/stylus ink, editable text, anchored expandable notes, selection/movement/erasing, undo/redo, local recovery, English/German UI, and system/light/dark appearance.
+Download **Inklane-Setup-1.0.0-rc.1-x64.exe**, run it and choose Install. Launch Inklane from Start. Setup installs for the current user and includes the desktop runtime. The portable ZIP is an alternative for running from an extracted folder. Both downloads have SHA-256 checksums. The binaries are unsigned.
 
-Extract the entire ZIP and run `Inklane.exe`. The .NET runtime is included. The executable is unsigned; this is a portable alpha, not an installed or production-certified application.
+Start with **Open an image** or **New notebook**. Ink, text and numbered note cards share one document workspace. A searchable notes panel jumps across notebook pages and returns to the selected detail. Paper setup previews A4/A5 geometry and line spacing. Editing starts at a writing scale, with fit-width, fit-page and manual zoom available.
 
-The release workflow builds and runs the persistence, WPF surface and document-lifecycle suites, starts the packaged application, and checks that it loads its own bundled runtime. The repository's validation record distinguishes automated checks from actual desktop inspection and untested devices.
+Existing alpha notebooks and image sidecars remain supported. Notebook PDFs retain standard annotations and editable Inklane data. For a flattened image, export PNG. For physical output, select the appropriate paper and orientation in Windows Print.
 
-Known boundaries: only Inklane notebooks reopen for PDF editing; external PDF edits are not merged. Third-party viewers vary in annotation support and do not reproduce note cards. Physical pen pressure, printer hardware, Narrator and mixed-monitor DPI transitions remain unverified. Print output uses 150 DPI rasterization. PDFsharp 6.2.4 is pinned under MIT and is no longer maintained upstream. Keep backups of important documents while evaluating this alpha.
+The candidate underwent live Windows editing and visual inspection, numerical PDF and virtual-print checks, package startup checks, and real per-user installation, upgrade and removal. See the repository validation record for measurements and test boundaries.
+
+Windows signing, physical pen and printer qualification, Narrator, mixed-monitor transitions, and a separate clean Windows 11 machine remain open. PDFsharp 6.2.4 is pinned to its MIT-licensed branch, whose upstream maintenance has ended. Product acceptance precedes a stable 1.0.0 release.

@@ -27,12 +27,17 @@ internal static class Program
     private static int _failures;
     private static int _checks;
     private static string _output = "";
+    private static string _fixtures = "";
 
     [STAThread]
     private static int Main(string[] args)
     {
         _output = Path.GetFullPath(args.FirstOrDefault() ?? ".scratch/surface-test-output");
         Directory.CreateDirectory(_output);
+        var run = Path.Combine(_output, "runs", Guid.NewGuid().ToString("N"));
+        _fixtures = Path.Combine(run, "documents");
+        Directory.CreateDirectory(_fixtures);
+        Environment.SetEnvironmentVariable("INKLANE_DATA_HOME", Path.Combine(run, "profile"));
         // A plain Application avoids invoking product startup/settings/recovery
         // when a real modal dialog enters its nested dispatcher below.
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown, ThemeMode = ThemeMode.System };
@@ -46,6 +51,8 @@ internal static class Program
         Run("Typed text edits persist Unicode and multiline content", EditableText);
         Run("Expanded note text and anchor survive collapse and reload", NoteRoundTrip);
         Run("Note marker and editor retain readable size at different zooms", NoteReadability);
+        Run("Numbered note reveal scrolls to the anchor and preserves identity", NoteReveal);
+        Run("Searching the index reveals a note on another page and restores the first view", NoteIndexNavigation);
         Run("Expanded lower-page notes stay inside the visible viewport during fit, resize and pan", NoteViewportPlacement);
         Run("Object drag uses page coordinates and canceled drag rolls back", ObjectMovement);
         Run("Selected ink deletion updates editable model", InkDeletion);
@@ -60,6 +67,7 @@ internal static class Program
         Run("Paper dialog rejects invalid custom values and preserves millimeters", PaperCustom);
         Run("Workspace controls fit small and large layouts in both languages", ResponsiveLayout);
         Run("Editing fit opens a readable upper page while full-page fit remains available", EditingFit);
+        Run("View presets resize, manual zoom stays fixed, and page navigation restores position", ViewRestoration);
         Run("All localized strings have complete values and matching placeholders", LocalizationCoverage);
         Console.WriteLine($"{_checks - _failures}/{_checks} checks passed. Artifacts: {_output}");
         app.Shutdown();
@@ -155,11 +163,11 @@ internal static class Program
         surface.Changed += (_, _) => changes++;
         var collapse = Descendants(surface).OfType<Button>().Single(b => AutomationProperties.GetName(b) == L.T("CollapseNote"));
         collapse.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert(!note.IsExpanded, "Note did not collapse."); Equal(1, changes);
+        Assert(!note.IsExpanded, "Note did not collapse."); Equal(0, changes);
         var clone = DocumentStore.Deserialize(State(page)).Pages[0];
         surface.LoadPage(clone); Layout(surface);
         Equal(text, clone.Items[1].Text); Near(x, clone.Items[1].X); Near(y, clone.Items[1].Y);
-        var marker = Descendants(surface).OfType<Button>().Single(b => AutomationProperties.GetName(b) == L.T("Note"));
+        var marker = NoteMarker(surface);
         marker.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert(clone.Items[1].IsExpanded, "Note did not expand.");
         Equal(text, Editor(surface, "Note").Text);
@@ -168,7 +176,7 @@ internal static class Program
     private static void NoteReadability()
     {
         var page = Sample(); var surface = Surface(page);
-        var marker = Descendants(surface).OfType<Button>().Single(b => AutomationProperties.GetName(b) == L.T("Note"));
+        var marker = NoteMarker(surface);
         var editor = Editor(surface, "Note");
         var original = State(page);
         foreach (var zoom in new[] { .15, .4, 1d, 2d, 4d })
@@ -189,10 +197,45 @@ internal static class Program
         Save(bitmap, "expanded-note-workspace.png");
     }
 
+    private static void NoteReveal()
+    {
+        var page = Sample();
+        var first = page.Items.Single(i => i.IsNote);
+        var second = new TextItem { IsNote = true, IsExpanded = false, X = 670, Y = 1010,
+            Width = 280, Height = 180, Text = "Second note\nGrüße — preserved." };
+        page.Items.Add(second);
+        var surface = Surface(page);
+        surface.Zoom = 2;
+        var changes = 0;
+        surface.Changed += (_, _) => changes++;
+        var selected = new List<string?>();
+        surface.NoteSelectionChanged += (_, _) => selected.Add(surface.SelectedNoteId);
+
+        Assert(surface.RevealNote(second.Id), "Existing note could not be revealed.");
+        Equal(second.Id, surface.SelectedNoteId);
+        Assert(selected.Contains(second.Id) && second.IsExpanded, "Revealed note was not selected and expanded.");
+        var marker = Descendants(surface).OfType<Button>().Single(b => AutomationProperties.GetAutomationId(b) == "NoteMarker:" + second.Id);
+        Equal(L.F("NoteNumber", 2), AutomationProperties.GetName(marker));
+        Equal("2", marker.Content.ToString());
+        var bounds = marker.TransformToAncestor(surface).TransformBounds(new Rect(marker.RenderSize));
+        Assert(new Rect(0, 0, surface.ActualWidth, surface.ActualHeight).Contains(bounds), "Offscreen note anchor was not brought into view.");
+        Near(670, second.X); Near(1010, second.Y);
+        surface.RevealNote(second.Id);
+        Equal(0, changes);
+        Assert(!surface.RevealNote("missing"), "Unknown note reported success.");
+
+        surface.RevealNote(first.Id);
+        surface.DeleteSelection();
+        Equal("1", marker.Content.ToString());
+        Equal(L.F("NoteNumber", 1), AutomationProperties.GetName(marker));
+        Equal("Second note\nGrüße — preserved.", second.Text);
+    }
+
     private static void ObjectMovement()
     {
-        var page = Sample(); var surface = Surface(page); surface.Zoom = 1.7; Layout(surface);
-        var grip = Descendants(surface).OfType<Thumb>().First(t => AutomationProperties.GetName(t) == L.T("MoveItem"));
+        var page = Sample(); var surface = Surface(page); surface.Zoom = 1.7; surface.Tool = EditorTool.Select; Layout(surface);
+        var grip = Descendants(surface).OfType<Thumb>().Single(t => AutomationProperties.GetAutomationId(t) == "TextMove:" + page.Items[0].Id);
+        Assert(grip.Visibility == Visibility.Visible && Editor(surface, "Text").IsReadOnly, "Select mode does not expose direct text movement.");
         var item = page.Items[0]; var x = item.X; var y = item.Y; var changes = 0;
         surface.Changed += (_, _) => changes++;
         grip.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
@@ -203,6 +246,11 @@ internal static class Program
         grip.RaiseEvent(new DragDeltaEventArgs(100, 100) { RoutedEvent = Thumb.DragDeltaEvent });
         grip.RaiseEvent(new DragCompletedEventArgs(100, 100, true) { RoutedEvent = Thumb.DragCompletedEvent });
         Near(x + 20, item.X); Near(y + 30, item.Y); Equal(1, changes);
+        surface.Tool = EditorTool.Text;
+        var editor = Editor(surface, "Text");
+        Assert(grip.Visibility == Visibility.Collapsed && !editor.IsReadOnly, "Text tool cannot edit a moved object.");
+        editor.Text = "The moved text stays editable.";
+        Equal(editor.Text, item.Text); Near(x + 20, item.X); Near(y + 30, item.Y);
     }
 
     private static void NoteViewportPlacement()
@@ -212,7 +260,7 @@ internal static class Program
         surface.Changed += (_, _) => changes++;
         var editor = Editor(surface, "Note");
         var card = (Border)VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(editor));
-        var marker = Descendants(surface).OfType<Button>().Single(b => AutomationProperties.GetName(b) == L.T("Note"));
+        var marker = NoteMarker(surface);
         var scroll = (ScrollViewer)Field(surface, "_scroll")!;
         void CheckBounds()
         {
@@ -277,13 +325,21 @@ internal static class Program
         var window = new MainWindow();
         Assert(!(bool)Property(window, "IsDirty")!, "Fresh notebook is dirty.");
         Assert((bool)Call(window, "CanLeave")!, "Unchanged document cannot be left.");
+        var content = (FrameworkElement)window.Content;
+        Layout(content);
+        var imageEntry = Named<Button>(content, "OpenImage");
+        var bookEntry = Named<Button>(content, "NewNotebook");
+        Assert(IsVisibleWithin(imageEntry, content) && IsVisibleWithin(bookEntry, content), "Home is missing a workspace entry.");
+        Near(imageEntry.ActualWidth, bookEntry.ActualWidth);
+        RenderContent(content, window.Background, "home.png");
         StopTimers(window);
     }
 
     private static void PageHistory()
     {
-        var window = new MainWindow();
-        Call(window, "AddPage"); Equal(2, Document(window).Pages.Count);
+        var window = OpenNotebook();
+        Named<Button>(window.Content as DependencyObject ?? window, "AddPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Equal(2, Document(window).Pages.Count);
         Assert((bool)Property(window, "IsDirty")!, "Added page is not dirty.");
         Call(window, "Undo"); Equal(1, Document(window).Pages.Count);
         Assert(!(bool)Property(window, "IsDirty")!, "Undo to saved state remains dirty.");
@@ -293,9 +349,7 @@ internal static class Program
 
     private static void TextHistory()
     {
-        var window = new MainWindow(); var page = Sample();
-        SetField(window, "_document", new DocumentData { Pages = [page] });
-        Call(window, "ResetHistory", false); Call(window, "ShowPage", false);
+        var window = OpenNotebook(withSample: true); var page = Document(window).Pages[0];
         var surface = (DocumentSurface)Field(window, "_surface")!;
         surface.Width = 1100; surface.Height = 800; Layout(surface);
         Editor(surface, "Text").Text = "Changed in editor";
@@ -328,21 +382,20 @@ internal static class Program
         foreach (var mode in new[] { "Light", "Dark" })
         {
             Settings.Current.Appearance = mode; Appearance.Apply();
-            var window = new MainWindow();
+            var window = OpenNotebook(withSample: true);
             var content = (FrameworkElement)window.Content;
             content.Measure(new Size(1100, 800)); content.Arrange(new Rect(0, 0, 1100, 800)); content.UpdateLayout();
             var surface = (DocumentSurface)Field(window, "_surface")!;
-            surface.LoadPage(Sample()); surface.FitToPage(); content.UpdateLayout();
+            surface.FitForEditing(); content.UpdateLayout();
             var button = Descendants(content).OfType<Button>().First(b => AutomationProperties.GetName(b) == L.T("Save"));
             var combo = Descendants(content).OfType<ComboBox>().First();
             // Theme switching replaces dictionary instances. Static BasedOn
             // keeps the template; its DynamicResource brushes update in place.
-            Assert(button.Style?.BasedOn?.TargetType == typeof(ButtonBase) && button.OverridesDefaultStyle,
-                "Button lost its Fluent base style.");
+            Assert(button.Style != null && button.OverridesDefaultStyle, "Save command lost its studio button style.");
             Assert(combo.Style?.BasedOn?.TargetType == typeof(ComboBox) && combo.OverridesDefaultStyle,
                 "ComboBox lost its Fluent base style.");
-            Assert(button.Template.FindName("ContentBorder", button) is Border { CornerRadius.TopLeft: > 0 },
-                "Rounded Fluent button template is missing.");
+            Assert(button.Template.FindName("Shell", button) is Border { CornerRadius.TopLeft: > 0 },
+                "Studio command template is missing.");
             Equal("#FF352B18", Editor(surface, "Note").Foreground.ToString());
             Equal("#FF202020", Editor(surface, "Text").Foreground.ToString());
             Equal(1_000_000, Editor(surface, "Text").MaxLength);
@@ -364,18 +417,21 @@ internal static class Program
     {
         var result = WithPaperDialog("en", "Light", dialog =>
         {
-            var pattern = Named<ComboBox>(dialog, "Pattern");
+            var blank = Named<RadioButton>(dialog, "Blank");
             var spacing = Named<ComboBox>(dialog, "Spacing");
             var custom = Named<TextBox>(dialog, "CustomSpacing");
-            Equal(0, pattern.SelectedIndex);
+            Assert(blank.IsChecked == true, "Blank paper is not selected initially.");
+            foreach (var key in new[] { "Blank", "Ruled", "Squared" })
+                Assert(IsVisibleWithin(Named<RadioButton>(dialog, key), dialog), $"Paper choice {key} is hidden.");
             Assert(!IsVisibleWithin(spacing, dialog) && !IsVisibleWithin(custom, dialog), "Blank paper exposes line spacing.");
             CaptureDialog(dialog, "paper-en-light-blank");
-            pattern.SelectedIndex = 1; dialog.UpdateLayout();
+            Named<RadioButton>(dialog, "Ruled").IsChecked = true; dialog.UpdateLayout();
             Assert(IsVisibleWithin(spacing, dialog), "Ruled paper hides spacing presets.");
             Assert(!IsVisibleWithin(custom, dialog), "Preset spacing exposes a redundant custom field.");
             spacing.SelectedIndex = 1;
-            Named<ComboBox>(dialog, "Format").SelectedIndex = 1;
-            Named<ComboBox>(dialog, "Orientation").SelectedIndex = 1;
+            Named<RadioButton>(dialog, "A5").IsChecked = true;
+            Named<RadioButton>(dialog, "Landscape").IsChecked = true;
+            Assert(Descendants(dialog).OfType<TextBlock>().Any(t => t.Text == "210 × 148 mm"), "Paper preview did not update its dimensions.");
             Named<TextBox>(dialog, "Margin").Text = 12.5.ToString(CultureInfo.CurrentCulture);
             CaptureDialog(dialog, "paper-en-light-ruled-top");
             ScrollDialogToBottom(dialog);
@@ -391,11 +447,10 @@ internal static class Program
     {
         var result = WithPaperDialog("de", "Dark", dialog =>
         {
-            var pattern = Named<ComboBox>(dialog, "Pattern");
             var spacing = Named<ComboBox>(dialog, "Spacing");
             var custom = Named<TextBox>(dialog, "CustomSpacing");
             var margin = Named<TextBox>(dialog, "Margin");
-            pattern.SelectedIndex = 2; spacing.SelectedIndex = 2; dialog.UpdateLayout();
+            Named<RadioButton>(dialog, "Squared").IsChecked = true; spacing.SelectedIndex = 2; dialog.UpdateLayout();
             Assert(IsVisibleWithin(spacing, dialog) && IsVisibleWithin(custom, dialog), "Custom spacing field is not visible.");
             Equal(1, Descendants(dialog).OfType<TextBox>().Count(t => AutomationProperties.GetName(t) == L.T("CustomSpacing")));
             foreach (var invalid in new[] { "invalid", "0", "101", "NaN" })
@@ -454,9 +509,14 @@ internal static class Program
 
     private static void ScrollDialogToBottom(Window dialog)
     {
-        var scroll = (ScrollViewer)dialog.Content;
+        var margin = Named<TextBox>(dialog, "Margin");
+        var scroll = Descendants(dialog).OfType<ScrollViewer>().Single(s => s.Content is Panel panel && panel.IsAncestorOf(margin));
         scroll.ScrollToBottom(); scroll.UpdateLayout();
-        Assert(scroll.VerticalOffset > 0, "Constrained dialog does not scroll to its actions.");
+        Near(scroll.ScrollableHeight, scroll.VerticalOffset);
+        var action = Descendants(dialog).OfType<Button>().Single(b => Equals(b.Content, L.T("Create")));
+        var body = (FrameworkElement)dialog.Content;
+        var bounds = action.TransformToAncestor(body).TransformBounds(new Rect(action.RenderSize));
+        Assert(new Rect(body.RenderSize).Contains(bounds), "Dialog actions are clipped after scrolling the form.");
     }
 
     private static void CaptureDialog(Window dialog, string name)
@@ -485,12 +545,12 @@ internal static class Program
         foreach (var tool in new[] { EditorTool.Pen, EditorTool.Text })
         {
             L.Initialize(language); Settings.Current.Appearance = appearance; Appearance.Apply();
-            var window = new MainWindow(); var content = (FrameworkElement)window.Content;
+            var window = OpenNotebook(); var content = (FrameworkElement)window.Content;
             Call(window, "SetTool", tool);
             content.Measure(size); content.Arrange(new Rect(size)); content.UpdateLayout();
             var surface = (DocumentSurface)Field(window, "_surface")!;
             surface.FitToPage(); content.UpdateLayout();
-            Assert(surface.ActualHeight >= 150 && surface.ActualWidth > 700, $"Document space collapsed at {size}.");
+            Assert(surface.ActualHeight >= size.Height * .65 && surface.ActualWidth >= size.Width * .85, $"Document space collapsed at {size}.");
             foreach (var control in Descendants(content).OfType<Control>().Where(c => c is ButtonBase or ComboBox))
             {
                 if (!IsVisibleWithin(control, content) || surface.IsAncestorOf(control)) continue;
@@ -528,7 +588,7 @@ internal static class Program
     private static void EditingFit()
     {
         L.Initialize("de"); Settings.Current.Appearance = "Dark"; Appearance.Apply();
-        var window = new MainWindow(); var content = (FrameworkElement)window.Content;
+        var window = OpenNotebook(); var content = (FrameworkElement)window.Content;
         var size = new Size(760, 560);
         content.Measure(size); content.Arrange(new Rect(size)); content.UpdateLayout();
         var surface = (DocumentSurface)Field(window, "_surface")!;
@@ -549,6 +609,96 @@ internal static class Program
             "Explicit full-page fit no longer fits the page.");
         Equal(original, DocumentStore.Serialize(Document(window)));
         StopTimers(window); L.Initialize("en"); Settings.Current.Appearance = "Light"; Appearance.Apply();
+    }
+
+    private static void ViewRestoration()
+    {
+        var window = OpenNotebook();
+        var content = (FrameworkElement)window.Content;
+        var surface = (DocumentSurface)Field(window, "_surface")!;
+        var scroll = (ScrollViewer)Field(surface, "_scroll")!;
+        void Resize(double width, double height)
+        {
+            var size = new Size(width, height);
+            content.Measure(size); content.Arrange(new Rect(size)); content.UpdateLayout();
+        }
+        surface.FitToWidth();
+        foreach (var size in new[] { new Size(760, 560), new Size(1600, 880) })
+        {
+            Resize(size.Width, size.Height);
+            Equal(PageViewMode.FitWidth, surface.ViewMode);
+            var gutter = scroll.ViewportWidth - Document(window).Pages[0].Width * surface.Zoom;
+            Assert(Math.Abs(gutter - 68) < 2, $"Fit width left {gutter} DIPs outside the page.");
+            Assert(scroll.ScrollableWidth < 1, "Width fit introduced horizontal scrolling.");
+        }
+        Assert(surface.Zoom > 1.4, "True width fit was limited by the editing cap.");
+        surface.FitForEditing(); Near(1.4, surface.Zoom);
+        Resize(760, 560);
+        Assert(surface.Zoom < 1, "Editing fit did not adapt to the narrower viewport.");
+        surface.Zoom = 1.75;
+        Resize(1000, 720); Near(1.75, surface.Zoom); Equal(PageViewMode.Manual, surface.ViewMode);
+        scroll.ScrollToHorizontalOffset(150); scroll.ScrollToVerticalOffset(420); surface.UpdateLayout();
+        var before = surface.CaptureView();
+        Assert(before.HorizontalOffset > 0 && before.VerticalOffset > 0, "Test did not scroll the source page.");
+        Named<Button>(content, "AddPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Equal(2, Document(window).Pages.Count);
+        Near(1.75, surface.Zoom); Near(0, scroll.VerticalOffset); Near(0, scroll.HorizontalOffset);
+        scroll.ScrollToVerticalOffset(60); surface.UpdateLayout();
+        Named<Button>(content, "PreviousPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Near(before.Zoom, surface.Zoom); Near(before.HorizontalOffset, scroll.HorizontalOffset); Near(before.VerticalOffset, scroll.VerticalOffset);
+        Named<Button>(content, "NextPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Near(60, scroll.VerticalOffset);
+        Named<Button>(content, "PreviousPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        surface.Zoom = 1.3;
+        Named<Button>(content, "AddPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Near(1.3, surface.Zoom); Near(0, scroll.VerticalOffset);
+        Named<Button>(content, "NextPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Near(1.75, surface.Zoom); Near(60, scroll.VerticalOffset);
+        StopTimers(window);
+    }
+
+    private static void NoteIndexNavigation()
+    {
+        var first = Sample();
+        var second = new PageData();
+        var target = new TextItem { IsNote = true, IsExpanded = false, X = 550, Y = 980, Text = "Schnittkante\nCheck the lower edge." };
+        second.Items.Add(target);
+        var path = Path.Combine(_fixtures, "Indexed notebook.pdf");
+        DocumentStore.SavePdf(new DocumentData { Pages = [first, second] }, path);
+        var interaction = new PromptProbe();
+        var window = new MainWindow(interaction); window.OpenFile(path);
+        var content = (FrameworkElement)window.Content; Layout(content);
+        var surface = (DocumentSurface)Field(window, "_surface")!;
+        surface.Zoom = 1.75;
+        var scroll = (ScrollViewer)Field(surface, "_scroll")!;
+        scroll.ScrollToVerticalOffset(230); surface.UpdateLayout();
+        var previous = surface.CaptureView();
+        Named<Button>(content, "NoteIndex").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        content.UpdateLayout();
+        Named<TextBox>(content, "NoteSearch").Text = "Schnittkante";
+        var row = Descendants(content).OfType<Button>().Single(b => AutomationProperties.GetName(b).Contains("Schnittkante", StringComparison.Ordinal));
+        row.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        content.UpdateLayout();
+        Equal(1, (int)Field(window, "_pageIndex")!);
+        Equal(target.Id, surface.SelectedNoteId);
+        Assert(Document(window).Pages[1].Items[0].IsExpanded, "Index selection left the target note collapsed.");
+        var marker = NoteMarker(surface);
+        var bounds = marker.TransformToAncestor(surface).TransformBounds(new Rect(marker.RenderSize));
+        Assert(new Rect(surface.RenderSize).Contains(bounds), "Note index jumped to a page with an offscreen anchor.");
+        Assert((bool)Call(window, "CanLeave")!, "Reading a saved note prevents leaving.");
+        Equal(0, interaction.Prompts);
+        Equal(1, ((List<string>)Field(window, "_history")!).Count);
+        var editor = Editor(surface, "Note");
+        editor.Text += "\nConfirmed.";
+        Assert((bool)Property(window, "IsDirty")!, "Editing note content is not dirty.");
+        Assert(!(bool)Call(window, "CanLeave")!, "Canceling the unsaved-note prompt did not keep the document open.");
+        Equal(1, interaction.Prompts);
+        Assert((bool)Call(window, "Save", false)!, "Edited note failed to save.");
+        var saved = DocumentStore.LoadPdf(path).Pages[1].Items[0];
+        Equal(editor.Text, saved.Text); Assert(saved.IsExpanded, "Save did not retain the current note presentation.");
+        Named<Button>(content, "PreviousPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Near(previous.Zoom, surface.Zoom); Near(previous.VerticalOffset, scroll.VerticalOffset);
+        StopTimers(window);
     }
 
     private static void RenderContent(FrameworkElement content, Brush background, string name)
@@ -594,7 +744,7 @@ internal static class Program
         ((System.Windows.Threading.DispatcherTimer)Field(window, "_editTimer")!).Stop();
         ((System.Windows.Threading.DispatcherTimer)Field(window, "_recoveryTimer")!).Stop();
         // Do not leave hidden document windows for Application.Shutdown to prompt.
-        SetField(window, "_savedState", DocumentStore.Serialize(Document(window)));
+        SetField(window, "_savedState", DocumentStore.SerializeForHistory(Document(window)));
         window.Close();
     }
     private static DocumentData Document(MainWindow window) => (DocumentData)Field(window, "_document")!;
@@ -604,7 +754,19 @@ internal static class Program
     private static void SetField(object target, string name, object value) => target.GetType().GetField(name, Private)!.SetValue(target, value);
     private static object? Property(object target, string name) => target.GetType().GetProperty(name, Private)!.GetValue(target);
     private static string State(PageData page) => DocumentStore.Serialize(new DocumentData { Pages = [page] });
-    private static TextBox Editor(DependencyObject parent, string key) => Descendants(parent).OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == L.T(key));
+    private static TextBox Editor(DependencyObject parent, string key) => Descendants(parent).OfType<TextBox>().Single(t =>
+        AutomationProperties.GetAutomationId(t).StartsWith(key == "Note" ? "NoteEditor:" : "TextEditor:", StringComparison.Ordinal));
+    private static Button NoteMarker(DependencyObject parent) => Descendants(parent).OfType<Button>()
+        .Single(b => AutomationProperties.GetAutomationId(b).StartsWith("NoteMarker:", StringComparison.Ordinal));
+    private static MainWindow OpenNotebook(bool withSample = false)
+    {
+        var window = new MainWindow();
+        var path = Path.Combine(_fixtures, withSample ? "Field notebook.pdf" : "Blank notebook.pdf");
+        if (!File.Exists(path)) DocumentStore.SavePdf(new DocumentData { Pages = [withSample ? Sample() : new PageData()] }, path);
+        window.OpenFile(path);
+        Layout((FrameworkElement)window.Content);
+        return window;
+    }
     private static void Layout(UIElement element) { element.Measure(new Size(1100, 800)); element.Arrange(new Rect(0, 0, 1100, 800)); element.UpdateLayout(); }
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
     {
@@ -627,9 +789,17 @@ internal static class Program
         // test styles. This keeps theme regression coverage tied to production.
         XNamespace ns = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         var source = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "AppResources.xaml"));
-        var resource = new XElement(ns + "ResourceDictionary",
-            new XAttribute(XNamespace.Xmlns + "x", "http://schemas.microsoft.com/winfx/2006/xaml"),
-            source.Root!.Element(ns + "Application.Resources")!.Elements().Select(e => new XElement(e)));
-        app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(resource.ToString()));
+        var resource = new XElement(source.Root!.Element(ns + "Application.Resources")!.Element(ns + "ResourceDictionary")!);
+        resource.SetAttributeValue(XNamespace.Xmlns + "x", "http://schemas.microsoft.com/winfx/2006/xaml");
+        var context = new ParserContext { BaseUri = new Uri("pack://application:,,,/Inklane;component/App.xaml") };
+        app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(resource.ToString(), context));
+    }
+
+    private sealed class PromptProbe : IDocumentInteraction
+    {
+        public int Prompts { get; private set; }
+        public int Choose(Window owner, string title, string message, params string[] buttons) { Prompts++; return buttons.Length - 1; }
+        public string? ChooseSavePath(Window owner, Microsoft.Win32.SaveFileDialog dialog) => throw new InvalidOperationException("Unexpected Save As dialog.");
+        public void ShowMessage(Window owner, string message, string title, MessageBoxImage icon = MessageBoxImage.Information) => throw new InvalidOperationException(message);
     }
 }

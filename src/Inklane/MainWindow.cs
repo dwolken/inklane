@@ -19,7 +19,7 @@ using Microsoft.Win32;
 
 namespace Inklane;
 
-public sealed class MainWindow : Window
+public sealed partial class MainWindow : Window
 {
     private DocumentData _document = NewDocument();
     private string? _filePath, _diskHash;
@@ -28,7 +28,7 @@ public sealed class MainWindow : Window
     private int _pageIndex;
     private string[] _folderImages = [];
     private int _folderIndex;
-    private bool _loading, _saving, _closing;
+    private bool _loading, _saving, _closing, _pendingEdit;
     private readonly IDocumentInteraction _interaction;
     private readonly DocumentSurface _surface = new() { Translate = L.T };
     private readonly List<string> _history = [];
@@ -36,15 +36,13 @@ public sealed class MainWindow : Window
     private readonly DispatcherTimer _editTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
     private readonly DispatcherTimer _recoveryTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly string _recoveryPath = Path.Combine(App.DataDirectory, "Recovery", $"{Environment.ProcessId}-{Guid.NewGuid():N}.json");
-    private readonly TextBlock _documentTitle = new() { FontSize = 18, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly TextBlock _kind = new() { FontSize = 10, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 3) };
-    private readonly TextBlock _pageLabel = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) };
-    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock _hint = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly TextBlock _zoomLabel = new() { Width = 48, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _documentTitle = Studio.Label("", 15, strong: true);
+    private readonly TextBlock _status = Studio.Label("", 11, "MutedBrush");
+    private readonly TextBlock _pageLabel = Studio.Label("", 12);
+    private readonly TextBlock _zoomLabel = Studio.Label("", 12);
     private readonly Dictionary<EditorTool, ToggleButton> _tools = [];
     private readonly List<Control> _undoControls = [], _redoControls = [], _saveControls = [];
-    private Button _previous = null!, _next = null!, _addPage = null!, _removePage = null!, _paper = null!;
+    private Button _previous = null!, _next = null!, _addPage = null!, _paper = null!;
     private FrameworkElement _inkProperties = null!, _textProperties = null!, _strokeWidth = null!;
 
     public MainWindow(IDocumentInteraction? interaction = null)
@@ -53,12 +51,14 @@ public sealed class MainWindow : Window
         Title = "Inklane";
         Width = Math.Min(1200, SystemParameters.WorkArea.Width - 48);
         Height = Math.Min(880, SystemParameters.WorkArea.Height - 48);
-        MinWidth = 760; MinHeight = 560;
+        MinWidth = Math.Min(710,SystemParameters.WorkArea.Width - 16);
+        MinHeight = Math.Min(480,SystemParameters.WorkArea.Height - 16);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        FontFamily = new FontFamily("Segoe UI"); FontSize = 14;
+        FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"); FontSize = 14;
         SetResourceReference(BackgroundProperty, "SurfaceBrush"); SetResourceReference(ForegroundProperty, "TextBrush");
         Content = BuildWorkspace();
         _surface.Changed += (_, _) => DocumentChanged();
+        _surface.NoteSelectionChanged += (_, _) => RefreshNotes();
         _surface.ViewChanged += (_, _) => _zoomLabel.Text = $"{_surface.Zoom:P0}";
         _editTimer.Tick += (_, _) => { _editTimer.Stop(); CaptureHistory(); };
         _recoveryTimer.Tick += (_, _) => { _recoveryTimer.Stop(); WriteRecovery(); };
@@ -70,97 +70,13 @@ public sealed class MainWindow : Window
         ResetHistory();
         ShowPage();
         SetTool(EditorTool.Pen);
+        ShowHome();
     }
 
     private static DocumentData NewDocument(PageData? page = null) => new() { Kind = DocumentKind.Notebook, Pages = [page ?? new PageData { Width = Units.MmToDip(210), Height = Units.MmToDip(297), Pattern = PaperPattern.Blank, SpacingMm = 5, MarginMm = 15 }] };
     private string DisplayName => _filePath != null ? Path.GetFileName(_filePath).Replace(".inklane.json", "", StringComparison.OrdinalIgnoreCase) : _document.Kind == DocumentKind.Image ? Path.GetFileName(_document.SourceImagePath) ?? L.T("Image") : L.T("Untitled");
-    private bool IsDirty => DocumentStore.Serialize(_document) != _savedState;
+    private bool IsDirty => _pendingEdit || _history.Count > 0 && _history[_historyIndex] != _savedState;
 
-    private UIElement BuildWorkspace()
-    {
-        var root = new DockPanel();
-        var menu = new Menu { Padding = new Thickness(12, 2, 12, 2) };
-        MenuItem Top(string key) { var m = new MenuItem { Header = L.T(key) }; menu.Items.Add(m); return m; }
-        MenuItem Item(ItemsControl parent, string key, Action action, string? shortcut = null)
-        {
-            var m = new MenuItem { Header = L.T(key), InputGestureText = shortcut ?? "" };
-            m.Click += (_, _) => action(); parent.Items.Add(m); return m;
-        }
-        var file = Top("File");
-        Item(file, "NewNotebook", NewNotebook, "Ctrl+N"); Item(file, "Open", OpenDialog, "Ctrl+O");
-        file.Items.Add(new Separator());
-        _saveControls.Add(Item(file, "Save", () => Save(), "Ctrl+S")); Item(file, "SaveAs", () => Save(true), "Ctrl+Shift+S");
-        Item(file, "ExportImage", ExportImage); Item(file, "ExportJson", ExportJson); Item(file, "Print", Print, "Ctrl+P"); file.Items.Add(new Separator()); Item(file, "Exit", Close);
-        var edit = Top("Edit"); _undoControls.Add(Item(edit, "Undo", Undo, "Ctrl+Z")); _redoControls.Add(Item(edit, "Redo", Redo, "Ctrl+Y")); Item(edit, "Delete", _surface.DeleteSelection, "Delete");
-        var view = Top("View"); Item(view, "Fit", _surface.FitToPage, "Ctrl+0"); Item(view, "ZoomIn", () => _surface.ZoomBy(1.2), "Ctrl++"); Item(view, "ZoomOut", () => _surface.ZoomBy(1 / 1.2), "Ctrl+-");
-        var appearance = new MenuItem { Header = L.T("Appearance") }; view.Items.Add(appearance);
-        foreach (var key in new[] { "System", "Light", "Dark" })
-        {
-            var m = Item(appearance, key, () => { Settings.Current.Appearance = key; Appearance.Apply(); TrySaveSettings(); foreach (MenuItem sibling in appearance.Items) sibling.IsChecked = Equals(sibling.Tag, key); });
-            m.Tag = key; m.IsCheckable = true; m.IsChecked = Settings.Current.Appearance == key;
-        }
-        var language = new MenuItem { Header = L.T("Language") }; view.Items.Add(language);
-        foreach (var (code, name) in new[] { ("System", L.T("System")), ("en", "English"), ("de", "Deutsch") })
-        {
-            var m = new MenuItem { Header = name, IsCheckable = true, IsChecked = Settings.Current.Language == code, Tag = code };
-            m.Click += (_, _) => { Settings.Current.Language = code; TrySaveSettings(); foreach (MenuItem sibling in language.Items) sibling.IsChecked = Equals(sibling.Tag, code); MessageBox.Show(this, L.T("LanguageRestart"), "Inklane"); }; language.Items.Add(m);
-        }
-        var help = Top("Help"); Item(help, "Shortcuts", () => MessageBox.Show(this, L.T("ShortcutText"), L.T("Shortcuts"))); Item(help, "About", () => MessageBox.Show(this, L.T("AboutText"), L.T("About")));
-        DockPanel.SetDock(menu, Dock.Top); root.Children.Add(menu);
-
-        var header = new Grid { Margin = new Thickness(20, 10, 20, 12) };
-        header.ColumnDefinitions.Add(new ColumnDefinition()); header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var doc = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) }; doc.Children.Add(_kind); doc.Children.Add(_documentTitle); _kind.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
-        header.Children.Add(doc);
-        var fileActions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        fileActions.Children.Add(Button("NewNotebook", NewNotebook)); fileActions.Children.Add(Button("Open", OpenDialog));
-        var save = Button("Save", () => Save()); _saveControls.Add(save); fileActions.Children.Add(save); Grid.SetColumn(fileActions, 1); header.Children.Add(fileActions);
-        DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
-
-        var toolbar = new WrapPanel { Margin = new Thickness(16, 8, 16, 8) };
-        foreach (var tool in Enum.GetValues<EditorTool>())
-        {
-            var b = new ToggleButton { Content = L.T(tool.ToString()), Margin = new Thickness(2), Padding = new Thickness(12, 8, 12, 8), MinHeight = 36, ToolTip = L.T(tool + "Hint") };
-            AutomationProperties.SetName(b, L.T(tool.ToString()));
-            b.Click += (_, _) => SetTool(tool); _tools[tool] = b; toolbar.Children.Add(b);
-        }
-        toolbar.Children.Add(new Border { Width = 1, Height = 28, Margin = new Thickness(12, 0, 12, 0), Background = (Brush)FindResource("BorderBrush") });
-        var ink = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
-        var color = new ComboBox { Width = 105, Margin = new Thickness(4, 0, 8, 0) };
-        foreach (var (label, hex) in new[] { ("Black", "#202020"), ("Blue", "#245DD7"), ("Red", "#C3343F"), ("Green", "#16734A"), ("Purple", "#7947AB") }) color.Items.Add(new ComboBoxItem { Content = L.T(label), Tag = hex });
-        color.SelectedIndex = 0; color.SelectionChanged += (_, _) => _surface.InkColor = (string)((ComboBoxItem)color.SelectedItem).Tag;
-        AutomationProperties.SetName(color, L.T("Color")); ink.Children.Add(color);
-        var width = new ComboBox { Width = 82, MinWidth = 70, ItemsSource = new[] { "1 px", "2 px", "4 px", "8 px" }, SelectedIndex = 1 };
-        width.SelectionChanged += (_, _) => _surface.InkWidth = double.Parse(((string)width.SelectedItem).Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
-        AutomationProperties.SetName(width, L.T("Width")); width.ToolTip = L.T("Width"); ink.Children.Add(width); _strokeWidth = width; _inkProperties = ink; toolbar.Children.Add(ink);
-        var textProps = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var size = new ComboBox { Width = 85, ItemsSource = new[] { "12 pt", "18 pt", "24 pt", "32 pt", "48 pt" }, SelectedIndex = 1, Margin = new Thickness(4, 0, 10, 0) };
-        _surface.TextSize = 24;
-        size.SelectionChanged += (_, _) => _surface.TextSize = double.Parse(((string)size.SelectedItem).Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture) * 96 / 72; AutomationProperties.SetName(size, L.T("TextSize")); size.ToolTip = L.T("TextSize"); textProps.Children.Add(size); _textProperties = textProps; toolbar.Children.Add(textProps);
-        var undo = Button("Undo", Undo); var redo = Button("Redo", Redo); _undoControls.Add(undo); _redoControls.Add(redo); toolbar.Children.Add(undo); toolbar.Children.Add(redo);
-        var toolBorder = new Border { BorderThickness = new Thickness(0, 1, 0, 1), Child = toolbar }; toolBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush"); DockPanel.SetDock(toolBorder, Dock.Top); root.Children.Add(toolBorder);
-
-        var navigation = new WrapPanel { Margin = new Thickness(18, 8, 18, 8) };
-        _previous = Button("Previous", () => Navigate(-1)); _next = Button("Next", () => Navigate(1)); navigation.Children.Add(_previous); navigation.Children.Add(_pageLabel); navigation.Children.Add(_next);
-        _addPage = Button("AddPage", AddPage); _removePage = Button("RemovePage", RemovePage); _paper = Button("Paper", EditPaper);
-        _addPage.Margin = new Thickness(20, 2, 2, 2); navigation.Children.Add(_addPage); navigation.Children.Add(_removePage); navigation.Children.Add(_paper); DockPanel.SetDock(navigation, Dock.Top); root.Children.Add(navigation);
-
-        var bottom = new Grid { Margin = new Thickness(18, 7, 18, 7) };
-        bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); bottom.ColumnDefinitions.Add(new ColumnDefinition()); bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _status.Margin = new Thickness(0, 0, 20, 0); bottom.Children.Add(_status); _hint.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); Grid.SetColumn(_hint, 1); bottom.Children.Add(_hint);
-        var zoom = new StackPanel { Orientation = Orientation.Horizontal };
-        var minus = Button("ZoomOut", () => _surface.ZoomBy(1 / 1.2)); minus.Content = "−"; var plus = Button("ZoomIn", () => _surface.ZoomBy(1.2)); plus.Content = "+";
-        zoom.Children.Add(minus); zoom.Children.Add(_zoomLabel); zoom.Children.Add(plus); zoom.Children.Add(Button("Fit", _surface.FitToPage)); Grid.SetColumn(zoom, 2); bottom.Children.Add(zoom);
-        DockPanel.SetDock(bottom, Dock.Bottom); root.Children.Add(bottom);
-        _surface.SetResourceReference(BackgroundProperty, "WorkspaceBrush"); root.Children.Add(_surface);
-        return root;
-    }
-
-    private static Button Button(string key, Action action)
-    {
-        var b = new Button { Content = L.T(key), Margin = new Thickness(2), ToolTip = L.T(key) };
-        AutomationProperties.SetName(b, L.T(key)); b.Click += (_, _) => action(); return b;
-    }
     private void SetTool(EditorTool tool)
     {
         _surface.CommitEdits(); _surface.Tool = tool;
@@ -168,22 +84,24 @@ public sealed class MainWindow : Window
         _inkProperties.Visibility = tool is EditorTool.Pen or EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
         _strokeWidth.Visibility = tool == EditorTool.Pen ? Visibility.Visible : Visibility.Collapsed;
         _textProperties.Visibility = tool == EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
-        _hint.Text = L.T(tool + "Hint");
     }
     private void ShowPage(bool fit = true)
     {
         _loading = true;
         _pageIndex = Math.Clamp(_pageIndex, 0, _document.Pages.Count - 1);
-        _surface.LoadPage(_document.Pages[_pageIndex], _image);
+        LoadCurrentPage(fit);
         _loading = false;
-        if (fit) Dispatcher.BeginInvoke(() => { if (_document.Kind == DocumentKind.Notebook) _surface.FitForEditing(); else _surface.FitToPage(); }, DispatcherPriority.Loaded);
+        RefreshNotes();
         UpdateState();
     }
     private void UpdateState()
     {
         var dirty = IsDirty;
-        Title = $"{(dirty ? "● " : "")}{DisplayName} — Inklane"; _documentTitle.Text = DisplayName; _documentTitle.ToolTip = _filePath ?? _document.SourceImagePath; _kind.Text = L.T(_document.Kind.ToString());
-        _status.Text = L.T(_saving ? "Saving" : dirty ? "Unsaved" : _filePath == null ? "Ready" : "Saved");
+        if (!_onHome) Title = $"{(dirty ? "● " : "")}{DisplayName} — Inklane";
+        _documentTitle.Text = DisplayName;
+        _documentTitle.ToolTip = _filePath ?? _document.SourceImagePath;
+        var state = L.T(_saving ? "Saving" : dirty ? "Unsaved" : _filePath == null ? "Ready" : "Saved");
+        _status.Text = $"{L.T(_document.Kind == DocumentKind.Notebook ? "NotebookType" : "ImageType")}  ·  {state}";
         foreach (var c in _undoControls) c.IsEnabled = _historyIndex > 0;
         foreach (var c in _redoControls) c.IsEnabled = _historyIndex < _history.Count - 1;
         foreach (var c in _saveControls) c.IsEnabled = !_saving;
@@ -191,54 +109,75 @@ public sealed class MainWindow : Window
         _pageLabel.Text = notebook ? L.F("Page", _pageIndex + 1, _document.Pages.Count) : L.F("ImageNumber", _folderIndex + 1, Math.Max(1, _folderImages.Length));
         _previous.IsEnabled = notebook ? _pageIndex > 0 : _folderIndex > 0;
         _next.IsEnabled = notebook ? _pageIndex + 1 < _document.Pages.Count : _folderIndex + 1 < _folderImages.Length;
-        _addPage.Visibility = _removePage.Visibility = _paper.Visibility = notebook ? Visibility.Visible : Visibility.Collapsed;
+        _addPage.Visibility = _paper.Visibility = notebook ? Visibility.Visible : Visibility.Collapsed;
         _addPage.IsEnabled = _document.Pages.Count < 1000;
-        _removePage.IsEnabled = _document.Pages.Count > 1;
+        UpdateNoteCount();
     }
     private void DocumentChanged()
     {
         if (_loading) return;
         try
         {
+            DocumentStore.CheckPageCapacity(_document.Pages[_pageIndex]);
+            _pendingEdit = true;
             UpdateState();
             _editTimer.Stop(); _editTimer.Start(); _recoveryTimer.Stop(); _recoveryTimer.Start();
         }
         catch (InvalidDataException ex)
         {
-            _document = DocumentStore.Deserialize(_history[_historyIndex]);
-            ShowPage(false);
-            Error(L.T("DocumentLimit"), ex);
+            RollBackEdit(ex);
         }
     }
-    private void CaptureHistory()
+    private void RollBackEdit(InvalidDataException error)
+    {
+        RestoreSnapshot(_history[_historyIndex]);
+        ShowPage(false);
+        Error(L.T("DocumentLimit"), error);
+    }
+    private bool CaptureHistory()
     {
         _editTimer.Stop();
-        var state = DocumentStore.Serialize(_document);
-        if (_history.Count > 0 && _history[_historyIndex] == state) return;
+        string state;
+        try { state = DocumentStore.SerializeForHistory(_document); }
+        catch (InvalidDataException ex) { RollBackEdit(ex); return false; }
+        _pendingEdit = false;
+        if (_history.Count > 0 && _history[_historyIndex] == state) { UpdateState(); return true; }
         if (_historyIndex + 1 < _history.Count) _history.RemoveRange(_historyIndex + 1, _history.Count - _historyIndex - 1);
         _history.Add(state);
         while (_history.Count > 80 || (_history.Count > 2 && _history.Sum(s => (long)s.Length) > 20_000_000)) _history.RemoveAt(0);
-        _historyIndex = _history.Count - 1; UpdateState();
+        _historyIndex = _history.Count - 1; UpdateState(); RefreshNotes();
+        return true;
     }
     private void ResetHistory(bool recovered = false)
     {
-        _editTimer.Stop(); _recoveryTimer.Stop(); _history.Clear(); _history.Add(DocumentStore.Serialize(_document)); _historyIndex = 0; _savedState = recovered ? "" : _history[0];
+        _pendingEdit = false;
+        _editTimer.Stop(); _recoveryTimer.Stop(); _history.Clear(); _history.Add(DocumentStore.SerializeForHistory(_document)); _historyIndex = 0; _savedState = recovered ? "" : _history[0];
     }
     private void Undo()
     {
         _surface.CommitEdits(); CaptureHistory();
         if (_historyIndex == 0) return;
-        _document = DocumentStore.Deserialize(_history[--_historyIndex]); ShowPage(false); _recoveryTimer.Start();
+        RestoreSnapshot(_history[--_historyIndex]); ShowPage(false); _recoveryTimer.Start();
     }
     private void Redo()
     {
         _surface.CommitEdits(); CaptureHistory();
         if (_historyIndex + 1 >= _history.Count) return;
-        _document = DocumentStore.Deserialize(_history[++_historyIndex]); ShowPage(false); _recoveryTimer.Start();
+        RestoreSnapshot(_history[++_historyIndex]); ShowPage(false); _recoveryTimer.Start();
+    }
+    private void RestoreSnapshot(string snapshot)
+    {
+        _pendingEdit = false;
+        var expanded = _document.Pages.SelectMany(p => p.Items).Where(i => i.IsNote && i.IsExpanded).Select(i => i.Id).ToHashSet();
+        var restored = DocumentStore.Deserialize(snapshot);
+        if (restored.Pages.Count != _document.Pages.Count) ClearSessionViews();
+        foreach (var note in restored.Pages.SelectMany(p => p.Items).Where(i => i.IsNote))
+            note.IsExpanded = expanded.Contains(note.Id);
+        _document = restored;
     }
     private bool CanLeave()
     {
-        _surface.CommitEdits(); CaptureHistory();
+        _surface.CommitEdits(); if (!CaptureHistory()) return false;
         if (!IsDirty) return true;
         var choice = _interaction.Choose(this, "Inklane", L.F("SavePrompt", DisplayName), L.T("Save"), L.T("Discard"), L.T("Cancel"));
         return choice == 1 || choice == 0 && Save();
@@ -246,11 +185,15 @@ public sealed class MainWindow : Window
     private void NewNotebook()
     {
         var paper = Dialogs.Paper(this); if (paper == null || !CanLeave()) return;
-        ClearRecovery(); _document = NewDocument(paper); _filePath = _diskHash = null; _image = null; _pageIndex = 0; _folderImages = []; ResetHistory(); ShowPage(); SetTool(EditorTool.Pen);
+        ClearRecovery(); _sessionId = Guid.NewGuid().ToString("N"); _document = NewDocument(paper); _filePath = _diskHash = null; _image = null; _pageIndex = 0; _folderImages = []; _noteSearch.Clear(); ResetHistory(); ShowEditor(); ShowPage(); SetTool(EditorTool.Pen);
     }
     private void OpenDialog()
     {
-        var dialog = new OpenFileDialog { Filter = L.T("OpenFilter"), CheckFileExists = true, Multiselect = false };
+        PickFile("OpenFilter");
+    }
+    private void PickFile(string filter)
+    {
+        var dialog = new OpenFileDialog { Filter = L.T(filter), CheckFileExists = true, Multiselect = false };
         if (dialog.ShowDialog(this) == true) OpenFile(dialog.FileName);
     }
     public void OpenFile(string path)
@@ -281,7 +224,9 @@ public sealed class MainWindow : Window
                 candidate.SourceImagePath = source; image = LoadImage(source);
             }
             ClearRecovery(); _document = candidate; _filePath = savePath; _diskHash = hash; _image = image; _pageIndex = 0;
-            SetupFolder(); ResetHistory(); ShowPage();
+            _sessionId = candidate.SourceImagePath ?? path;
+            _noteSearch.Clear();
+            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); RememberRecent(path);
         }
         catch (NotSupportedException) { Error(L.T("UnsupportedPdf")); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); }
@@ -329,6 +274,7 @@ public sealed class MainWindow : Window
     {
         if (_document.Pages.Count >= 1000) return;
         _surface.CommitEdits(); CaptureHistory(); var page = _document.Pages[_pageIndex];
+        ShiftPageViews(_pageIndex+1,1);
         _document.Pages.Insert(++_pageIndex, new PageData { Width = page.Width, Height = page.Height, Pattern = page.Pattern, SpacingMm = page.SpacingMm, MarginMm = page.MarginMm });
         CaptureHistory(); ShowPage(); DocumentChanged();
     }
@@ -336,7 +282,8 @@ public sealed class MainWindow : Window
     {
         if (_document.Pages.Count < 2) return;
         if (_interaction.Choose(this, L.T("RemovePage"), L.T("RemovePagePrompt"), L.T("RemovePage"), L.T("Cancel")) != 0) return;
-        _surface.CommitEdits(); CaptureHistory(); _document.Pages.RemoveAt(_pageIndex); _pageIndex = Math.Min(_pageIndex, _document.Pages.Count - 1); CaptureHistory(); ShowPage(); DocumentChanged();
+        _surface.CommitEdits(); CaptureHistory(); ShiftPageViews(_pageIndex,-1);
+        _document.Pages.RemoveAt(_pageIndex); _pageIndex = Math.Min(_pageIndex, _document.Pages.Count - 1); CaptureHistory(); ShowPage(); DocumentChanged();
     }
     private void EditPaper()
     {
@@ -346,7 +293,8 @@ public sealed class MainWindow : Window
 
     private bool Save(bool saveAs = false)
     {
-        _surface.CommitEdits(); CaptureHistory();
+        if (_saving) return false;
+        _surface.CommitEdits(); if (!CaptureHistory()) return false;
         try
         {
         var path = _filePath;
@@ -369,8 +317,13 @@ public sealed class MainWindow : Window
             if (_document.Kind == DocumentKind.Image && (_document.SourceImagePath == null || !File.Exists(_document.SourceImagePath) || !string.Equals(DocumentStore.GetFileHash(_document.SourceImagePath), _document.SourceImageSha256, StringComparison.OrdinalIgnoreCase)))
             { Error(L.T("ImageChanged")); return false; }
             _saving = true; UpdateState();
-            if (_document.Kind == DocumentKind.Notebook) DocumentStore.SavePdf(_document, path); else DocumentStore.SaveJson(_document, path);
-            _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = DocumentStore.Serialize(_document); ClearRecovery(); return true;
+            if (_document.Kind == DocumentKind.Notebook) SaveProgress.WriteNotebook(this, _document, _history[_historyIndex], path);
+            else DocumentStore.SaveJson(_document, path);
+            _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = _history[_historyIndex]; ClearRecovery();
+            if (_document.Kind == DocumentKind.Notebook) RenameViewSession(path);
+            var source = _document.SourceImagePath;
+            RememberRecent(source != null && SamePath(path, source + ".inklane.json") ? source : path);
+            return true;
         }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); return false; }
         finally { _saving = false; UpdateState(); }
@@ -431,13 +384,23 @@ public sealed class MainWindow : Window
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        if (_onHome)
+        {
+            if (ctrl && key is Key.O or Key.N)
+            {
+                e.Handled = true;
+                if (key == Key.O) OpenDialog(); else NewNotebook();
+            }
+            else if (_hasDocument && key == Key.Escape) { e.Handled = true; ShowEditor(); }
+            return;
+        }
         if (ctrl)
         {
             Action? action = key switch
             {
                 Key.N => NewNotebook, Key.O => OpenDialog, Key.S => () => Save(shift), Key.P => Print,
                 Key.Z when !_surface.HasTextFocus => shift ? Redo : Undo, Key.Y when !_surface.HasTextFocus => Redo,
-                Key.D0 or Key.NumPad0 => _surface.FitToPage, Key.OemPlus or Key.Add => () => _surface.ZoomBy(1.2), Key.OemMinus or Key.Subtract => () => _surface.ZoomBy(1 / 1.2), _ => null
+                Key.D1 or Key.NumPad1 => _surface.FitToWidth, Key.D0 or Key.NumPad0 => _surface.FitToPage, Key.OemPlus or Key.Add => () => _surface.ZoomBy(1.2), Key.OemMinus or Key.Subtract => () => _surface.ZoomBy(1 / 1.2), _ => null
             };
             if (action != null) { e.Handled = true; action(); } return;
         }
@@ -450,6 +413,7 @@ public sealed class MainWindow : Window
     public void StopBackgroundWork() { _editTimer.Stop(); _recoveryTimer.Stop(); }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (_saving && !App.FatalShutdown) { e.Cancel = true; return; }
         if (App.SmokeTest || App.FatalShutdown || _closing) return;
         if (!CanLeave()) { e.Cancel = true; return; }
         _closing = true; ClearRecovery();
@@ -483,7 +447,7 @@ public sealed class MainWindow : Window
                 {
                     var image = state.Document.Kind == DocumentKind.Image ? LoadImage(state.Document.SourceImagePath!) : null;
                     if (image != null && state.Document.SourceImageSha256 != DocumentStore.GetFileHash(state.Document.SourceImagePath!)) throw new InvalidDataException(L.T("ImageChanged"));
-                    _document = state.Document; _image = image; _filePath = state.FilePath; _diskHash = state.DiskHash; _pageIndex = state.PageIndex; SetupFolder(); ResetHistory(true); ShowPage(); if (WriteRecovery()) File.Delete(path); return;
+                    _document = state.Document; _image = image; _filePath = state.FilePath; _diskHash = state.DiskHash; _pageIndex = state.PageIndex; SetupFolder(); ResetHistory(true); ShowEditor(); ShowPage(); if (WriteRecovery()) File.Delete(path); return;
                 }
                 if (choice == 1) { File.Delete(path); continue; }
                 return;
@@ -535,8 +499,10 @@ public sealed class MainWindow : Window
     private void TrySaveSettings() { try { Settings.Save(); } catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); } }
     public object RunStartupSmokeCheck()
     {
-        if (!IsLoaded || ActualWidth < 100 || _surface.ActualHeight < 100) throw new InvalidOperationException("Main workspace was not laid out.");
+        var startViewRendered = _onHome && _home.ActualWidth > 100;
+        ShowEditor(); UpdateLayout();
+        if (!startViewRendered || !IsLoaded || ActualWidth < 100 || _surface.ActualHeight < 100) throw new InvalidOperationException("Main workspace was not laid out.");
         var bitmap = _surface.RenderPage(); if (bitmap.PixelWidth < 100) throw new InvalidOperationException("Page renderer failed.");
-        return new { success = true, version = "0.1.0-alpha.1", windowRendered = true, width = ActualWidth, height = ActualHeight, dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX, workArea = new[] { SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height }, pagePixels = new[] { bitmap.PixelWidth, bitmap.PixelHeight }, runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory(), language = L.Language, theme = Settings.Current.Appearance };
+        return new { success = true, version = App.ProductVersion, startViewRendered, windowRendered = true, width = ActualWidth, height = ActualHeight, dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX, workArea = new[] { SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height }, pagePixels = new[] { bitmap.PixelWidth, bitmap.PixelHeight }, runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory(), language = L.Language, theme = Settings.Current.Appearance };
     }
 }
