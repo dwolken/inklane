@@ -1,0 +1,14 @@
+.scratch/
+
+# Local operating system and temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+*.tmp
+*~
+
+# Local environment secrets
+.env
+.env.*
+!.env.example
