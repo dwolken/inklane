@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-labelledby="title">
+  <title id="title">Inklane — Margin fold</title>
+  <defs>
+    <linearGradient id="folio" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#36315D"/>
+      <stop offset="1" stop-color="#211F39"/>
+    </linearGradient>
+  </defs>
+  <path id="sheet" d="M11 3h19q1.2 0 2.1.9l9 9q.9.9.9 2.1v23a6 6 0 0 1-6 6H11a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6Z" fill="url(#folio)" stroke="#5D5681" stroke-width=".7"/>
+  <path id="corner" d="M30 3q1.2 0 2.1.9l9 9q.9.9.9 2.1h-7a5 5 0 0 1-5-5Z" fill="#8075C1"/>
+  <path id="margin" d="M12 12h7v17l-7 7Z" fill="#E1DBFF"/>
+  <path id="lane" d="m12 36 13-13h10v7h-7l-6 6Z" fill="#B3A1FF"/>
+  <path id="crease" d="m12 36 7-7v7Z" fill="#8577C8"/>
+</svg>

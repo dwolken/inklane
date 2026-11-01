@@ -12,9 +12,15 @@ Sources reviewed on 2026-11-01:
 
 The editor and persistence share plain mutable models. All content coordinates use device-independent pixels (96 per inch); zoom and pan affect the view only. Paper spacing and margins are stored in millimeters. Conversion is `mm * 96 / 25.4` for the editor and `mm * 72 / 25.4` for PDF. Pattern lines begin at the chosen margin and stop at the opposite margin.
 
+## Workspace and identity
+
+The release candidate uses one editor with distinct entry points and file semantics. A folder image keeps its original and sidecar. A notebook keeps its pages and annotations in a PDF. Home makes both tasks explicit. The header carries document actions, the rail carries direct tools, and the footer carries contextual properties and navigation. The optional notes index connects numbered markers to their document positions. These choices follow the primary/overflow distinction in [Microsoft's command-bar guidance](https://learn.microsoft.com/en-us/windows/apps/design/controls/command-bar), with markup tools and an optional navigation panel informed by [Adobe's Acrobat workspace](https://helpx.adobe.com/acrobat/desktop/get-started/learn-the-basics/workspace.html) and [Apple's Preview markup workflow](https://support.apple.com/en-sg/guide/preview/prvw11580/mac).
+
+The Margin fold identity combines a vertical margin with a folded lane that turns toward a detail. A nib was too specific to handwriting, and a bookmark competed with the meaning of Save. The selected SVG is the editable master. The Windows icon contains eleven frames from 16 to 256 pixels. The size review used [Microsoft's app-icon guidance](https://learn.microsoft.com/en-us/windows/apps/design/style/iconography/app-icon-design).
+
 ## PDF and editable data
 
-PDFsharp-WPF **6.2.4** is explicitly pinned. Its downloaded NuGet manifest and tagged source license are MIT. Version 6.5 and later changed to AGPL/commercial licensing, and upstream states that the 6.2 branch will receive no further updates. Upgrading therefore requires a fresh maintenance and licensing decision. This is a known dependency limitation of the alpha, not an assumption that all PDFsharp versions have the same license.
+PDFsharp-WPF **6.2.4** is explicitly pinned. Its downloaded NuGet manifest and tagged source license are MIT. Version 6.5 and later changed to AGPL/commercial licensing, and upstream states that the 6.2 branch will receive no further updates. Upgrading therefore requires a fresh maintenance and licensing decision.
 
 - [PDFsharp-WPF 6.2.4 package and license](https://www.nuget.org/packages/PDFsharp-WPF/6.2.4)
 - [Tagged 6.2.4 license](https://github.com/empira/PDFsharp/blob/v6.2.4/LICENSE)
@@ -28,7 +34,7 @@ The complete versioned model is both an `inklane.json` attachment and a private 
 
 Before editable reopening, Inklane checks page count/dimensions and a versioned content fingerprint. The fingerprint follows PDFsharp's object graph through complete page dictionaries, annotations (including properties Inklane does not edit), appearance streams, fonts, images, resource dictionaries, inherited page properties and other catalog content such as attachments and document viewing settings. It sorts dictionary keys, resolves references without object numbers, frames scalar/stream values, and detects cycles. Stream bytes and filter parameters are included without implementing another PDF decoder. Numeric values are normalized to a millionth of a PDF point to tolerate insignificant serializer rounding. Informational document metadata and regenerated XMP timestamps are excluded; edits to such metadata are not preserved when Inklane rebuilds a notebook. Content changes cause a safe refusal to reopen for editing. This is a consistency safeguard, not a cryptographic signature or a guarantee about arbitrary PDF applications. Early development PDFs without fingerprint version 2 are rejected.
 
-General PDF import/editing is deliberately unsupported in this alpha. A PDF without Inklane's versioned data is rejected rather than rasterized or reconstructed. Encrypted PDFs are rejected, including files that open without a user password, so saving cannot silently remove their security settings. Image PDF export is self-contained for viewing; its editable image workspace still depends on the original image and its JSON sidecar. Windows.Data.Pdf was considered for future foreign-PDF rendering but is not required by the implemented notebook workflow.
+Editable reopening requires an Inklane notebook with its versioned data. The reader checks this before opening a PDF. It also rejects encrypted files, including files that open without a user password, to preserve their security settings. Image workspaces retain the original image and their JSON sidecar. PNG export flattens the current image and visible annotation marks into a separate file.
 
 ## Persistence and boundaries
 

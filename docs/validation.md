@@ -1,55 +1,44 @@
-# Validation record
+# Release candidate validation
 
-This document records observed results, not feature intentions. The application is an initial alpha until the core workflows have been exercised and outstanding limitations have been reviewed.
+Inklane 1.0.0-rc.1 was exercised on Windows 11 at 125% display scaling. This record separates desktop observations, repeatable regression checks and device work that remains open.
 
-## Repeatable checks
+## Desktop journeys
 
-- `./scripts/build.ps1`: locked dependency restore, Release compilation, and the persistence, WPF surface, and document lifecycle regression suites. Each run retains its fixtures in a separate `.scratch/test-runs/` directory.
-- `./scripts/package.ps1`: repeats the build checks, publishes the complete Windows x64 runtime, launches that packaged `Inklane.exe` with the startup-check argument, and creates a ZIP only after a successful startup result.
-- `.github/workflows/windows.yml`: runs the same commands on a Windows runner and retains the packaged output as a private repository workflow artifact. Artifact upload does not create a release. Only a `v*` tag push can start the separate prerelease job, after the Windows job passes. The release job verifies repository privacy, checks the archive's version and SHA-256, then publishes the private prerelease using `docs/release-notes.md`. Only that job has repository write permission.
+| Journey | Observed result |
+| --- | --- |
+| First launch | Both entry cards are visible in English and German, including on a fresh profile. Selecting **Open an image** opened the native picker with a PNG/JPEG filter. The two cards have equal hit areas. |
+| Image review | Opened a plan with two saved note markers, read a note without an unsaved-change prompt, browsed to its companion JPEG and drew a stroke. Save created a sidecar. Navigating away and back recovered the stroke. The original JPEG hash matched the saved identity. |
+| Image export | Used the real document menu and save dialog to export the annotated JPEG as PNG. Independent pixel comparison found the same 1440 × 1000 dimensions and differences confined to the added stroke. |
+| Notebook creation | Selected A5, landscape and squared paper in the actual German dark dialog. Its preview changed to 210 × 148 mm and revealed the 5 mm spacing and margin controls. Created the notebook, wrote with the mouse, typed German text, placed and edited a multiline note, collapsed it, added a second page and saved through Windows. |
+| Reading and returning to a note | Opened a three-page A4 notebook. The default editing fit was 132% on this laptop. Opening the notes panel refitted the page to 99%. From page two, selecting a page-one entry returned to the right page and expanded the anchored card. |
+| Switching and recovery | Observed the unsaved-change choice on a document switch. The lifecycle suite separately exercised cancel, failed saves, source changes, conflict handling, recovery replacement, restoration and history rollback using the real file writer and window model. |
+| Small window | Resized the actual German dark editor using Windows sizing commands. The active image refitted while navigation, tool labels and contextual controls remained available. Both languages were also exercised at 760 × 560 and 1200 × 880 in WPF integration checks. |
+| Print | Printed the three-page journal through the Windows **Microsoft Print to PDF** driver. All pages and the section drawing appeared in the output. Anchored notes printed as markers. |
 
-The startup check establishes that the packaged process initializes. It is not a substitute for manually inspecting document editing, dialogs, and rendering. A successful build does not establish pen pressure or printer behavior.
+The product screenshots are lossless PNG files captured from the running window using `PrintWindow` and the physical DWM frame bounds. The captures retain the native display resolution. The fixtures contain original architectural drawings, typed observations and real Inklane annotations. Inspect the [notebook and notes index](screenshots/notebook.png), [image note](screenshots/image.png), [first launch](screenshots/start.png), and [paper setup](screenshots/paper.png).
 
-The workflow passed local static validation with actionlint 1.7.12, and its embedded PowerShell release script passed syntax parsing. The first [private Windows Actions run](https://github.com/dwolken/inklane/actions/runs/41332573422) completed successfully on 2026-11-01, including build, regression suites, self-contained startup and artifact upload. Release publication is a separate tagged workflow.
+Visual review corrected unequal start-card hit areas, undersized tool highlights, clipped German property fields, a clipped paper selector, excessive note-body padding and an unreadable marker hover state in dark mode. The review also exposed two behavioral defects: reading a note made the document dirty, and inserting a page could attach another page's zoom to the new page. These cases now have targeted checks.
 
-## Acceptance evidence
+## File and print measurements
 
-Local automated checks on 2026-11-01, Windows 11 (build 26300), .NET SDK 10.0.402:
+Independent pypdf inspection measured the three virtual print pages at 595.27576 × 841.89001 points, or 210.00006 × 297.00009 mm. Across repeated grid intervals at 150 DPI, the printed 5 mm grid measured 5.00013 mm vertically and 5.00004 mm horizontally. The 10 mm rules measured 10.00044 mm. The corresponding source PDF operators measured 4.99999 mm and 10.00002 mm. All three pages rendered legibly. The printed PDF contains raster pages. The saved notebook contains vector paper, standard annotations and editable data.
 
-- Release compilation completed with zero warnings and zero errors.
-- Persistence suite: **14/14 checks passed**. These exercise JSON/PDF round trips, complete Unicode multiline note data, A4/A5 dimensions and actual 5/10 mm grid operators, standard annotation appearances, atomic replacement and failed writes, original-image protection, malformed/encrypted inputs, and external changes to PDF resources, page rotation, or annotations.
-- WPF integration suite: **21/21 checks passed**. These exercise real text/note controls, anchor preservation, note readability at different zooms, movement rollback, selection/deletion, native stroke collection and pressure rendering, clean document state, history, Fluent light/dark control templates, paper-dialog state and millimeter validation, 760 × 560 and 1200 × 880 layouts in both languages, editing/full-page fit, complete English/German/fallback strings, and note-card bounds in short or scrolled viewports.
-- Document lifecycle suite: **15/15 checks passed**. It uses the real window model and filesystem, substituting user decisions to check unchanged documents, canceled switching, failed saves, same-file reopening, notebook JSON import, sidecar collisions, failed recovery replacement, stale recovery after undo, invalid input, wrong file extensions, exports over active documents, changed source images, and safe rollback at document limits.
-- The final combined Release run passed **50/50 checks**, with zero warnings and zero errors.
-- Self-contained package startup passed with the system German language and system appearance. The startup result confirmed a laid-out 1200 × 768 main window at 125% DPI and a 794 × 1123 page render. The loaded runtime directory was inside the package, rather than the installed development runtime.
-- The generated ZIP was extracted into a separate `.scratch/` directory and its `Inklane.exe` launched from that extracted folder with English/light overrides. It passed the same startup check and loaded its own extracted runtime.
+The showcase notebook contained 156 Ink, 40 FreeText and four Text annotations across three pages, each with an appearance. The full content of all four standard notes matched the editable model. Image identity verification independently matched the plan's SHA-256 to its sidecar.
 
-The WPF suite invokes control APIs on an STA thread. It does not simulate a physical tablet or establish that all mouse/keyboard workflows are usable. Actual visual inspection is recorded separately below. Local package startup was checked on the development host, not on a second clean Windows computer.
+## Responsiveness and regression checks
 
-Tests use isolated per-run fixtures, retaining the atomic-overwrite assertions. Packaging uses the SDK's `--artifacts-path` option in `.scratch/package/` so a running development UI cannot lock its build output. The Windows RID is included in both application and Core dependency locks; the successful package run used locked restore throughout.
+A 150,000-point notebook exposed full-document serialization during each keystroke in the earlier editor. With the candidate, a real WPF text edit and layout measured 2.79 ms median and 4.93 ms p95 over 24 warmed edits on this host. This measures the application callback and layout. Physical input-to-display latency requires separate measurement.
 
-## Actual desktop and independent PDF checks
+A substantial save of the same notebook took 5.81 seconds. While its STA worker wrote the PDF, the window processed 70 dispatcher callbacks. The test rejected attempts to dismiss progress or reenter Save, checked that the owner was disabled, reopened the approximately 48.5 MiB result, and compared the full model including note presentation. A locked destination retained its original hash and current edits. Unlocking it allowed a successful retry.
 
-On the Windows 11 host at 125% display scaling:
+Release compilation completed with zero warnings and errors. All **53 application checks** passed locally, comprising 14 persistence/geometry, 24 WPF surface/workspace and 15 lifecycle checks. They include protected originals, modification detection, atomic replacement, PDF annotation appearances, Unicode data, physical paper operators, pressure geometry, undo/redo, keyboard text movement, zoom intent, note navigation, paper controls and locale fallback.
 
-- Launched the real application, drew with mouse input, inserted editable text, created and edited a multiline note, expanded/collapsed it, saved a notebook through the native file dialog, and reopened its editable content. Added and saved a second page and navigated between pages.
-- Opened a PNG, drew and saved its sidecar, navigated to a JPEG and back in the same window, and observed the recovered stroke. An independent hash comparison confirmed the original PNG was unchanged.
-- Inspected English/light and German/dark workspaces, active tools, toolbar controls, the paper dialog and its open pattern list, native file dialogs, full-page and editing fit, and expanded note cards. Automated WPF checks additionally exercised paper presets/custom input and smaller layouts; those checks are not represented as physical pointer interaction.
-- Corrected a native ink color serialization failure found by mouse drawing, restored Fluent control styles, constrained initial window size to the work area, and corrected note cards extending beneath the viewport at full-page zoom. The final actual window showed the reopened note fully inside the workspace at 34% zoom. The committed [screenshot](screenshots/notebook-note-light.jpg) is a capture of this application window, not a mockup.
-- Used the native Windows print dialog with **Microsoft Print to PDF** to print the two-page notebook. Independent pypdf inspection measured saved pages at 210.000144 × 297.000083 mm and printed pages at 210.000060 × 297.000087 mm. Maximum rounding error was below 0.00015 mm.
-- Independent Poppler raster comparison at 150 DPI found identical ink bounds; typed text differed vertically by one pixel (0.169 mm) and was not clipped. The printed second page was blank. Print output contains raster pages; the normal saved notebook retains standard editable annotations and its JSON data.
-- Independent inspection of the UI-created notebook confirmed exact typed text, the full 197-character Unicode note, and its anchor at 126.657754 × 145.046791 mm. The final format reopened successfully in the actual application.
+`./scripts/build.ps1` runs all three suites. `./scripts/package.ps1 -VerifyInstaller` additionally tests the published executable and setup. Runs retain isolated evidence below the ignored `.scratch/` directory.
 
-Temporary inputs and inspection outputs remain in `.scratch/`; they are not distributed as user documents. Actual pointer inspection covered representative workflows, not every combination of page size, hardware, language, theme and window size.
+## Installation and acceptance
 
-## Environment-dependent checks
+The real per-user installer passed 17 lifecycle checks under a non-elevated Windows token. Verification covered the Installed apps entry, the Start shortcut's normal launch, startup using the installed bundled runtime, a locked previous version, upgrade, downgrade refusal and registered uninstall. The checks preserved test notebooks, sidecars, unknown files, settings and existing file associations. They used an isolated Windows desktop and refused to claim an existing registered installation. Visual inspection of the actual German wizard caught and corrected an encoding error in its authored text.
 
-Physical pen pressure, tablet eraser behavior, physical printer scale, screen-reader use, and multiple physical displays/DPI settings require appropriate hardware or explicit test setups. Record them as unverified until exercised.
+The release workflow repeats build, application, package and installer checks on Windows, verifies the downloaded artifact checksums, confirms the repository is private and publishes candidate assets on a version tag. See the [Windows runs](https://github.com/dwolken/inklane/actions) and [release record](https://github.com/dwolken/inklane/releases).
 
-The private repository's SSH identity is `dwolken`; the available GitHub CLI identity is `wol230296` and could not access `dwolken/inklane` at initial inspection. Remote Git uses the verified private SSH identity; repository inspection and issues use the connected `dwolken` account. The hosted workflow uses its scoped repository token.
-
-Remaining release work is tracked in [device/accessibility validation](https://github.com/dwolken/inklane/issues/1), [PDF dependency maintenance](https://github.com/dwolken/inklane/issues/2), and [signed distribution/clean-machine validation](https://github.com/dwolken/inklane/issues/3).
-
-## Distribution scope
-
-The initial distributable is a portable Windows x64 folder and ZIP. Keep all files in the folder together. It includes the .NET desktop runtime, so the target computer does not need the development SDK. The package does not register file associations or require an installer. Signing and a verified installer are outside the checks currently recorded here.
+The candidate awaits user acceptance. [Physical pen, printer, Narrator and mixed-DPI checks](https://github.com/dwolken/inklane/issues/1) remain open. The pinned MIT PDFsharp 6.2.4 branch requires a [long-term maintenance decision](https://github.com/dwolken/inklane/issues/2). A NuGet vulnerability query including transitive dependencies reported no listed vulnerable packages on 2026-11-01. [Trusted signing and a separate clean Windows 11 machine](https://github.com/dwolken/inklane/issues/3) remain outstanding. Windows Server CI and this Windows 11 development host cover different environments from a clean consumer PC.

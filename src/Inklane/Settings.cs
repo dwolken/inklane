@@ -10,19 +10,26 @@ namespace Inklane;
 public sealed class Settings
 {
     public string Appearance { get; set; } = "System";
+    public List<string> RecentFiles { get; set; } = [];
     public string Language { get; set; } = "System";
     public static Settings Current { get; private set; } = new();
     public static void Load()
     {
-        try { Current = JsonSerializer.Deserialize<Settings>(File.ReadAllText(Path.Combine(App.DataDirectory, "settings.json"))) ?? new(); }
+        try
+        {
+            Current = JsonSerializer.Deserialize<Settings>(File.ReadAllText(Path.Combine(App.DataDirectory, "settings.json"))) ?? new();
+            Current.Language ??= "System";
+            Current.Appearance ??= "System";
+            Current.RecentFiles = (Current.RecentFiles ?? []).Where(p => !string.IsNullOrWhiteSpace(p) && Path.IsPathFullyQualified(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { Current = new(); }
     }
     public static void Save()
     {
         Directory.CreateDirectory(App.DataDirectory);
         var path = Path.Combine(App.DataDirectory, "settings.json");
-        File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(Current));
-        File.Move(path + ".tmp", path, true);
+        MainWindow.AtomicWrite(path, stream => JsonSerializer.Serialize(stream, Current));
     }
 }
 
@@ -36,12 +43,18 @@ public static class Appearance
         var dark = mode == "Dark" || (mode == "System" && (int?)Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) == 0);
         var r = Application.Current.Resources;
         void Brush(string key, string value) => r[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
-        Brush("SurfaceBrush", dark ? "#252927" : "#FFFFFF");
-        Brush("WorkspaceBrush", dark ? "#171B19" : "#E9EEEB");
-        Brush("TextBrush", dark ? "#F4F6F4" : "#1E2C25");
-        Brush("MutedBrush", dark ? "#B8C6BE" : "#55665D");
-        Brush("BorderBrush", dark ? "#46524B" : "#CDD8D1");
-        Brush("AccentBrush", dark ? "#73D6B2" : "#176B59");
+        Brush("SurfaceBrush", dark ? "#25242D" : "#FCFBF9");
+        Brush("WorkspaceBrush", dark ? "#19181F" : "#E8E6E2");
+        Brush("CardBrush", dark ? "#302F3B" : "#FFFFFF");
+        Brush("TextBrush", dark ? "#F3F0FA" : "#272534");
+        Brush("MutedBrush", dark ? "#BAB6C7" : "#625E6B");
+        Brush("BorderBrush", dark ? "#45424F" : "#DCD9DF");
+        Brush("AccentBrush", dark ? "#BDB0FF" : "#5B4597");
+        Brush("AccentSoftBrush", dark ? "#403653" : "#E9E3F7");
+        Brush("HoverBrush", dark ? "#35323F" : "#EFECF0");
+        Brush("PressedBrush", dark ? "#494355" : "#E1DBEA");
+        Brush("PrimaryBrush", dark ? "#BDB0FF" : "#514083");
+        Brush("OnPrimaryBrush", dark ? "#20162F" : "#FFFFFF");
         Brush("ErrorBrush", dark ? "#FF9B9B" : "#A4262C");
         if (SystemParameters.HighContrast)
         {
@@ -50,6 +63,9 @@ public static class Appearance
             r["BorderBrush"] = SystemColors.WindowTextBrush;
             r["AccentBrush"] = SystemColors.HighlightBrush;
             r["ErrorBrush"] = SystemColors.WindowTextBrush;
+            r["CardBrush"] = r["HoverBrush"] = r["PressedBrush"] = r["AccentSoftBrush"] = SystemColors.WindowBrush;
+            r["PrimaryBrush"] = SystemColors.HighlightBrush;
+            r["OnPrimaryBrush"] = SystemColors.HighlightTextBrush;
         }
         if (!_subscribed)
         {
