@@ -1,0 +1,452 @@
+using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using PdfSharp.Drawing;
+using PdfSharp.Drawing.Layout;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.Annotations;
+using PdfSharp.Pdf.IO;
+
+namespace Inklane.Core;
+
+/// <summary>Versioned, bounded persistence. Writes are committed by a same-directory atomic rename.</summary>
+public static class DocumentStore
+{
+    public const int MaxJsonBytes = 32 * 1024 * 1024;
+    public const int MaxPdfBytes = 128 * 1024 * 1024;
+    private const string Format = "Inklane-1";
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        MaxDepth = 32,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    public static string Serialize(DocumentData data)
+    {
+        Validate(data);
+        var result = JsonSerializer.Serialize(data, JsonOptions);
+        if (Encoding.UTF8.GetByteCount(result) > MaxJsonBytes)
+            throw new InvalidDataException("The annotation data exceeds the 32 MiB limit.");
+        return result;
+    }
+
+    public static DocumentData Deserialize(string json)
+    {
+        if (Encoding.UTF8.GetByteCount(json) > MaxJsonBytes)
+            throw new InvalidDataException("The annotation data exceeds the 32 MiB limit.");
+        try
+        {
+            var data = JsonSerializer.Deserialize<DocumentData>(json, JsonOptions)
+                ?? throw new InvalidDataException("The annotation data is empty.");
+            Validate(data);
+            return data;
+        }
+        catch (JsonException ex) { throw new InvalidDataException("The annotation data is invalid.", ex); }
+    }
+
+    public static DocumentData Clone(DocumentData data) => Deserialize(Serialize(data));
+    public static string GetFileHash(string path)
+    {
+        using var input = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(input));
+    }
+
+    public static void SaveJson(DocumentData data, string path)
+    {
+        var bytes = Encoding.UTF8.GetBytes(Serialize(data));
+        ProtectSourceImage(data, path);
+        AtomicWrite(path, temporary => File.WriteAllBytes(temporary, bytes));
+    }
+
+    public static DocumentData LoadJson(string path)
+    {
+        CheckSize(path, MaxJsonBytes);
+        return Deserialize(File.ReadAllText(path, Encoding.UTF8));
+    }
+
+    public static void SavePdf(DocumentData data, string path)
+    {
+        var json = Encoding.UTF8.GetBytes(Serialize(data));
+        ProtectSourceImage(data, path);
+        using var pdf = new PdfDocument();
+        pdf.Info.Title = Path.GetFileNameWithoutExtension(path);
+        pdf.Info.Creator = "Inklane 0.1.0-alpha";
+        pdf.Info.Subject = "Editable Inklane notebook";
+        pdf.Version = 17;
+        pdf.Internals.Catalog.Elements.SetString("/InklaneFormat", Format);
+        pdf.AddEmbeddedFile("inklane.json", new MemoryStream(json, writable: false));
+        var metadata = new PdfDictionary(pdf);
+        metadata.CreateStream(json);
+        pdf.Internals.AddObject(metadata);
+        pdf.Internals.Catalog.Elements["/InklaneData"] = metadata.Reference!;
+
+        XImage? sourceImage = null;
+        try
+        {
+            if (data.Kind == DocumentKind.Image)
+            {
+                if (string.IsNullOrWhiteSpace(data.SourceImagePath))
+                    throw new InvalidDataException("The original image path is missing.");
+                if (data.SourceImageSha256 is not null &&
+                    !StringComparer.OrdinalIgnoreCase.Equals(GetFileHash(data.SourceImagePath), data.SourceImageSha256))
+                    throw new InvalidDataException("The original image has changed since the annotations were created.");
+                sourceImage = XImage.FromFile(data.SourceImagePath);
+            }
+            foreach (var model in data.Pages)
+            {
+                var page = pdf.AddPage();
+                page.Width = XUnit.FromPoint(Units.DipToPoint(model.Width));
+                page.Height = XUnit.FromPoint(Units.DipToPoint(model.Height));
+                using (var graphics = XGraphics.FromPdfPage(page))
+                {
+                    graphics.DrawRectangle(XBrushes.White, 0, 0, page.Width.Point, page.Height.Point);
+                    if (sourceImage is not null)
+                        graphics.DrawImage(sourceImage, 0, 0, page.Width.Point, page.Height.Point);
+                    else DrawPaper(graphics, model);
+                }
+                foreach (var stroke in model.Ink) AddInk(pdf, page, stroke);
+                foreach (var item in model.Items) AddText(pdf, page, item);
+            }
+            AtomicWrite(path, temporary =>
+            {
+                pdf.Save(temporary);
+                // PDFsharp finalizes content streams during Save; hash the serialized representation.
+                using var finalized = PdfReader.Open(temporary, PdfDocumentOpenMode.Modify);
+                finalized.Internals.Catalog.Elements.SetInteger("/InklaneContentHashVersion", 2);
+                finalized.Internals.Catalog.Elements.SetString("/InklaneContentHash", ContentHash(finalized));
+                finalized.Save(temporary);
+                CheckSize(temporary, MaxPdfBytes);
+            });
+        }
+        finally { sourceImage?.Dispose(); }
+    }
+
+    public static DocumentData LoadPdf(string path)
+    {
+        try { return LoadPdfCore(path); }
+        catch (Exception ex) when (ex is PdfSharp.PdfSharpException or FormatException or
+            ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException || ex.GetType() == typeof(Exception))
+        {
+            throw new InvalidDataException("The PDF is damaged, encrypted, or uses unsupported PDF features.", ex);
+        }
+        catch (NotImplementedException ex)
+        {
+            throw new NotSupportedException("This PDF uses a feature that Inklane cannot read.", ex);
+        }
+    }
+
+    private static DocumentData LoadPdfCore(string path)
+    {
+        CheckSize(path, MaxPdfBytes);
+        using var pdf = PdfReader.Open(path, PdfDocumentOpenMode.Import);
+        // PDFsharp decrypts imported objects and then reports IsEncrypted=false. The parsed
+        // security-handler object still identifies an encrypted source, including an empty user password.
+        if (pdf.SecuritySettings.IsEncrypted || pdf.Internals.GetAllObjects().Any(o => o is PdfSharp.Pdf.Security.PdfStandardSecurityHandler))
+            throw new NotSupportedException("Encrypted PDFs cannot be edited by Inklane without losing their security settings.");
+        var catalog = pdf.Internals.Catalog;
+        if (catalog.Elements.GetString("/InklaneFormat") != Format)
+            throw new NotSupportedException("This PDF was not created by Inklane. General PDF editing is not supported.");
+        var metadata = catalog.Elements.GetDictionary("/InklaneData");
+        if (metadata?.Stream is null)
+            throw new InvalidDataException("The editable Inklane data is missing from this PDF.");
+        // Our stream is intentionally uncompressed. Reject compressed replacements before decompression.
+        if (metadata.Elements.ContainsKey("/Filter"))
+            throw new NotSupportedException("The editable data has been transformed by another PDF application.");
+        var bytes = metadata.Stream.Value;
+        if (bytes.Length > MaxJsonBytes) throw new InvalidDataException("The editable data exceeds the size limit.");
+        var data = Deserialize(Encoding.UTF8.GetString(bytes));
+        if (data.Pages.Count != pdf.PageCount)
+            throw new InvalidDataException("The PDF pages no longer match the editable Inklane data.");
+        for (var i = 0; i < data.Pages.Count; i++)
+        {
+            if (Math.Abs(pdf.Pages[i].Width.Point - Units.DipToPoint(data.Pages[i].Width)) > .02 ||
+                Math.Abs(pdf.Pages[i].Height.Point - Units.DipToPoint(data.Pages[i].Height)) > .02)
+                throw new InvalidDataException("The PDF page dimensions no longer match the editable data.");
+        }
+        if (catalog.Elements.GetInteger("/InklaneContentHashVersion") != 2)
+            throw new NotSupportedException("This PDF uses an earlier development format that cannot be safely verified.");
+        if (catalog.Elements.GetString("/InklaneContentHash") != ContentHash(pdf))
+            throw new NotSupportedException("This PDF was modified outside Inklane. Reopening it for editing could discard those changes.");
+        return data;
+    }
+
+    private static string ContentHash(PdfDocument pdf)
+        => PdfContentFingerprint.Compute(pdf);
+
+    private static void DrawPaper(XGraphics graphics, PageData page)
+    {
+        if (page.Pattern == PaperPattern.Blank) return;
+        var margin = Units.MmToPoint(page.MarginMm);
+        var spacing = Units.MmToPoint(page.SpacingMm);
+        var width = Units.DipToPoint(page.Width);
+        var height = Units.DipToPoint(page.Height);
+        var pen = new XPen(XColor.FromArgb(219, 226, 232), .45);
+        for (var y = margin; y <= height - margin + .001; y += spacing)
+            graphics.DrawLine(pen, margin, y, width - margin, y);
+        if (page.Pattern == PaperPattern.Squared)
+            for (var x = margin; x <= width - margin + .001; x += spacing)
+                graphics.DrawLine(pen, x, margin, x, height - margin);
+    }
+
+    private static void AddInk(PdfDocument pdf, PdfPage page, InkData ink)
+    {
+        if (ink.Points.Count == 0) return;
+        var padding = ink.Width * 2 + 1;
+        var left = Units.DipToPoint(ink.Points.Min(p => p.X) - padding);
+        var top = Units.DipToPoint(ink.Points.Min(p => p.Y) - padding);
+        var width = Units.DipToPoint(ink.Points.Max(p => p.X) - ink.Points.Min(p => p.X) + padding * 2);
+        var height = Units.DipToPoint(ink.Points.Max(p => p.Y) - ink.Points.Min(p => p.Y) + padding * 2);
+        var annotation = new StandardAnnotation(pdf, "/Ink")
+        {
+            Rectangle = new PdfRectangle(new XRect(left, page.Height.Point - top - height, width, height))
+        };
+        annotation.Elements.SetString("/NM", ink.Id);
+        annotation.Elements.SetInteger("/F", 4); // Print
+        annotation.Elements["/C"] = ColorArray(pdf, ink.Color);
+        var border = new PdfDictionary(pdf);
+        border.Elements.SetReal("/W", Units.DipToPoint(ink.Width));
+        annotation.Elements["/BS"] = border;
+        var path = new PdfArray(pdf);
+        foreach (var point in ink.Points)
+        {
+            path.Elements.Add(new PdfReal(Units.DipToPoint(point.X)));
+            path.Elements.Add(new PdfReal(page.Height.Point - Units.DipToPoint(point.Y)));
+        }
+        var paths = new PdfArray(pdf);
+        paths.Elements.Add(path);
+        annotation.Elements["/InkList"] = paths;
+        SetAppearance(pdf, annotation, width, height, graphics =>
+        {
+            // Preserve the actual WPF pen-pressure outline, rather than approximating its width curve.
+            var points = new System.Windows.Input.StylusPointCollection(ink.Points.Select(p =>
+                new System.Windows.Input.StylusPoint(p.X, p.Y, p.Pressure)));
+            var stroke = new System.Windows.Ink.Stroke(points,
+                new System.Windows.Ink.DrawingAttributes { Width = ink.Width, Height = ink.Width, FitToCurve = false });
+            var geometry = stroke.GetGeometry().GetFlattenedPathGeometry();
+            var outline = new XGraphicsPath { FillMode = XFillMode.Winding };
+            foreach (var figure in geometry.Figures)
+            {
+                var polygon = new List<XPoint> { new(Units.DipToPoint(figure.StartPoint.X) - left,
+                    Units.DipToPoint(figure.StartPoint.Y) - top) };
+                foreach (var segment in figure.Segments)
+                    if (segment is System.Windows.Media.PolyLineSegment line)
+                        polygon.AddRange(line.Points.Select(p => new XPoint(Units.DipToPoint(p.X) - left, Units.DipToPoint(p.Y) - top)));
+                    else if (segment is System.Windows.Media.LineSegment single)
+                        polygon.Add(new XPoint(Units.DipToPoint(single.Point.X) - left, Units.DipToPoint(single.Point.Y) - top));
+                if (polygon.Count > 2) outline.AddPolygon(polygon.ToArray());
+            }
+            graphics.DrawPath(new XSolidBrush(ParseColor(ink.Color)), outline);
+        });
+        page.Annotations.Add(annotation);
+    }
+
+    private static void AddText(PdfDocument pdf, PdfPage page, TextItem item)
+    {
+        var left = Units.DipToPoint(item.X);
+        var top = Units.DipToPoint(item.Y);
+        var width = Units.DipToPoint(item.IsNote ? 26 : item.Width);
+        var height = Units.DipToPoint(item.IsNote ? 26 : item.Height);
+        var annotation = new StandardAnnotation(pdf, item.IsNote ? "/Text" : "/FreeText")
+        {
+            Rectangle = new PdfRectangle(new XRect(left, page.Height.Point - top - height, width, height)),
+            Contents = item.Text,
+            Title = "Inklane"
+        };
+        annotation.Elements.SetString("/NM", item.Id);
+        annotation.Elements.SetInteger("/F", 4);
+        annotation.Elements["/C"] = ColorArray(pdf, item.IsNote ? "#E7AA32" : item.Color);
+        if (item.IsNote)
+        {
+            annotation.Elements.SetName("/Name", "/Note");
+            annotation.Elements.SetBoolean("/Open", false);
+        }
+        else
+        {
+            annotation.Elements.SetString("/DA", $"/Helv {Number(Units.DipToPoint(item.FontSize))} Tf 0 g");
+            annotation.Elements.SetInteger("/Q", 0);
+        }
+        SetAppearance(pdf, annotation, width, height, graphics =>
+        {
+            if (item.IsNote)
+            {
+                graphics.DrawRoundedRectangle(new XPen(XColor.FromArgb(168, 112, 18), .7),
+                    new XSolidBrush(XColor.FromArgb(255, 221, 134)), 1, 1, width - 2, height - 2, 4, 4);
+                var pen = new XPen(XColor.FromArgb(114, 75, 10), .9);
+                for (var y = 6d; y < height - 4; y += 3.5) graphics.DrawLine(pen, 5, y, width - 5, y);
+            }
+            else
+            {
+                var font = new XFont("Segoe UI", Units.DipToPoint(item.FontSize), XFontStyleEx.Regular);
+                var formatter = new XTextFormatter(graphics);
+                formatter.DrawString(item.Text, font, new XSolidBrush(ParseColor(item.Color)),
+                    new XRect(0, 0, width, height), XStringFormats.TopLeft);
+            }
+        });
+        page.Annotations.Add(annotation);
+    }
+
+    // PDFsharp's public graphics API writes a complete vector appearance with embedded font resources.
+    // The temporary page is removed after its content/resources have become the annotation's Form XObject.
+    private static void SetAppearance(PdfDocument pdf, PdfAnnotation annotation, double width, double height, Action<XGraphics> draw)
+    {
+        var appearancePage = pdf.AddPage();
+        appearancePage.Width = XUnit.FromPoint(width);
+        appearancePage.Height = XUnit.FromPoint(height);
+        using (var graphics = XGraphics.FromPdfPage(appearancePage)) draw(graphics);
+        var appearance = new PdfDictionary(pdf);
+        appearance.Elements.SetName("/Type", "/XObject");
+        appearance.Elements.SetName("/Subtype", "/Form");
+        appearance.Elements["/BBox"] = new PdfArray(pdf, new PdfInteger(0), new PdfInteger(0), new PdfReal(width), new PdfReal(height));
+        appearance.Elements["/Resources"] = appearancePage.Elements["/Resources"];
+        using var content = new MemoryStream();
+        for (var i = 0; i < appearancePage.Contents.Elements.Count; i++)
+        {
+            var stream = appearancePage.Contents.Elements.GetDictionary(i)!.Stream.UnfilteredValue;
+            content.Write(stream);
+            content.WriteByte((byte)'\n');
+        }
+        appearance.CreateStream(content.ToArray());
+        pdf.Internals.AddObject(appearance);
+        var ap = new PdfDictionary(pdf);
+        ap.Elements["/N"] = appearance.Reference!;
+        annotation.Elements["/AP"] = ap;
+        pdf.Pages.Remove(appearancePage);
+    }
+
+    private sealed class StandardAnnotation : PdfAnnotation
+    {
+        public StandardAnnotation(PdfDocument document, string subtype) : base(document)
+            => Elements.SetName("/Subtype", subtype);
+    }
+
+    private static PdfArray ColorArray(PdfDocument pdf, string hex)
+    {
+        var color = ParseColor(hex);
+        return new PdfArray(pdf, new PdfReal(color.R / 255d), new PdfReal(color.G / 255d), new PdfReal(color.B / 255d));
+    }
+    private static XColor ParseColor(string hex)
+    {
+        var value = uint.Parse(hex.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return XColor.FromArgb((int)((value >> 16) & 255), (int)((value >> 8) & 255), (int)(value & 255));
+    }
+    private static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    public static void Validate(DocumentData data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.SchemaVersion != 1) throw new NotSupportedException("This Inklane document version is not supported.");
+        if (!Enum.IsDefined(data.Kind)) throw new InvalidDataException("The document kind is invalid.");
+        if (data.Pages is null || data.Pages.Count is < 1 or > 1000)
+            throw new InvalidDataException("A document must have between 1 and 1,000 pages.");
+        if (data.Kind == DocumentKind.Image && data.Pages.Count != 1)
+            throw new InvalidDataException("Image annotations must have exactly one page.");
+        if (data.SourceImagePath?.Length > 32767 || data.SourceImageSha256 is { } hash &&
+            (hash.Length != 64 || !hash.All(Uri.IsHexDigit)))
+            throw new InvalidDataException("The original image identity is invalid.");
+        long pointCount = 0;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var page in data.Pages)
+        {
+            if (page is null) throw new InvalidDataException("A page is missing.");
+            Range(page.Width, 1, 100000, "Page width");
+            Range(page.Height, 1, 100000, "Page height");
+            if (!Enum.IsDefined(page.Pattern)) throw new InvalidDataException("The paper pattern is invalid.");
+            Range(page.SpacingMm, 1, 100, "Grid spacing");
+            Range(page.MarginMm, 0, data.Kind == DocumentKind.Image ? 1000 : Units.DipToMm(Math.Min(page.Width, page.Height)) / 2, "Margin");
+            if (page.Ink is null || page.Items is null || page.Ink.Count > 100000 || page.Items.Count > 10000)
+                throw new InvalidDataException("The page contains too many annotations or missing collections.");
+            foreach (var ink in page.Ink)
+            {
+                if (ink is null || ink.Points is null) throw new InvalidDataException("An ink stroke is invalid.");
+                Id(ink.Id, ids);
+                Color(ink.Color);
+                Range(ink.Width, .1, 1000, "Stroke width");
+                pointCount += ink.Points.Count;
+                if (pointCount > 2000000) throw new InvalidDataException("The document contains too many ink points.");
+                foreach (var point in ink.Points)
+                {
+                    if (point is null) throw new InvalidDataException("An ink point is missing.");
+                    Range(point.X, -100000, 200000, "Point X");
+                    Range(point.Y, -100000, 200000, "Point Y");
+                    Range(point.Pressure, 0, 1, "Pen pressure");
+                }
+            }
+            foreach (var item in page.Items)
+            {
+                if (item is null || item.Text is null || item.Text.Length > 1000000)
+                    throw new InvalidDataException("A text annotation is invalid or too long.");
+                Id(item.Id, ids);
+                Color(item.Color);
+                Range(item.X, -100000, 200000, "Text X");
+                Range(item.Y, -100000, 200000, "Text Y");
+                Range(item.Width, 1, 100000, "Text width");
+                Range(item.Height, 1, 100000, "Text height");
+                Range(item.FontSize, 1, 1000, "Font size");
+            }
+        }
+    }
+    private static void Range(double value, double min, double max, string name)
+    {
+        if (!double.IsFinite(value) || value < min || value > max)
+            throw new InvalidDataException($"{name} is outside the supported range.");
+    }
+    private static void Id(string value, HashSet<string> ids)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128 || !ids.Add(value))
+            throw new InvalidDataException("Annotation identifiers must be unique and nonempty.");
+    }
+    private static void Color(string value)
+    {
+        if (value is null || value.Length != 7 || value[0] != '#' || !value.AsSpan(1).ToArray().All(Uri.IsHexDigit))
+            throw new InvalidDataException("An annotation color is invalid.");
+    }
+    private static void CheckSize(string path, long limit)
+    {
+        if (new FileInfo(path).Length > limit) throw new InvalidDataException("The file exceeds the supported size limit.");
+    }
+    private static void ProtectSourceImage(DocumentData data, string destination)
+    {
+        if (data.SourceImagePath is { Length: > 0 } source &&
+            string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Annotation data cannot replace the original image.");
+    }
+    private static void AtomicWrite(string path, Action<string> write)
+    {
+        path = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(path)!;
+        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException("The destination folder does not exist.");
+        if (File.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly))
+            throw new UnauthorizedAccessException("The destination file is read-only.");
+        var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            write(temporary);
+            using (var flush = new FileStream(temporary, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) flush.Flush(true);
+            if (File.Exists(path)) ReplaceWithRetry(temporary, path);
+            else File.Move(temporary, path);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
+    private static void ReplaceWithRetry(string temporary, string path)
+    {
+        // Windows indexers/scanners can briefly open a freshly written target without delete sharing.
+        // Keep File.Replace's ACL preservation; permanent locks still fail with the original intact.
+        for (var attempt = 0; ; attempt++)
+        {
+            try { File.Replace(temporary, path, null); return; }
+            catch (IOException ex) when (attempt < 3 && (ex.HResult & 0xffff) is 32 or 33 or 1175)
+            {
+                Thread.Sleep(40 * (1 << attempt));
+            }
+        }
+    }
+}
