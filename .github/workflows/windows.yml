@@ -46,7 +46,10 @@ jobs:
           path: |
             .scratch/test-runs/**/*.png
             .scratch/package/startup-*.json
+            .scratch/installer-validation/**/checks.log
+            .scratch/installer-validation/**/installed-startup.json
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   prerelease:
