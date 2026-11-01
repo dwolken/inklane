@@ -2,6 +2,10 @@
 
 Inklane is a local Windows 11 application for image annotation and printable PDF notebooks. **0.1.0-alpha.1** is an unsigned evaluation build, not a production release. The repository is private.
 
+![Inklane notebook with an expanded editable note](docs/screenshots/notebook-note-light.jpg)
+
+Actual Windows application at full-page fit. New notebook pages initially open at a larger editing scale.
+
 ## Workspaces
 
 - **Images:** open PNG/JPEG files, browse their folder in one window, fit/zoom/pan, draw with a mouse or Windows stylus, add editable text and anchored notes, select/move/erase content, and undo/redo. Save creates a neighboring `image.png.inklane.json` sidecar; the source image stays unchanged. Annotated PNG and JSON export are available.
@@ -12,7 +16,7 @@ Inklane is a local Windows 11 application for image annotation and printable PDF
 
 ## Run the Windows build
 
-Download the ZIP from the private prerelease or a successful Windows Actions run. Extract **the whole folder**, then launch `Inklane.exe`. No separate .NET installation or administrator privileges are required. Windows may identify the executable as unsigned; no code-signing certificate or installer is included. The app does not register file associations or install a background service.
+Download the ZIP from [private releases](https://github.com/dwolken/inklane/releases) or a successful [Windows Actions run](https://github.com/dwolken/inklane/actions). Extract **the whole folder**, then launch `Inklane.exe`. No separate .NET installation or administrator privileges are required. Windows may identify the executable as unsigned; no code-signing certificate or installer is included. The app does not register file associations or install a background service.
 
 Keep image files and their `.inklane.json` sidecars together. When moving both, open the image so Inklane can find its neighboring sidecar. A notebook PDF carries its own editable data and does not require a sidecar.
 
