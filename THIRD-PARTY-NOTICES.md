@@ -65,3 +65,10 @@ notices are included in the distribution's `licenses/` directory.
 
 The application uses installed Windows Segoe UI fonts. PDFsharp embeds the used
 glyphs in generated PDFs. Windows font files are not bundled with Inklane.
+
+## Windows setup
+
+The installer and uninstaller use NSIS 3.13 and its zlib compressor, copyright
+1999–2026 NSIS contributors. These components use the zlib/libpng license. The
+installed `licenses/nsis-COPYING.txt` file contains the upstream notices. See the
+[NSIS license](https://nsis.sourceforge.io/License).

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Release')]
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+    [switch]$VerifyInstaller
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,7 +46,7 @@ Push-Location $projectRoot
 try {
     & dotnet publish $projectPath --artifacts-path $buildArtifacts --configuration $Configuration --runtime win-x64 --self-contained true --output $packagePath -p:PublishSingleFile=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:RestoreLockedMode=true
     if ($LASTEXITCODE -ne 0) { throw 'Self-contained publish failed.' }
-    foreach ($document in @('README.md', 'THIRD-PARTY-NOTICES.md')) {
+    foreach ($document in @('README.md', 'CHANGELOG.md', 'THIRD-PARTY-NOTICES.md')) {
         $documentPath = Join-Path $projectRoot $document
         if (-not (Test-Path -LiteralPath $documentPath)) { throw "Missing distribution document: $document" }
         Copy-Item -LiteralPath $documentPath -Destination $packagePath
@@ -65,7 +66,11 @@ try {
     if (-not (Test-Path -LiteralPath $exePath)) { throw 'Publish did not produce Inklane.exe.' }
     $smokePath = Join-Path $scratchRoot ("startup-" + [guid]::NewGuid().ToString('N') + '.json')
     # Launch from a directory outside the app/source tree to catch relative-resource assumptions.
-    $process = Start-Process -FilePath $exePath -ArgumentList @('--smoke-test', ('"' + $smokePath + '"')) -WorkingDirectory $scratchRoot -WindowStyle Hidden -PassThru
+    $previousDataHome = [Environment]::GetEnvironmentVariable('INKLANE_DATA_HOME')
+    try {
+        $env:INKLANE_DATA_HOME = Join-Path $buildArtifacts 'smoke-profile'
+        $process = Start-Process -FilePath $exePath -ArgumentList @('--smoke-test', ('"' + $smokePath + '"')) -WorkingDirectory $scratchRoot -WindowStyle Hidden -PassThru
+    } finally { [Environment]::SetEnvironmentVariable('INKLANE_DATA_HOME', $previousDataHome) }
     if (-not $process.WaitForExit(30000)) {
         $process.Kill()
         throw 'Packaged startup did not finish within 30 seconds.'
@@ -76,6 +81,7 @@ try {
     }
     $smokeResult = Get-Content -LiteralPath $smokePath -Raw | ConvertFrom-Json
     if ($smokeResult.success -ne $true) { throw 'Packaged startup did not report success.' }
+    if ($smokeResult.version -ne $version) { throw "Packaged application version does not match setup version $version." }
     if (-not $smokeResult.runtimeDirectory) { throw 'Startup check did not identify the loaded runtime.' }
     $loadedRuntimePath = [System.IO.Path]::GetFullPath([string]$smokeResult.runtimeDirectory).TrimEnd('\')
     if (-not $loadedRuntimePath.Equals($packagePath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -88,6 +94,11 @@ try {
     Write-Host "Packaged and startup-checked: $exePath"
     Write-Host "Archive: $zipPath"
     Write-Host "SHA-256: $checksum"
+    $setupPath = Join-Path $artifactRoot "Inklane-Setup-$version-x64.exe"
+    & (Join-Path $PSScriptRoot 'new-installer.ps1') -PayloadDirectory $packagePath -Version $version -OutputPath $setupPath
+    if ($VerifyInstaller) {
+        & (Join-Path $PSScriptRoot 'test-installer.ps1') -SetupPath $setupPath -PayloadDirectory $packagePath -Version $version
+    }
 }
 finally {
     Pop-Location

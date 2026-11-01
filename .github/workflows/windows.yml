@@ -27,13 +27,14 @@ jobs:
           global-json-file: global.json
       - name: Build, test, and package
         shell: pwsh
-        run: ./scripts/package.ps1
+        run: ./scripts/package.ps1 -VerifyInstaller
       - name: Retain checked Windows package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Inklane-win-x64-${{ github.sha }}
           path: |
             artifacts/*.zip
+            artifacts/Inklane-Setup-*-x64.exe
             artifacts/*.sha256
           if-no-files-found: error
           retention-days: 14
@@ -79,12 +80,15 @@ jobs:
           }
           $version = $env:RELEASE_TAG.Substring(1)
           $archive = "artifacts/Inklane-$version-win-x64.zip"
-          $checksumFile = "$archive.sha256"
-          foreach ($path in @($archive, $checksumFile, 'docs/release-notes.md')) {
+          $setup = "artifacts/Inklane-Setup-$version-x64.exe"
+          $assets = @($setup, "$setup.sha256", $archive, "$archive.sha256")
+          foreach ($path in ($assets + 'docs/release-notes.md')) {
             if (-not (Test-Path -LiteralPath $path)) { throw "Required release file is missing: $path" }
           }
-          $expected = ((Get-Content -LiteralPath $checksumFile -Raw).Trim() -split '\s+')[0]
-          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
-          if ($expected -ne $actual) { throw 'The downloaded archive failed its SHA-256 check.' }
-          & gh release create $env:RELEASE_TAG $archive $checksumFile --repo $env:GITHUB_REPOSITORY --verify-tag --prerelease --title "Inklane $version" --notes-file docs/release-notes.md
+          foreach ($asset in @($setup, $archive)) {
+            $expected = ((Get-Content -LiteralPath "$asset.sha256" -Raw).Trim() -split '\s+')[0]
+            $actual = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash
+            if ($expected -ne $actual) { throw "Downloaded asset failed its SHA-256 check: $asset" }
+          }
+          & gh release create $env:RELEASE_TAG @assets --repo $env:GITHUB_REPOSITORY --verify-tag --prerelease --title "Inklane $version" --notes-file docs/release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Private prerelease publication failed.' }
