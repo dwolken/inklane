@@ -7,13 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Inklane</AssemblyName>
     <RootNamespace>Inklane</RootNamespace>
-    <Version>0.1.0-alpha.1</Version>
+    <Version>1.0.0-rc.1</Version>
+    <Product>Inklane</Product>
+    <Company>Inklane</Company>
+    <Description>Local image annotation and PDF notebooks</Description>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/inklane.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets/inklane.ico" />
     <ProjectReference Include="../Inklane.Core/Inklane.Core.csproj" />
     <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
   </ItemGroup>

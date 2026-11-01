@@ -6,7 +6,9 @@ namespace Inklane;
 
 public partial class App : Application
 {
-    internal static string? DataDirectoryOverride { get; set; }
+    internal static string? DataDirectoryOverride { get; set; } = Environment.GetEnvironmentVariable("INKLANE_DATA_HOME");
+    public static string ProductVersion => typeof(App).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().First().InformationalVersion.Split('+')[0];
     public static string DataDirectory => DataDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Inklane");
     public static bool SmokeTest { get; private set; }
     public static bool FatalShutdown { get; private set; }

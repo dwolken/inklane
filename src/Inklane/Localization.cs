@@ -7,7 +7,7 @@ public static class L
     public static string Language { get; private set; } = "en";
     public static string ResolveLanguage(string requested, string windowsLanguage) =>
         (requested == "System" ? windowsLanguage : requested).StartsWith("de", StringComparison.OrdinalIgnoreCase) ? "de" : "en";
-    public static void Initialize(string requested) => Language = ResolveLanguage(requested, CultureInfo.InstalledUICulture.Name);
+    public static void Initialize(string requested) => Language = ResolveLanguage(requested, CultureInfo.CurrentUICulture.Name);
     public static string T(string key) => Strings.TryGetValue(key, out var value) ? (Language == "de" ? value.De : value.En) : key;
     public static string F(string key, params object[] values) => string.Format(CultureInfo.CurrentCulture, T(key), values);
     private static readonly Dictionary<string, (string En, string De)> Strings = new()
@@ -58,7 +58,37 @@ public static class L
         ["TextHint"] = ("Click the page to add text · Click existing text to edit", "Auf die Seite klicken für neuen Text · Bestehenden Text anklicken zum Bearbeiten"),
         ["NoteHint"] = ("Click to anchor a note · Use its marker to expand or collapse", "Klicken, um eine Notiz zu verankern · Über die Markierung ein- und ausklappen"),
         ["EraserHint"] = ("Touch an ink stroke to erase it", "Einen Tintenstrich berühren, um ihn zu löschen"), ["PanHint"] = ("Drag the page to pan · Ctrl+wheel to zoom", "Seite zum Verschieben ziehen · Strg+Mausrad zum Zoomen"),
-        ["AboutText"] = ("Inklane 0.1.0-alpha.1\nLocal image annotation and printable notebooks.\n\nOriginal images are preserved. Notebook PDFs contain editable Inklane data and standard annotations. Other PDF editors may display annotations differently; third-party edits are not imported.\n\nUnsigned Windows x64 alpha. Pen pressure and physical printer output require device validation.", "Inklane 0.1.0-alpha.1\nLokale Bildanmerkungen und druckbare Notizbücher.\n\nOriginalbilder bleiben erhalten. Notizbuch-PDFs enthalten bearbeitbare Inklane-Daten und Standardanmerkungen. Andere PDF-Programme können Anmerkungen anders darstellen; externe Änderungen werden nicht importiert.\n\nUnsignierte Windows-x64-Alpha. Stiftdruck und physischer Druck müssen noch an Geräten geprüft werden."),
+        ["AboutText"] = ("Local image annotation and printable PDF notebooks.", "Lokale Bildanmerkungen und druckbare PDF-Notizbücher."),
+        ["Start"] = ("Home", "Start"),
+        ["HomeTitle"] = ("Your workspace", "Ihr Arbeitsbereich"),
+        ["OpenImage"] = ("Open an image", "Bild öffnen"),
+        ["ImageEntryDetail"] = ("View a folder of images and mark up the details.", "Bilder im Ordner durchsehen und Details markieren."),
+        ["BookEntryDetail"] = ("Choose your paper and start writing.", "Papier auswählen und mit dem Schreiben beginnen."),
+        ["OpenExisting"] = ("Open a saved document…", "Gespeichertes Dokument öffnen…"),
+        ["ImageFilter"] = ("Images|*.png;*.jpg;*.jpeg", "Bilder|*.png;*.jpg;*.jpeg"),
+        ["Recents"] = ("Recent documents", "Zuletzt verwendet"),
+        ["RecentsEmpty"] = ("Documents you open or save appear here.", "Hier erscheinen geöffnete und gespeicherte Dokumente."),
+        ["Resume"] = ("Return to document", "Zurück zum Dokument"),
+        ["ClearRecents"] = ("Clear list", "Liste leeren"),
+        ["ImageType"] = ("Image", "Bild"), ["NotebookType"] = ("Notebook", "Notizbuch"),
+        ["More"] = ("More actions", "Weitere Aktionen"), ["Notes"] = ("Notes", "Notizen"),
+        ["NoteIndex"] = ("Anchored notes", "Verankerte Notizen"),
+        ["NoteSearch"] = ("Find a note", "Notiz suchen"),
+        ["NoteNumber"] = ("Note {0}", "Notiz {0}"),
+        ["NotePage"] = ("Page {0}", "Seite {0}"),
+        ["EmptyNote"] = ("Untitled note", "Unbenannte Notiz"),
+        ["NoNotes"] = ("No notes yet", "Noch keine Notizen"),
+        ["NoNoteMatches"] = ("No matching notes", "Keine passenden Notizen"),
+        ["PlaceNote"] = ("Place a note", "Notiz platzieren"),
+        ["PlaceNoteHint"] = ("Choose a point on the document for your note.", "Wählen Sie eine Stelle im Dokument für Ihre Notiz."),
+        ["CloseNotes"] = ("Close notes", "Notizen schließen"),
+        ["FitWidth"] = ("Fit width", "Breite einpassen"), ["WritingView"] = ("Writing view", "Schreibansicht"),
+        ["Zoom"] = ("Zoom", "Zoom"), ["ActualSize"] = ("Actual size", "Originalgröße"),
+        ["PagePreview"] = ("Paper preview", "Papiervorschau"), ["PageSettings"] = ("Page settings", "Seiteneinstellungen"),
+        ["NextImage"] = ("Next image", "Nächstes Bild"), ["PreviousImage"] = ("Previous image", "Vorheriges Bild"),
+        ["NextPage"] = ("Next page", "Nächste Seite"), ["PreviousPage"] = ("Previous page", "Vorherige Seite"),
+        ["SelectShort"] = ("Select", "Auswahl"), ["PanShort"] = ("Pan", "Hand"),
+        ["PaperShort"] = ("Paper", "Papier"), ["OpenShort"] = ("Open", "Öffnen"),
         ["ShortcutText"] = ("Ctrl+N   New notebook\nCtrl+O   Open image or notebook\nCtrl+S   Save\nCtrl+Shift+S   Save as\nCtrl+P   Print\nCtrl+Z / Ctrl+Y   Undo / Redo\nDelete   Delete selection\nCtrl+0   Fit page\nCtrl+plus / Ctrl+minus   Zoom\nAlt+Left / Alt+Right   Previous / Next\n\nWhen not typing: P Pen · V Select · E Eraser · T Text · N Note · H Pan\nUse Tab and Shift+Tab to move between controls.", "Strg+N   Neues Notizbuch\nStrg+O   Bild oder Notizbuch öffnen\nStrg+S   Speichern\nStrg+Umschalt+S   Speichern unter\nStrg+P   Drucken\nStrg+Z / Strg+Y   Rückgängig / Wiederholen\nEntf   Auswahl löschen\nStrg+0   Seite einpassen\nStrg+Plus / Strg+Minus   Zoom\nAlt+Links / Alt+Rechts   Zurück / Weiter\n\nAußerhalb der Texteingabe: P Stift · V Auswählen · E Radierer · T Text · N Notiz · H Verschieben\nTab und Umschalt+Tab wechseln zwischen Bedienelementen."),
     };
 }

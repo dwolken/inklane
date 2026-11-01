@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using PdfSharp.Drawing;
 using PdfSharp.Drawing.Layout;
 using PdfSharp.Pdf;
@@ -26,10 +27,28 @@ public static class DocumentStore
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public static string Serialize(DocumentData data)
+    private static readonly JsonSerializerOptions HistoryOptions = CreateHistoryOptions();
+
+    private static JsonSerializerOptions CreateHistoryOptions()
+    {
+        var resolver = new DefaultJsonTypeInfoResolver();
+        resolver.Modifiers.Add(type =>
+        {
+            if (type.Type == typeof(TextItem))
+                type.Properties.Single(p => p.Name == "isExpanded").ShouldSerialize = (item, _) => !((TextItem)item).IsNote;
+        });
+        return new JsonSerializerOptions(JsonOptions) { TypeInfoResolver = resolver };
+    }
+
+    public static string Serialize(DocumentData data) => Serialize(data, JsonOptions);
+
+    // Reading a note changes its presentation. Explicit saves still retain that presentation.
+    public static string SerializeForHistory(DocumentData data) => Serialize(data, HistoryOptions);
+
+    private static string Serialize(DocumentData data, JsonSerializerOptions options)
     {
         Validate(data);
-        var result = JsonSerializer.Serialize(data, JsonOptions);
+        var result = JsonSerializer.Serialize(data, options);
         if (Encoding.UTF8.GetByteCount(result) > MaxJsonBytes)
             throw new InvalidDataException("The annotation data exceeds the 32 MiB limit.");
         return result;
@@ -75,7 +94,7 @@ public static class DocumentStore
         ProtectSourceImage(data, path);
         using var pdf = new PdfDocument();
         pdf.Info.Title = Path.GetFileNameWithoutExtension(path);
-        pdf.Info.Creator = "Inklane 0.1.0-alpha";
+        pdf.Info.Creator = "Inklane";
         pdf.Info.Subject = "Editable Inklane notebook";
         pdf.Version = 17;
         pdf.Internals.Catalog.Elements.SetString("/InklaneFormat", Format);
@@ -336,6 +355,12 @@ public static class DocumentStore
     }
     private static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
+    public static void CheckPageCapacity(PageData page)
+    {
+        if (page.Ink is null || page.Items is null || page.Ink.Count > 100000 || page.Items.Count > 10000)
+            throw new InvalidDataException("The page contains too many annotations or missing collections.");
+    }
+
     public static void Validate(DocumentData data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -358,8 +383,7 @@ public static class DocumentStore
             if (!Enum.IsDefined(page.Pattern)) throw new InvalidDataException("The paper pattern is invalid.");
             Range(page.SpacingMm, 1, 100, "Grid spacing");
             Range(page.MarginMm, 0, data.Kind == DocumentKind.Image ? 1000 : Units.DipToMm(Math.Min(page.Width, page.Height)) / 2, "Margin");
-            if (page.Ink is null || page.Items is null || page.Ink.Count > 100000 || page.Items.Count > 10000)
-                throw new InvalidDataException("The page contains too many annotations or missing collections.");
+            CheckPageCapacity(page);
             foreach (var ink in page.Ink)
             {
                 if (ink is null || ink.Points is null) throw new InvalidDataException("An ink stroke is invalid.");
