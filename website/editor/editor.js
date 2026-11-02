@@ -1331,8 +1331,18 @@ function queueRecovery() {
 }
 function captureRecovery() {
   clearTimeout(recoverTimer);
-  if (!data || !recovery || embedded || !dirty()) return Promise.resolve();
+  if (!data || !recovery || embedded) return Promise.resolve();
   const entry = recovery;
+  if (!dirty()) {
+    // A previous edit can already be durable. Queue removal behind any write
+    // in flight, so Undo → Home cannot leave the undone version in Documents.
+    return (recoverQueue = recoverQueue.catch(() => {}).then(async () => {
+      if (entry.stored) {
+        await removeDraft(entry.id);
+        entry.stored = false;
+      }
+    }));
+  }
   const doc = { ...data, pages: [...data.pages] };
   if (changedDraft()) {
     const original = find(draft.id);
