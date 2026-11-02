@@ -2,9 +2,9 @@
 
 [Product website](https://dwolken.github.io/inklane/) · [Open the browser editor](https://dwolken.github.io/inklane/editor/) · [Windows downloads](https://github.com/dwolken/inklane/releases)
 
-Inklane is a local Windows 11 workspace for marking up images and writing in printable PDF notebooks. Draw directly on a detail, add editable text, or pin a longer observation to a numbered point. The notes panel lets you search those observations and jump back to the drawing, even on a different page.
+Inklane keeps feedback on the material it describes. Circle a detail, type a correction, or pin a longer explanation to its place on the page. Collapse the explanation to see the original again. [Try it on the field guide](https://dwolken.github.io/inklane/editor/?sample=review).
 
-The published Windows installer is **1.0.0-rc.2**. The **1.0.0-rc.3** source adds review of existing PDFs and Office documents using a matching PDF export. You can also annotate an image in the browser and reopen the editable marks on Windows.
+The [web workspace](https://dwolken.github.io/inklane/editor/) opens PDFs and images and creates printable notebooks without an account. The published Windows installer is **1.0.0-rc.2**; existing PDF review and Office review against a fixed PDF edition require the newer Windows source build.
 
 ![An Inklane notebook showing a courtyard section and its cross-page notes index](docs/screenshots/notebook.png)
 
@@ -14,7 +14,7 @@ Choose the **Inklane-Setup** x64 executable on the [Windows releases page](https
 
 The candidate is unsigned. Windows may display the publisher as unknown. A portable ZIP and SHA-256 checksums are also available on the release page. For portable use, extract the complete folder and launch `Inklane.exe`.
 
-## Two ways to work
+## Windows workspace
 
 **Images.** Choose **Open an image** on Home. PNG and JPEG files open at a scale that shows the whole image. Use ← and → to browse other images in the folder. Click the image counter to jump to a filename. The list follows Explorer-style numeric order and updates when files are added or removed. Save writes the editable ink, text and notes to a neighboring `.inklane.json` file. Keep the image and its sidecar together. **More actions → Export annotated PNG** creates a separate image for sharing.
 
@@ -57,7 +57,11 @@ For DOCX or PPTX, open the Office file and choose its matching PDF export. With 
 
 **Share precise feedback.** In the browser editor or the RC.3 Windows build, choose **More actions → Export feedback**. Give the recipient the reviewed source and the resulting `.feedback.json`. The report records the source fingerprint, page, location, note text and ink geometry. It can be read by a script as well as by a person. [Feedback format and example](docs/feedback.md)
 
-**Work in a browser.** [Open the image editor](https://dwolken.github.io/inklane/editor/) and choose a PNG or JPEG. Save the annotations and keep the JSON with the original image. To continue on another device, reopen both files. The editor reads and writes supported Windows image sidecars. The small interactive example on the product page resets on reload.
+**Continue in the web workspace.** Open a PNG, JPEG or PDF, or start a notebook with blank, ruled or squared paper. A portable `.inklane` file keeps the editable marks together with the reviewed source. For a smaller transfer, keep the original and its matching `.inklane.json` sidecar together. Image sidecars work with Windows; PDF sidecars require the Windows source build. A feedback export describes the marks for a recipient and is independent of the editable save.
+
+**Use it offline.** Open the web workspace once while online, then check **More → Offline access**. After it reports ready, it can reopen even when the server is unreachable, including its PDF renderer. Use a supported browser's install command to give the workspace its own window. Local drafts belong to that browser profile: keep a portable copy before clearing site data or changing devices.
+
+**Take a notebook between editions.** The Windows source build can open a portable notebook from the web and save it as an editable PDF. To go the other way, use **Export portable notebook** in Windows. For an annotated image or an existing PDF, transfer the original and its matching JSON sidecar; Windows does not unpack source-backed web bundles.
 
 A notebook PDF contains standard Ink, FreeText and Text annotations, vector paper, placed pictures, and an attached JSON model for editable reopening in Inklane. Other PDF readers can display the page and may expose annotation contents. Their note presentation varies. Editable notebook reopening includes the original alpha format released in November 2026. A title or placed image needs RC.2 or newer. General PDF markup uses a separate schema 3 sidecar and needs this development build. Inklane rejects detected external changes to protected notebook content. Keep third-party edits in a separate copy.
 

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 680" width="1160" height="680" role="img" aria-labelledby="title">
+  <title id="title">Echinacea purpurea, a botanical field plate</title>
+  <defs>
+    <linearGradient id="petal" x2=".25" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#74394c"/><stop offset=".24" stop-color="#b35c70"/><stop offset=".68" stop-color="#d58b9c"/><stop offset="1" stop-color="#e6b0b9"/>
+    </linearGradient>
+    <linearGradient id="leaf" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#879b78"/><stop offset=".65" stop-color="#677f62"/><stop offset="1" stop-color="#4f6957"/>
+    </linearGradient>
+    <g id="blade">
+      <path d="M0 0Q27-16 45-47L44-42L51-55L51-49L60-68L60-61Q70-91 70-126Q54-107 42-98L45-100L28-86L32-87L19-73L22-74L14-61Q-1-34 0 0Z" fill="url(#leaf)" stroke="#475e4f" stroke-width="1.5"/>
+      <g fill="none" stroke="#465f50" stroke-width="1.2">
+        <path d="M0 0Q27-56 70-126M8-17Q12-49 28-77M16-34Q26-55 55-76M26-52Q32-75 44-94M38-73Q50-90 62-97"/>
+        <path d="M3-6Q24-19 40-48M14-30Q19-57 32-76" stroke="#c2c49c"/>
+      </g>
+    </g>
+    <g id="ray">
+      <path d="M-5 0C-12 11-14 29-11 49C-8 69-3 89 1 107Q5 113 9 105C12 86 11 64 10 43C10 22 8 7 5 0Z" fill="url(#petal)" stroke="#8c5664" stroke-width="1.2"/>
+      <g fill="none" stroke-linecap="round" stroke-width=".85">
+        <path d="M0 4C-6 26-2 70 3 101M4 7C1 29 5 70 7 95" stroke="#ab6979"/>
+        <path d="M-5 11C-9 32-7 58-4 75" stroke="#e7aab2"/>
+      </g>
+    </g>
+    <g id="flower">
+      <g>
+        <use href="#ray" transform="translate(-34 -2) rotate(79) scale(.86 .93)"/>
+        <use href="#ray" transform="translate(34 -2) rotate(-83) scale(.85 1.03)"/>
+        <use href="#ray" transform="translate(-30 -2) rotate(64) scale(1 1.06)"/>
+        <use href="#ray" transform="translate(29 -2) rotate(-65) scale(.92 1.12)"/>
+        <use href="#ray" transform="translate(-24 -2) rotate(51) scale(1.08 1.12)"/>
+        <use href="#ray" transform="translate(23 -2) rotate(-52) scale(1.05 1.08)"/>
+        <use href="#ray" transform="translate(-21 -1) rotate(38) scale(1 1.1)"/>
+        <use href="#ray" transform="translate(19 1) rotate(-38) scale(1 1.05)"/>
+        <use href="#ray" transform="translate(-15 1) rotate(27) scale(.96 1.13)"/>
+        <use href="#ray" transform="translate(13 2) rotate(-24) scale(1.1 1.18)"/>
+        <use href="#ray" transform="translate(-7 2) rotate(14) scale(.94 1.17)"/>
+        <use href="#ray" transform="translate(7 1) rotate(-7) scale(.95 1.09)"/>
+        <use href="#ray" transform="translate(-1 0) rotate(3) scale(1.02 1.03)"/>
+      </g>
+      <use href="#cone"/>
+    </g>
+    <clipPath id="dome"><path d="M-42 0Q-36-34 -16-45Q-5-52 5-49Q29-47 43 0Q19 16-13 12Q-33 10-42 0Z"/></clipPath>
+    <pattern id="seeds" width="8" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-9)">
+      <path d="M0 11L2 3L5 10M5 5L7-2L9 6" stroke="#663529" stroke-width="1" fill="#b26839"/>
+      <path d="M2 3L1 7M7-2L6 2" stroke="#efbd75" stroke-width="1.5"/>
+    </pattern>
+    <g id="cone">
+      <path d="M-42 0Q-36-34 -16-45Q-5-52 5-49Q29-47 43 0Q19 16-13 12Q-33 10-42 0Z" fill="#9b5938" stroke="#724534" stroke-width="1.3"/>
+      <rect x="-47" y="-54" width="95" height="73" clip-path="url(#dome)" fill="url(#seeds)"/>
+    </g>
+  </defs>
+  <rect width="1160" height="680" fill="#f7f2e5"/>
+  <g fill="#484c40" font-family="Arial, sans-serif">
+    <path d="M57 77H1104M57 619H1104" stroke="#777b68" stroke-width="1.2"/>
+    <text x="58" y="58" font-size="17" letter-spacing="3.2" data-de="FELDFLORA">FIELD FLORA</text>
+    <text x="1103" y="58" text-anchor="end" font-size="15" letter-spacing="1.8" data-de="BOTANISCHE STUDIEN    /    TAFEL 04">BOTANICAL STUDIES    /    PLATE 04</text>
+    <text x="58" y="649" font-size="14" letter-spacing=".6" data-de="Herbar · Studienausgabe">Herbarium · Study edition</text>
+    <text x="1103" y="649" text-anchor="end" font-size="15" letter-spacing="2">04</text>
+  </g>
+  <g transform="translate(-5 0)">
+    <g fill="none" stroke-linecap="round">
+      <path d="M358 593Q367 493 363 420Q360 328 388 218M364 465Q334 413 283 390Q247 373 223 333" stroke="#4b6552" stroke-width="6"/>
+      <path d="M357 591Q366 497 362 419Q359 331 387 220M364 467Q328 408 283 392Q247 374 222 334" stroke="#93a27e" stroke-width="2"/>
+    </g>
+    <use href="#blade" transform="translate(360 548) rotate(-77) scale(1.02 1.16)"/>
+    <use href="#blade" transform="translate(366 489) rotate(28) scale(1.06 1.08)"/>
+    <use href="#blade" transform="translate(364 423) rotate(-77) scale(.82 .89)"/>
+    <use href="#blade" transform="translate(367 378) rotate(37) scale(.9 .87)"/>
+    <use href="#blade" transform="translate(283 390) rotate(-87) scale(.57 .68)"/>
+    <use href="#flower" transform="translate(222 330) rotate(-14) scale(.63)"/>
+    <use href="#flower" transform="translate(390 218) rotate(8) scale(1.04)"/>
+  </g>
+  <g fill="#394738">
+    <text x="633" y="161" font-family="Arial, sans-serif" font-size="16" letter-spacing="3.8">ASTERACEAE</text>
+    <text x="628" y="239" font-family="Georgia, serif" font-size="70" font-style="italic">Echinacea</text>
+    <text x="628" y="306" font-family="Georgia, serif" font-size="70" font-style="italic">purpurea</text>
+    <text x="634" y="349" font-family="Arial, sans-serif" font-size="23" data-de="Purpur-Sonnenhut">Purple coneflower</text>
+    <path d="M634 375H1053" fill="none" stroke="#a1a18f"/>
+  </g>
+  <g transform="translate(850 477) scale(1.05)">
+    <path d="M-6 7Q-7 30-13 46L-7 44L-3 52L2 44L8 48Q4 26 6 8" fill="#809072" stroke="#536a50"/>
+    <path d="M-35 2Q-26 18-12 19L-16 14Q-1 21 11 15L9 20Q28 17 38 3" fill="#8b9674" stroke="#566951"/>
+    <use href="#cone"/>
+  </g>
+  <g fill="#4d5143" font-family="Georgia, serif" font-size="17" font-style="italic">
+    <text x="165" y="563" data-de="a.   Blüte">a.   Flowering stem</text>
+    <text x="846" y="562" text-anchor="middle" data-de="b.   Fruchtstand">b.   Seed head</text>
+  </g>
+</svg>

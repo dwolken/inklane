@@ -9,6 +9,7 @@ import re
 from shutil import copyfile
 from string import Template
 from urllib.request import Request, urlopen
+from build_workspace import build_workspace
 
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parent
@@ -62,12 +63,10 @@ def build(output):
     installer = asset["browser_download_url"]
     assets = output / "assets"
     assets.mkdir(exist_ok=True, parents=True)
-    for name in ("site.css", "language.js", "demo.js", "courtyard.svg"):
+    for name in ("site.css", "language.js", "demo.js"):
         copyfile(SOURCE / name, assets / name)
-    editor = output / "editor"
-    editor.mkdir(exist_ok=True)
-    for name in ("index.html", "editor.css", "editor.js", "language.js", "model.js"):
-        copyfile(SOURCE / "editor" / name, editor / name)
+    build_workspace(output)
+    copyfile(ROOT / "brand/motion/inklane-sting.mp4", assets / "inklane-sting.mp4")
     for name in ("inklane.svg", "inklane.ico"):
         copyfile(ROOT / "src/Inklane/Assets" / name, assets / name)
     for name in ("notebook.png", "paper.png", "image.png"):
@@ -119,4 +118,6 @@ def build(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".scratch/website/inklane")
-    build(parser.parse_args().output)
+    parser.add_argument("--workspace-only", action="store_true", help="Build the offline app without fetching release metadata.")
+    args = parser.parse_args()
+    (build_workspace if args.workspace_only else build)(args.output)
