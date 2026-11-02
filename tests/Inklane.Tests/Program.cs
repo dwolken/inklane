@@ -218,6 +218,18 @@ internal static class Program
         Throws<InvalidDataException>(() => DocumentStore.Deserialize("{}"));
         Throws<InvalidDataException>(() => DocumentStore.Deserialize("{oops"));
         Throws<NotSupportedException>(() => DocumentStore.Deserialize("{\"schemaVersion\":3}"));
+        Throws<NotSupportedException>(() => DocumentStore.Deserialize("""{"schemaVersion":3,"title":"Future data"}"""));
+        var badText = Path.Combine(output,"invalid-utf8.json");
+        var validBytes = Encoding.UTF8.GetBytes(DocumentStore.Serialize(Sample()));
+        var badBytes = (byte[])validBytes.Clone();
+        badBytes[badBytes.AsSpan().IndexOf("A contextual note."u8)] = 0xff;
+        foreach (var prefix in new[] { Array.Empty<byte>(), Encoding.UTF8.GetPreamble() })
+        {
+            File.WriteAllBytes(badText,prefix.Concat(badBytes).ToArray());
+            Throws<InvalidDataException>(() => DocumentStore.LoadJson(badText));
+            File.WriteAllBytes(badText,prefix.Concat(validBytes).ToArray());
+            Equal("A contextual note.",DocumentStore.LoadJson(badText).Pages[0].Items[1].Text.Split('\n')[0]);
+        }
         var data = Sample();
         data.Pages[0].SpacingMm = 0;
         Throws<InvalidDataException>(() => DocumentStore.Serialize(data));
@@ -369,6 +381,9 @@ internal static class Program
         Mutate("changed-parent-rotation", pdf => pdf.Pages[0].Elements.GetDictionary("/Parent")!.Elements.SetInteger("/Rotate", 180));
         Mutate("changed-annotation-opacity", pdf => Annotation(pdf, 0).Elements.SetReal("/CA", .4));
         Mutate("changed-rich-note", pdf => Annotation(pdf, 2).Elements.SetString("/RC", "<p>An external rich-text edit</p>"));
+        var named = Sample(); named.Title = "Field book";
+        Mutate("changed-notebook-title", pdf => pdf.Info.Title = "External rename", named);
+        Mutate("changed-note-subject", pdf => Annotation(pdf, 2).Elements.SetString("/Subj", "An external rename"));
         Mutate("changed-font-resource", pdf => TextFont(pdf).Elements.SetName("/BaseFont", "/Courier"));
         Mutate("changed-font-stream", pdf =>
         {

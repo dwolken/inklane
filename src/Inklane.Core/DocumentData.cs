@@ -6,7 +6,16 @@ public enum PaperPattern { Blank, Ruled, Squared }
 /// <summary>Editable document coordinates are device-independent pixels (96 per inch).</summary>
 public sealed class DocumentData
 {
-    public int SchemaVersion { get; set; } = 1;
+    private int declaredVersion = 1;
+    // Recovery and clipboard writers use different JSON options. The model itself
+    // advertises the minimum reader it needs, without masking an unknown input version.
+    public int SchemaVersion
+    {
+        get => declaredVersion == 1 && (!string.IsNullOrEmpty(Title) || Pages?.Any(page =>
+            page?.Images is { Count: > 0 } || page?.Items?.Any(item => !string.IsNullOrEmpty(item?.Title)) == true) == true)
+            ? 2 : declaredVersion;
+        set => declaredVersion = value;
+    }
     public DocumentKind Kind { get; set; }
     public string Title { get; set; } = "";
     public List<PageData> Pages { get; set; } = [];

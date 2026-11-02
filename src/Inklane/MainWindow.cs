@@ -31,7 +31,8 @@ public sealed partial class MainWindow : Window
     private bool _loading, _saving, _closing, _pendingEdit;
     private readonly IDocumentInteraction _interaction;
     private readonly DocumentSurface _surface = new() { Translate = L.T };
-    private readonly List<string> _history = [];
+    private sealed record HistoryEntry(string Data, int PageBefore, int PageAfter, bool Reordered);
+    private readonly List<HistoryEntry> _history = [];
     private int _historyIndex;
     private readonly DispatcherTimer _editTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
     private readonly DispatcherTimer _recoveryTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -57,6 +58,8 @@ public sealed partial class MainWindow : Window
         FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"); FontSize = 14;
         SetResourceReference(BackgroundProperty, "SurfaceBrush"); SetResourceReference(ForegroundProperty, "TextBrush");
         Content = BuildWorkspace();
+        InitializeObjectCommands();
+        _folderRefresh.Tick += (_,_) => RefreshFolder();
         _surface.Changed += (_, _) => DocumentChanged();
         _surface.NoteSelectionChanged += (_, _) => RefreshNotes();
         _surface.ViewChanged += (_, _) => _zoomLabel.Text = $"{_surface.Zoom:P0}";
@@ -74,8 +77,10 @@ public sealed partial class MainWindow : Window
     }
 
     private static DocumentData NewDocument(PageData? page = null) => new() { Kind = DocumentKind.Notebook, Pages = [page ?? new PageData { Width = Units.MmToDip(210), Height = Units.MmToDip(297), Pattern = PaperPattern.Blank, SpacingMm = 5, MarginMm = 15 }] };
-    private string DisplayName => _filePath != null ? Path.GetFileName(_filePath).Replace(".inklane.json", "", StringComparison.OrdinalIgnoreCase) : _document.Kind == DocumentKind.Image ? Path.GetFileName(_document.SourceImagePath) ?? L.T("Image") : L.T("Untitled");
-    private bool IsDirty => _pendingEdit || _history.Count > 0 && _history[_historyIndex] != _savedState;
+    private string DisplayName => _document.Kind == DocumentKind.Image
+        ? Path.GetFileName(_document.SourceImagePath) ?? L.T("Image")
+        : _document.Title.Length > 0 ? _document.Title : _filePath == null ? L.T("Untitled") : Path.GetFileName(_filePath);
+    private bool IsDirty => _pendingEdit || _history.Count > 0 && _history[_historyIndex].Data != _savedState;
 
     private void SetTool(EditorTool tool)
     {
@@ -99,16 +104,22 @@ public sealed partial class MainWindow : Window
         var dirty = IsDirty;
         if (!_onHome) Title = $"{(dirty ? "● " : "")}{DisplayName} — Inklane";
         _documentTitle.Text = DisplayName;
-        _documentTitle.ToolTip = _filePath ?? _document.SourceImagePath;
+        _titleButton.ToolTip = _document.Kind == DocumentKind.Notebook ? L.T("RenameNotebook") + (_filePath == null ? "" : "\n" + _filePath) : _document.SourceImagePath;
+        _titleButton.Focusable = _titleButton.IsHitTestVisible = _document.Kind == DocumentKind.Notebook;
+        AutomationProperties.SetName(_titleButton, L.T("RenameNotebook") + " · " + DisplayName);
         var state = L.T(_saving ? "Saving" : dirty ? "Unsaved" : _filePath == null ? "Ready" : "Saved");
         _status.Text = $"{L.T(_document.Kind == DocumentKind.Notebook ? "NotebookType" : "ImageType")}  ·  {state}";
         foreach (var c in _undoControls) c.IsEnabled = _historyIndex > 0;
         foreach (var c in _redoControls) c.IsEnabled = _historyIndex < _history.Count - 1;
         foreach (var c in _saveControls) c.IsEnabled = !_saving;
         var notebook = _document.Kind == DocumentKind.Notebook;
-        _pageLabel.Text = notebook ? L.F("Page", _pageIndex + 1, _document.Pages.Count) : L.F("ImageNumber", _folderIndex + 1, Math.Max(1, _folderImages.Length));
-        _previous.IsEnabled = notebook ? _pageIndex > 0 : _folderIndex > 0;
-        _next.IsEnabled = notebook ? _pageIndex + 1 < _document.Pages.Count : _folderIndex + 1 < _folderImages.Length;
+        _pageLabel.Text = notebook ? L.F("Page", _pageIndex + 1, _document.Pages.Count) : _folderIndex < 0 ? L.F("MissingFolderImage", _folderImages.Length) : L.F("ImageNumber", _folderIndex + 1, _folderImages.Length);
+        var browse = L.T(notebook ? "BrowsePages" : "BrowseFolder");
+        _browseButton.ToolTip = browse;
+        _browseButton.IsEnabled = notebook || _folderImages.Length > 0;
+        AutomationProperties.SetName(_browseButton, browse + " · " + _pageLabel.Text);
+        _previous.IsEnabled = notebook ? _pageIndex > 0 : FolderNeighbor(-1) >= 0;
+        _next.IsEnabled = notebook ? _pageIndex + 1 < _document.Pages.Count : FolderNeighbor(1) < _folderImages.Length;
         _addPage.Visibility = _paper.Visibility = notebook ? Visibility.Visible : Visibility.Collapsed;
         _addPage.IsEnabled = _document.Pages.Count < 1000;
         UpdateNoteCount();
@@ -130,40 +141,51 @@ public sealed partial class MainWindow : Window
     }
     private void RollBackEdit(InvalidDataException error)
     {
-        RestoreSnapshot(_history[_historyIndex]);
+        RestoreSnapshot(_history[_historyIndex].Data);
         ShowPage(false);
         Error(L.T("DocumentLimit"), error);
     }
-    private bool CaptureHistory()
+    private bool CaptureHistory() => RecordEdit(_pageIndex);
+    private bool RecordEdit(int pageBefore, bool reordered = false)
     {
         _editTimer.Stop();
         string state;
         try { state = DocumentStore.SerializeForHistory(_document); }
         catch (InvalidDataException ex) { RollBackEdit(ex); return false; }
         _pendingEdit = false;
-        if (_history.Count > 0 && _history[_historyIndex] == state) { UpdateState(); return true; }
-        if (_historyIndex + 1 < _history.Count) _history.RemoveRange(_historyIndex + 1, _history.Count - _historyIndex - 1);
-        _history.Add(state);
-        while (_history.Count > 80 || (_history.Count > 2 && _history.Sum(s => (long)s.Length) > 20_000_000)) _history.RemoveAt(0);
+        if (_history.Count > 0 && _history[_historyIndex].Data == state) { UpdateState(); return true; }
+        if (_historyIndex + 1 < _history.Count)
+        {
+            int discarded = _history.Count - _historyIndex - 1;
+            _history.RemoveRange(_historyIndex + 1, discarded);
+        }
+        _history.Add(new HistoryEntry(state, pageBefore, _pageIndex, reordered));
+        while (_history.Count > 80 || (_history.Count > 2 && _history.Sum(s => (long)s.Data.Length) > 20_000_000))
+            _history.RemoveAt(0);
         _historyIndex = _history.Count - 1; UpdateState(); RefreshNotes();
         return true;
     }
-    private void ResetHistory(bool recovered = false)
+    private void ResetHistory(string? recoveredSnapshot = null)
     {
         _pendingEdit = false;
-        _editTimer.Stop(); _recoveryTimer.Stop(); _history.Clear(); _history.Add(DocumentStore.SerializeForHistory(_document)); _historyIndex = 0; _savedState = recovered ? "" : _history[0];
+        _editTimer.Stop(); _recoveryTimer.Stop(); _history.Clear();
+        _history.Add(new HistoryEntry(recoveredSnapshot ?? DocumentStore.SerializeForHistory(_document), _pageIndex, _pageIndex, false));
+        _historyIndex = 0; _savedState = recoveredSnapshot == null ? _history[0].Data : "";
     }
-    private void Undo()
+    private void Undo() => StepHistory(-1);
+    private void Redo() => StepHistory(1);
+    private void StepHistory(int direction)
     {
-        _surface.CommitEdits(); CaptureHistory();
-        if (_historyIndex == 0) return;
-        RestoreSnapshot(_history[--_historyIndex]); ShowPage(false); _recoveryTimer.Start();
-    }
-    private void Redo()
-    {
-        _surface.CommitEdits(); CaptureHistory();
-        if (_historyIndex + 1 >= _history.Count) return;
-        RestoreSnapshot(_history[++_historyIndex]); ShowPage(false); _recoveryTimer.Start();
+        _surface.CommitEdits();
+        if (!CaptureHistory()) return;
+        int index = _historyIndex + direction;
+        if (index < 0 || index >= _history.Count) return;
+        var step = _history[Math.Max(index,_historyIndex)];
+        if (step.Reordered) SwapPageViews(step.PageBefore,step.PageAfter);
+        int page = direction < 0 ? step.PageBefore : step.PageAfter;
+        bool switchPage = page != _pageIndex || step.Reordered;
+        _historyIndex = index; _pageIndex = page;
+        RestoreSnapshot(_history[index].Data); ShowPage(switchPage); _recoveryTimer.Start();
     }
     private void RestoreSnapshot(string snapshot)
     {
@@ -177,6 +199,7 @@ public sealed partial class MainWindow : Window
     }
     private bool CanLeave()
     {
+        FinishRenameNotebook(true);
         _surface.CommitEdits(); if (!CaptureHistory()) return false;
         if (!IsDirty) return true;
         var choice = _interaction.Choose(this, "Inklane", L.F("SavePrompt", DisplayName), L.T("Save"), L.T("Discard"), L.T("Cancel"));
@@ -185,7 +208,7 @@ public sealed partial class MainWindow : Window
     private void NewNotebook()
     {
         var paper = Dialogs.Paper(this); if (paper == null || !CanLeave()) return;
-        ClearRecovery(); _sessionId = Guid.NewGuid().ToString("N"); _document = NewDocument(paper); _filePath = _diskHash = null; _image = null; _pageIndex = 0; _folderImages = []; _noteSearch.Clear(); ResetHistory(); ShowEditor(); ShowPage(); SetTool(EditorTool.Pen);
+        ClearRecovery(); _sessionId = Guid.NewGuid().ToString("N"); _document = NewDocument(paper); _filePath = _diskHash = null; _image = null; _pageIndex = 0; SetupFolder(); _noteSearch.Clear(); ResetHistory(); ShowEditor(); ShowPage(); SetTool(EditorTool.Pen);
     }
     private void OpenDialog()
     {
@@ -226,18 +249,10 @@ public sealed partial class MainWindow : Window
             ClearRecovery(); _document = candidate; _filePath = savePath; _diskHash = hash; _image = image; _pageIndex = 0;
             _sessionId = candidate.SourceImagePath ?? path;
             _noteSearch.Clear();
-            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); RememberRecent(path);
+            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); _surface.Focus(); RememberRecent(path);
         }
         catch (NotSupportedException) { Error(L.T("UnsupportedPdf")); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); }
-    }
-    private void SetupFolder()
-    {
-        _folderImages = []; _folderIndex = 0;
-        if (_document.Kind != DocumentKind.Image || _document.SourceImagePath == null) return;
-        try { _folderImages = Directory.EnumerateFiles(Path.GetDirectoryName(_document.SourceImagePath)!).Where(p => new[] { ".png", ".jpg", ".jpeg" }.Contains(Path.GetExtension(p).ToLowerInvariant())).OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase).ToArray(); _folderIndex = Math.Max(0, Array.FindIndex(_folderImages, p => SamePath(p, _document.SourceImagePath))); }
-        catch (IOException) { _folderImages = [_document.SourceImagePath]; }
-        catch (UnauthorizedAccessException) { _folderImages = [_document.SourceImagePath]; }
     }
     private static BitmapSource LoadImage(string path)
     {
@@ -265,25 +280,30 @@ public sealed partial class MainWindow : Window
     {
         if (_document.Kind == DocumentKind.Image)
         {
-            var index = _folderIndex + direction; if (index >= 0 && index < _folderImages.Length) OpenFile(_folderImages[index]); return;
+            if (_folderRefresh.IsEnabled || _folderWatcher == null) RefreshFolder();
+            var index = FolderNeighbor(direction);
+            if (index >= 0 && index < _folderImages.Length) OpenFile(_folderImages[index]);
+            return;
         }
-        _surface.CommitEdits(); CaptureHistory(); var next = _pageIndex + direction;
-        if (next >= 0 && next < _document.Pages.Count) { _pageIndex = next; ShowPage(); }
+        GoToPage(_pageIndex + direction);
     }
     private void AddPage()
     {
         if (_document.Pages.Count >= 1000) return;
-        _surface.CommitEdits(); CaptureHistory(); var page = _document.Pages[_pageIndex];
+        if (!BeginPageChange()) return;
+        var page = _document.Pages[_pageIndex];
         ShiftPageViews(_pageIndex+1,1);
         _document.Pages.Insert(++_pageIndex, new PageData { Width = page.Width, Height = page.Height, Pattern = page.Pattern, SpacingMm = page.SpacingMm, MarginMm = page.MarginMm });
-        CaptureHistory(); ShowPage(); DocumentChanged();
+        FinishPageChange(_pageIndex - 1);
     }
     private void RemovePage()
     {
         if (_document.Pages.Count < 2) return;
         if (_interaction.Choose(this, L.T("RemovePage"), L.T("RemovePagePrompt"), L.T("RemovePage"), L.T("Cancel")) != 0) return;
-        _surface.CommitEdits(); CaptureHistory(); ShiftPageViews(_pageIndex,-1);
-        _document.Pages.RemoveAt(_pageIndex); _pageIndex = Math.Min(_pageIndex, _document.Pages.Count - 1); CaptureHistory(); ShowPage(); DocumentChanged();
+        if (!BeginPageChange()) return;
+        ShiftPageViews(_pageIndex,-1);
+        int removed = _pageIndex;
+        _document.Pages.RemoveAt(_pageIndex); _pageIndex = Math.Min(_pageIndex, _document.Pages.Count - 1); FinishPageChange(removed);
     }
     private void EditPaper()
     {
@@ -294,6 +314,7 @@ public sealed partial class MainWindow : Window
     private bool Save(bool saveAs = false)
     {
         if (_saving) return false;
+        FinishRenameNotebook(true);
         _surface.CommitEdits(); if (!CaptureHistory()) return false;
         try
         {
@@ -308,7 +329,7 @@ public sealed partial class MainWindow : Window
         if (saveAs || path == null)
         {
             var notebook = _document.Kind == DocumentKind.Notebook;
-            var dialog = new SaveFileDialog { Filter = L.T(notebook ? "PdfFilter" : "JsonFilter"), DefaultExt = notebook ? ".pdf" : ".json", AddExtension = true, FileName = path == null ? notebook ? L.T("Untitled") + ".pdf" : Path.GetFileName(_document.SourceImagePath) + ".inklane.json" : Path.GetFileName(path), OverwritePrompt = true };
+            var dialog = new SaveFileDialog { Filter = L.T(notebook ? "PdfFilter" : "JsonFilter"), DefaultExt = notebook ? ".pdf" : ".json", AddExtension = true, FileName = path == null ? notebook ? SuggestedPdfName() : Path.GetFileName(_document.SourceImagePath) + ".inklane.json" : Path.GetFileName(path), InitialDirectory = Path.GetDirectoryName(path ?? _document.SourceImagePath) ?? "", OverwritePrompt = true };
             path = _interaction.ChooseSavePath(this, dialog); if (path == null) return false;
             if (_filePath == null && _document.Kind == DocumentKind.Image && SamePath(path, _document.SourceImagePath + ".inklane.json") && File.Exists(path)) { Error(L.T("ExternalChange")); return false; }
             if (saveAs && _filePath != null && SamePath(path, _filePath) && File.Exists(path) && _diskHash != DocumentStore.GetFileHash(path)) { Error(L.T("ExternalChange")); return false; }
@@ -317,9 +338,9 @@ public sealed partial class MainWindow : Window
             if (_document.Kind == DocumentKind.Image && (_document.SourceImagePath == null || !File.Exists(_document.SourceImagePath) || !string.Equals(DocumentStore.GetFileHash(_document.SourceImagePath), _document.SourceImageSha256, StringComparison.OrdinalIgnoreCase)))
             { Error(L.T("ImageChanged")); return false; }
             _saving = true; UpdateState();
-            if (_document.Kind == DocumentKind.Notebook) SaveProgress.WriteNotebook(this, _document, _history[_historyIndex], path);
+            if (_document.Kind == DocumentKind.Notebook) SaveProgress.WriteNotebook(this, _document, _history[_historyIndex].Data, path);
             else DocumentStore.SaveJson(_document, path);
-            _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = _history[_historyIndex]; ClearRecovery();
+            _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = _history[_historyIndex].Data; ClearRecovery();
             if (_document.Kind == DocumentKind.Notebook) RenameViewSession(path);
             var source = _document.SourceImagePath;
             RememberRecent(source != null && SamePath(path, source + ".inklane.json") ? source : path);
@@ -330,14 +351,14 @@ public sealed partial class MainWindow : Window
     }
     private void ExportJson()
     {
-        _surface.CommitEdits(); var dialog = new SaveFileDialog { Filter = L.T("JsonFilter"), DefaultExt = ".json", FileName = Path.GetFileNameWithoutExtension(DisplayName) + ".annotations.json" };
+        _surface.CommitEdits(); var dialog = new SaveFileDialog { Filter = L.T("JsonFilter"), DefaultExt = ".json", FileName = ExportStem + ".annotations.json" };
         var path = _interaction.ChooseSavePath(this, dialog); if (path == null || !DestinationAllowed(path, ".json", true)) return;
         try { DocumentStore.SaveJson(_document, path); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); }
     }
     private void ExportImage()
     {
-        _surface.CommitEdits(); var dialog = new SaveFileDialog { Filter = L.T("PngFilter"), DefaultExt = ".png", FileName = Path.GetFileNameWithoutExtension(DisplayName) + "-annotated.png" };
+        _surface.CommitEdits(); var dialog = new SaveFileDialog { Filter = L.T("PngFilter"), DefaultExt = ".png", FileName = ExportStem + "-annotated.png" };
         var path = _interaction.ChooseSavePath(this, dialog); if (path == null || !DestinationAllowed(path, ".png", true)) return;
         try
         {
@@ -386,7 +407,8 @@ public sealed partial class MainWindow : Window
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         if (_onHome)
         {
-            if (ctrl && key is Key.O or Key.N)
+            if (Keyboard.Modifiers == ModifierKeys.Control && key == Key.V) { e.Handled = true; StartNotebookFromClipboard(); }
+            else if (ctrl && key is Key.O or Key.N)
             {
                 e.Handled = true;
                 if (key == Key.O) OpenDialog(); else NewNotebook();
@@ -394,29 +416,37 @@ public sealed partial class MainWindow : Window
             else if (_hasDocument && key == Key.Escape) { e.Handled = true; ShowEditor(); }
             return;
         }
+        if (_pagePicker.IsOpen || _titleEditor.IsKeyboardFocusWithin && key is Key.Escape or Key.Enter) return;
+        if (HandleObjectKey(key, Keyboard.Modifiers)) { e.Handled = true; return; }
+        var typing = Keyboard.FocusedElement is TextBoxBase || _surface.HasTextFocus;
         if (ctrl)
         {
             Action? action = key switch
             {
                 Key.N => NewNotebook, Key.O => OpenDialog, Key.S => () => Save(shift), Key.P => Print,
-                Key.Z when !_surface.HasTextFocus => shift ? Redo : Undo, Key.Y when !_surface.HasTextFocus => Redo,
+                Key.Z when !typing => shift ? Redo : Undo, Key.Y when !typing => Redo,
                 Key.D1 or Key.NumPad1 => _surface.FitToWidth, Key.D0 or Key.NumPad0 => _surface.FitToPage, Key.OemPlus or Key.Add => () => _surface.ZoomBy(1.2), Key.OemMinus or Key.Subtract => () => _surface.ZoomBy(1 / 1.2), _ => null
             };
             if (action != null) { e.Handled = true; action(); } return;
         }
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt) && key is Key.Left or Key.Right) { e.Handled = true; Navigate(key == Key.Left ? -1 : 1); return; }
-        if (_surface.HasTextFocus || Keyboard.FocusedElement is TextBoxBase || Keyboard.Modifiers != ModifierKeys.None) return;
+        if (typing || Keyboard.FocusedElement is ComboBox or ComboBoxItem or ListBoxItem or MenuItem) return;
+        if (key is Key.Left or Key.Right && (Keyboard.Modifiers == ModifierKeys.Alt ||
+            Keyboard.Modifiers == ModifierKeys.None && _document.Kind == DocumentKind.Image && !_surface.HasSelection &&
+            (_surface.IsKeyboardFocusWithin || Keyboard.FocusedElement == this || Keyboard.FocusedElement == null ||
+             _previous.IsKeyboardFocused || _next.IsKeyboardFocused || _browseButton.IsKeyboardFocused)))
+        { e.Handled = true; Navigate(key == Key.Left ? -1 : 1); return; }
+        if (Keyboard.Modifiers != ModifierKeys.None) return;
         EditorTool? tool = key switch { Key.P => EditorTool.Pen, Key.V => EditorTool.Select, Key.E => EditorTool.Eraser, Key.T => EditorTool.Text, Key.N => EditorTool.Note, Key.H => EditorTool.Pan, _ => null };
         if (tool.HasValue) { SetTool(tool.Value); e.Handled = true; }
         else if (key == Key.Delete) { _surface.DeleteSelection(); e.Handled = true; }
     }
-    public void StopBackgroundWork() { _editTimer.Stop(); _recoveryTimer.Stop(); }
+    public void StopBackgroundWork() { _editTimer.Stop(); _recoveryTimer.Stop(); StopWatchingFolder(); }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_saving && !App.FatalShutdown) { e.Cancel = true; return; }
         if (App.SmokeTest || App.FatalShutdown || _closing) return;
         if (!CanLeave()) { e.Cancel = true; return; }
-        _closing = true; ClearRecovery();
+        _closing = true; ClearRecovery(); StopBackgroundWork();
     }
     private bool WriteRecovery()
     {
@@ -439,20 +469,27 @@ public sealed partial class MainWindow : Window
             try
             {
                 if (new FileInfo(path).Length > 40_000_000) continue;
-                var state = JsonSerializer.Deserialize<Recovery>(File.ReadAllText(path)); if (state?.Document == null) continue;
+                Recovery? state;
+                using (var input = File.OpenRead(path)) state = JsonSerializer.Deserialize<Recovery>(input);
+                if (state?.Document == null) continue;
                 try { using var process = Process.GetProcessById(state.ProcessId); if (process.ProcessName == "Inklane") continue; } catch (ArgumentException) { }
-                DocumentStore.Deserialize(DocumentStore.Serialize(state.Document));
+                DocumentStore.Validate(state.Document, decodeImages: true);
                 var choice = _interaction.Choose(this, L.T("Recovery"), L.F("RecoveryPrompt", state.SavedAt.LocalDateTime.ToString("g")), L.T("Restore"), L.T("Discard"), L.T("Cancel"));
                 if (choice == 0)
                 {
                     var image = state.Document.Kind == DocumentKind.Image ? LoadImage(state.Document.SourceImagePath!) : null;
                     if (image != null && state.Document.SourceImageSha256 != DocumentStore.GetFileHash(state.Document.SourceImagePath!)) throw new InvalidDataException(L.T("ImageChanged"));
-                    _document = state.Document; _image = image; _filePath = state.FilePath; _diskHash = state.DiskHash; _pageIndex = state.PageIndex; SetupFolder(); ResetHistory(true); ShowEditor(); ShowPage(); if (WriteRecovery()) File.Delete(path); return;
+                    var snapshot = DocumentStore.SerializeForHistory(state.Document);
+                    _document = state.Document; _image = image; _filePath = state.FilePath; _diskHash = state.DiskHash;
+                    _pageIndex = Math.Clamp(state.PageIndex,0,_document.Pages.Count-1);
+                    SetupFolder(); ResetHistory(snapshot); ShowEditor(); ShowPage();
+                    if (WriteRecovery()) File.Delete(path);
+                    return;
                 }
                 if (choice == 1) { File.Delete(path); continue; }
                 return;
             }
-            catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); return; }
+            catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); }
         }
     }
     private void ClearRecovery()

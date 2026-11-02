@@ -20,6 +20,7 @@ public static class DocumentStore
     public const int MaxPdfBytes = 128 * 1024 * 1024;
     public const int MaxTitleLength = 200;
     private const string Format = "Inklane-1";
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true);
     private static readonly JsonSerializerOptions JsonOptions = CreateOptions(history: false);
     private static readonly JsonSerializerOptions HistoryOptions = CreateOptions(history: true);
 
@@ -28,15 +29,6 @@ public static class DocumentStore
         var resolver = new DefaultJsonTypeInfoResolver();
         resolver.Modifiers.Add(type =>
         {
-            // An older Inklane must never silently discard an inserted image or a title.
-            // Keep ordinary, version-one notebooks editable by the earlier release.
-            if (type.Type == typeof(DocumentData))
-                type.Properties.Single(p => p.Name == "schemaVersion").Get = obj =>
-                {
-                    var data = (DocumentData)obj;
-                    return data.Title.Length != 0 || data.Pages.Any(p => p.Images.Count > 0 || p.Items.Any(i => i.Title.Length > 0))
-                        ? 2 : data.SchemaVersion;
-                };
             if (history && type.Type == typeof(TextItem))
                 type.Properties.Single(p => p.Name == "isExpanded").ShouldSerialize = (item, _) => !((TextItem)item).IsNote;
         });
@@ -69,9 +61,7 @@ public static class DocumentStore
         {
             var data = JsonSerializer.Deserialize<DocumentData>(json, JsonOptions)
                 ?? throw new InvalidDataException("The annotation data is empty.");
-            Validate(data);
-            foreach (var image in data.Pages.SelectMany(page => page.Images))
-                EmbeddedPng.Decode(image.PngData);
+            Validate(data, decodeImages: true);
             return data;
         }
         catch (JsonException ex) { throw new InvalidDataException("The annotation data is invalid.", ex); }
@@ -94,7 +84,8 @@ public static class DocumentStore
     public static DocumentData LoadJson(string path)
     {
         CheckSize(path, MaxJsonBytes);
-        return Deserialize(File.ReadAllText(path, Encoding.UTF8));
+        try { return Deserialize(File.ReadAllText(path, StrictUtf8)); }
+        catch (DecoderFallbackException ex) { throw new InvalidDataException("The annotation file contains invalid text encoding.", ex); }
     }
 
     public static void SavePdf(DocumentData data, string path)
@@ -194,7 +185,9 @@ public static class DocumentStore
             throw new NotSupportedException("The editable data has been transformed by another PDF application.");
         var bytes = metadata.Stream.Value;
         if (bytes.Length > MaxJsonBytes) throw new InvalidDataException("The editable data exceeds the size limit.");
-        var data = Deserialize(Encoding.UTF8.GetString(bytes));
+        DocumentData data;
+        try { data = Deserialize(StrictUtf8.GetString(bytes)); }
+        catch (DecoderFallbackException ex) { throw new InvalidDataException("The embedded annotation text is not valid UTF-8.", ex); }
         if (!string.IsNullOrWhiteSpace(data.Title) && pdf.Info.Title != data.Title)
             throw new NotSupportedException("The PDF title was changed outside Inklane.");
         if (data.Pages.Count != pdf.PageCount)
@@ -381,7 +374,7 @@ public static class DocumentStore
             throw new InvalidDataException("The page contains too many annotations or missing collections.");
     }
 
-    public static void Validate(DocumentData data)
+    public static void Validate(DocumentData data, bool decodeImages = false)
     {
         ArgumentNullException.ThrowIfNull(data);
         if (data.SchemaVersion is not (1 or 2)) throw new NotSupportedException("This Inklane document version is not supported.");
@@ -450,6 +443,10 @@ public static class DocumentStore
                 Range(item.FontSize, 1, 1000, "Font size");
             }
         }
+        // Establish aggregate bounds for every page before allocating any decoded images.
+        if (decodeImages)
+            foreach (var image in data.Pages.SelectMany(page => page.Images))
+                EmbeddedPng.Decode(image.PngData);
     }
     private static void CheckTitle(string title)
     {
