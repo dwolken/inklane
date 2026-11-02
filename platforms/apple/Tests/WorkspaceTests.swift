@@ -227,16 +227,22 @@ final class WorkspaceTests: XCTestCase {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
+        host.exporter.makeSavePanel = {
+            let panel = NSSavePanel()
+            // The sandboxed AppKit sheet transfers its configuration to a remote view when presented.
+            panel.directoryURL = folder
+            return panel
+        }
         try await perform(host, "document.querySelector('#close-card').click(); document.querySelector('#save').click()")
         for _ in 0..<120 {
-            if host.exporter.picker != nil { break }
+            if let picker = host.exporter.picker, picker.isVisible, picker.sheetParent != nil { break }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         let save = try XCTUnwrap(host.exporter.picker)
-        save.directoryURL = folder
-        save.nameFieldStringValue = "Review.inklane"
+        XCTAssertTrue(save.isVisible)
+        let suggestedName = try XCTUnwrap(host.exporter.pendingFile).lastPathComponent
         save.ok(nil)
-        let destination = folder.appendingPathComponent("Review.inklane")
+        let destination = folder.appendingPathComponent(suggestedName)
         for _ in 0..<120 {
             if FileManager.default.fileExists(atPath: destination.path) { break }
             try await Task.sleep(nanoseconds: 100_000_000)
