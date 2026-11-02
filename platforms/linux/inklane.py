@@ -2,6 +2,8 @@
 """GTK host for the bundled Inklane workspace. User documents stay inside WebKit."""
 import base64
 import binascii
+import ctypes
+import errno
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -64,6 +66,7 @@ class Exports:
     def __init__(self, select_destination):
         self.select_destination = select_destination
         self.pending = None
+        self.presenting = False
 
     def discard(self):
         if self.pending:
@@ -74,7 +77,7 @@ class Exports:
         op = msg["op"]
         if op == "begin":
             name, size = msg["filename"], msg["size"]
-            if (self.pending or not isinstance(size, int) or not 0 <= size <= MAX_BYTES
+            if (self.pending or self.presenting or not isinstance(size, int) or not 0 <= size <= MAX_BYTES
                     or not isinstance(name,str) or name in ("",".","..") or Path(name).name != name
                     or len(name)>255 or any(ord(c)<32 for c in name)
                     or not name.lower().endswith((".inklane", ".inklane.json", ".feedback.json"))):
@@ -99,6 +102,10 @@ class Exports:
             return ""
         if op != "export" or stream.tell()!=transfer["size"]:
             raise ValueError("Incomplete transfer.")
+        # A complete payload now belongs to the native save dialog. A renderer crash
+        # may discard a partial upload, but cannot invalidate the user's pending copy.
+        self.pending = None
+        self.presenting = True
         try:
             destination = self.select_destination(transfer["name"])
             if destination is None:
@@ -109,17 +116,34 @@ class Exports:
                 raise ValueError("Unexpected file extension.")
             # Publish an entirely written file. Never replace a source or a newly appeared destination.
             with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".inklane-", delete=False) as staged:
+                moved = False
                 try:
                     stream.seek(0)
                     shutil.copyfileobj(stream,staged)
                     staged.flush()
                     os.fsync(staged.fileno())
-                    os.link(staged.name,destination)
+                    try:
+                        os.link(staged.name, destination)
+                    except OSError as error:
+                        if error.errno not in (errno.EOPNOTSUPP, errno.EPERM, errno.EACCES, errno.ENOSYS, errno.EMLINK):
+                            raise
+                        # FAT volumes and some network shares reject hard links. RENAME_NOREPLACE
+                        # performs the same atomic collision check while moving our completed file.
+                        rename = getattr(ctypes.CDLL(None, use_errno=True), "renameat2", None)
+                        if rename is None:
+                            raise
+                        at_fdcwd, noreplace = -100, 1
+                        if rename(at_fdcwd, os.fsencode(staged.name), at_fdcwd, os.fsencode(destination), noreplace) != 0:
+                            reason = ctypes.get_errno()
+                            raise OSError(reason, os.strerror(reason), destination) from error
+                        moved = True
                 finally:
-                    os.unlink(staged.name)
+                    if not moved:
+                        os.unlink(staged.name)
             return "saved"
         finally:
-            self.discard()
+            stream.close()
+            self.presenting = False
 
 
 class Inklane(Gtk.Application):
@@ -127,6 +151,7 @@ class Inklane(Gtk.Application):
         super().__init__(application_id="io.github.dwolken.Inklane", flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.window = self.server = self.view = None
         self.exports = Exports(self.choose_copy)
+        self.renderer_generation = 0
 
     def choose_copy(self, name):
         german = GLib.get_language_names()[0].lower().startswith("de")
@@ -149,6 +174,7 @@ class Inklane(Gtk.Application):
             dialog.destroy()
 
     def on_message(self, manager, value, reply):
+        generation = self.renderer_generation
         try:
             if not self.view or not self.valid_document(self.view.get_uri()):
                 raise ValueError("Untrusted page.")
@@ -156,11 +182,19 @@ class Inklane(Gtk.Application):
             if not raw or len(raw)>270000:
                 raise ValueError("Invalid message.")
             result = self.exports.accept(json.loads(raw))
-            reply.return_value(JSC.Value.new_string(value.get_context(), result))
+            if generation == self.renderer_generation:
+                reply.return_value(JSC.Value.new_string(value.get_context(), result))
         except (ValueError, KeyError, TypeError, OSError, binascii.Error) as error:
-            self.exports.discard()
-            reply.return_error_message(str(error))
+            if generation == self.renderer_generation:
+                self.exports.discard()
+                reply.return_error_message(str(error))
         return True
+
+    def renderer_terminated(self, view, reason):
+        self.renderer_generation += 1
+        self.exports.discard()
+        # Reopen the trusted library with the same origin and persistent draft store.
+        view.load_uri(f"http://127.0.0.1:{self.server.server_port}/editor/")
 
     def valid_document(self, uri):
         if not uri or not self.server:
@@ -218,6 +252,7 @@ class Inklane(Gtk.Application):
         context=WebKit2.WebContext.new_with_website_data_manager(stores)
         self.view=WebKit2.WebView(web_context=context,user_content_manager=manager)
         self.view.connect("decide-policy",self.navigation)
+        self.view.connect("web-process-terminated",self.renderer_terminated)
         self.view.connect("permission-request",lambda _,request: (request.deny(),True)[1])
         self.view.connect("close",lambda *_:self.window.destroy())
         self.window.connect("delete-event",lambda *_:(self.view.try_close(),True)[1])
