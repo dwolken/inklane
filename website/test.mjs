@@ -91,6 +91,38 @@ try {
     assert.equal(new URL(page.url()).hash, "#main");
     await page.locator("header a[href='#workspace']").click();
     assert.equal(new URL(page.url()).hash, "#workspace");
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 840 });
+      const section = page.locator(".sample-board");
+      const notes = section.locator("details");
+      const first = notes.first(), second = notes.last();
+      const pin = first.locator("summary");
+      const relativePin = () => pin.evaluate(el => {
+        const b = el.closest(".sample-board").getBoundingClientRect(), p = el.getBoundingClientRect();
+        return [p.x + p.width / 2 - b.x, p.y + p.height / 2 - b.y];
+      });
+      await section.scrollIntoViewIfNeeded();
+      const anchor = await relativePin();
+      await pin.focus(); await page.keyboard.press("Enter");
+      assert.ok(await first.locator("textarea").isVisible());
+      await first.locator("textarea").fill("A revised observation");
+      assert.deepEqual(await relativePin(), anchor, "Opening the card moved its anchor.");
+      await page.keyboard.press("Escape");
+      assert.equal(await pin.evaluate(el => el === document.activeElement), true);
+      await pin.click(); assert.equal(await first.locator("textarea").inputValue(), "A revised observation");
+      await second.locator("summary").click();
+      assert.ok(await second.locator("textarea").isVisible());
+      assert.equal(await first.locator("textarea").isVisible(), false);
+      if (process.env.SITE_CAPTURE_DIR && width !== 320)
+        await page.locator(".note-study").screenshot({ path: join(process.env.SITE_CAPTURE_DIR, lang + "-notes-" + width + ".png") });
+      const card = await second.locator("textarea").boundingBox();
+      assert.ok(card.x >= 0 && card.x + card.width <= width && card.height >= 50);
+      await second.locator("summary").click();
+    }
+    await page.locator(".study-copy .link").click();
+    assert.equal(new URL(page.url()).pathname, base + "editor/");
+    assert.equal(new URL(page.url()).searchParams.get("lang"), lang);
+    await page.goBack();
     await page.locator("a.image-wrap").click();
     assert.equal(new URL(page.url()).pathname, base + "assets/image.png");
     await page.goBack();
@@ -138,6 +170,8 @@ try {
   await page.goto(local);
   assert.equal(await page.locator("html").getAttribute("lang"), "en");
   assert.ok(await page.locator(".button").first().isVisible());
+  await page.locator(".sample-pin").first().click();
+  assert.ok(await page.locator("#note-one").isVisible());
   await page.locator("[data-language-link]").click();
   assert.equal(await page.locator("html").getAttribute("lang"), "de");
   for (const path of ["robots.txt", "sitemap.xml"]) assert.equal((await page.request.get(local + path)).status(), 200);

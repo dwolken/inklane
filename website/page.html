@@ -26,6 +26,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <script type="application/ld+json">$structured_data</script>
   <script src="${base}assets/language.js" defer></script>
+  <script src="${base}assets/demo.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">$skip</a>
@@ -43,7 +44,7 @@
         <p class="kicker"><span class="rule"></span>$hero_label</p>
         <h1 id="intro">$headline <em>$headline_accent</em></h1>
         <p class="lead">$hero_text</p>
-        <div class="actions"><a class="button" href="$installer">$download_icon $download</a><a class="link" href="$repo">GitHub $arrow_icon</a></div>
+        <div class="actions"><a class="button" href="$installer">$download_icon $download</a><a class="link" href="${base}editor/?lang=$lang">$open_editor $arrow_icon</a></div>
         <p class="release-line">$windows <span>·</span> $status $version</p>
       </div>
       <figure class="hero-figure">
@@ -63,9 +64,29 @@
         </figure>
         <div class="marginalia">
           <h3>$image_heading</h3><p>$image_body</p>
-          <div class="note-rule"><span class="note-mark" aria-hidden="true">1</span></div>
-          <h3>$note_heading</h3><p>$note_body</p>
         </div>
+      </div>
+      <div class="note-study" id="notes">
+        <div class="study-copy">
+          <p class="kicker"><span class="rule"></span>$demo_label</p>
+          <h2>$note_heading</h2><p>$demo_intro</p>
+          <p class="study-foot">$demo_ephemeral</p>
+          <a class="link" href="${base}editor/?lang=$lang">$own_image $arrow_icon</a>
+        </div>
+        <figure>
+          <div class="sample-board">
+            <img class="plan" src="${base}assets/courtyard.svg" width="600" height="300" alt="$demo_alt">
+            <details class="sample-detail first" name="courtyard-note">
+              <summary class="sample-pin"><b aria-hidden="true">1</b><span class="visually-hidden">$demo_one</span></summary>
+              <div class="sample-card"><label for="note-one"><span>01</span> $demo_one</label><textarea id="note-one" rows="3" maxlength="1600">$demo_one_body</textarea></div>
+            </details>
+            <details class="sample-detail second" name="courtyard-note">
+              <summary class="sample-pin"><b aria-hidden="true">2</b><span class="visually-hidden">$demo_two</span></summary>
+              <div class="sample-card"><label for="note-two"><span>02</span> $demo_two</label><textarea id="note-two" rows="3" maxlength="1600">$demo_two_body</textarea></div>
+            </details>
+          </div>
+          <figcaption><span class="fig-no">↳</span>$demo_caption</figcaption>
+        </figure>
       </div>
       <div class="paper">
         <div class="paper-copy">

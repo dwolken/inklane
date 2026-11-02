@@ -62,8 +62,12 @@ def build(output):
     installer = asset["browser_download_url"]
     assets = output / "assets"
     assets.mkdir(exist_ok=True, parents=True)
-    for name in ("site.css", "language.js"):
+    for name in ("site.css", "language.js", "demo.js", "courtyard.svg"):
         copyfile(SOURCE / name, assets / name)
+    editor = output / "editor"
+    editor.mkdir(exist_ok=True)
+    for name in ("index.html", "editor.css", "editor.js", "language.js", "model.js"):
+        copyfile(SOURCE / "editor" / name, editor / name)
     for name in ("inklane.svg", "inklane.ico"):
         copyfile(ROOT / "src/Inklane/Assets" / name, assets / name)
     for name in ("notebook.png", "paper.png", "image.png"):
