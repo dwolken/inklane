@@ -86,6 +86,13 @@ internal static partial class Program
         AddText(state.Window,"Desktop follow-up"); Assert(Call<bool>(state.Window,"Save",false),"Native save failed.");
         state.Window.OpenFile(source); Equal(hash,DocumentStore.GetFileHash(source));
         Equal("Desktop follow-up",Document(state.Window).Pages[0].Items.Last().Text);
+        // A separately saved legacy sidecar can have an unrelated same-named image
+        // beside it. The matching local original must still be found.
+        var legacy = Path.Combine(cwd,"detached.json");
+        DocumentStore.SaveJson(Document(state.Window),legacy);
+        state.Window.OpenFile(legacy);
+        Equal(legacy,Field<string>(state.Window,"_filePath"));
+        Equal(source,Document(state.Window).SourceImagePath);
     }
 
     private static void DirectOfficeReview()

@@ -284,13 +284,7 @@ public sealed partial class MainWindow : Window
             }
             if (candidate.Kind == DocumentKind.Image && image == null)
             {
-                var source = candidate.SourceImagePath;
-                // Portable image pairs resolve relative to the sidecar, never the process working directory.
-                var sibling = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileName(source ?? ""));
-                if (string.IsNullOrWhiteSpace(source) || !Path.IsPathFullyQualified(source) || File.Exists(sibling)) source = sibling;
-                // A local sidecar must not cause Windows to contact a network share named by its contents.
-                if (new Uri(source).IsUnc && !new Uri(path).IsUnc) throw new InvalidDataException(L.T("ImageChanged"));
-                if (!File.Exists(source) || !string.Equals(DocumentStore.GetFileHash(source), candidate.SourceImageSha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(L.T("ImageChanged"));
+                var source = ResolveImageSource(path,candidate);
                 candidate.SourceImagePath = source; image = LoadImage(source);
             }
             ClearRecovery(); _pdf?.Dispose(); _pdf = nextPdf; nextPdf = null;
@@ -315,6 +309,30 @@ public sealed partial class MainWindow : Window
         try { _image = _pdf.Render(this,index); return true; }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("PdfRenderFailed"),ex); return false; }
     }
+    private static string ResolveImageSource(string sidecar, DocumentData model)
+    {
+        var stored = model.SourceImagePath;
+        if (string.IsNullOrWhiteSpace(stored) || model.SourceImageSha256 == null ||
+            Path.GetExtension(stored).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg"))
+            throw new InvalidDataException(L.T("ImageChanged"));
+        var sibling = Path.Combine(Path.GetDirectoryName(sidecar)!,Path.GetFileName(stored));
+        bool Matches(string candidate)
+        {
+            var info = new FileInfo(candidate);
+            return info.Exists && info.Length <= 256L * 1024 * 1024 &&
+                string.Equals(DocumentStore.GetFileHash(candidate),model.SourceImageSha256,StringComparison.OrdinalIgnoreCase);
+        }
+        if (Matches(sibling)) return sibling;
+        // Legacy Save As could place the JSON away from its image. Use its absolute local
+        // path only if the bytes match. A sidecar cannot initiate access to another UNC share.
+        if (Path.IsPathFullyQualified(stored) && !SamePath(sibling,stored))
+        {
+            var sameRoot = string.Equals(Path.GetPathRoot(stored),Path.GetPathRoot(sidecar),StringComparison.OrdinalIgnoreCase);
+            if ((!new Uri(stored).IsUnc || sameRoot) && Matches(stored)) return stored;
+        }
+        throw new InvalidDataException(L.T("ImageChanged"));
+    }
+
     private static BitmapSource LoadImage(string path)
     {
         var info = new FileInfo(path); if (info.Length > 256 * 1024 * 1024) throw new InvalidDataException("Image exceeds 256 MB.");
