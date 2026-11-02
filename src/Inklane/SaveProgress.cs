@@ -27,7 +27,7 @@ internal static class SaveProgress
         // is the only field excluded from history, so capture it separately.
         var collapsed = document.Pages.SelectMany(page => page.Items)
             .Where(item => item.IsNote && !item.IsExpanded).Select(item => item.Id).ToFrozenSet(StringComparer.Ordinal);
-        var dialog = CreateWindow(owner, path);
+        var dialog = CreateWindow(owner, path, L.T("Saving"));
         ExceptionDispatchInfo? failure = null;
         var finished = false;
         var started = false;
@@ -65,16 +65,15 @@ internal static class SaveProgress
         if (!started) throw new IOException("The PDF writer could not start.");
     }
 
-    private static Window CreateWindow(Window owner, string path)
+    internal static Window CreateWindow(Window owner, string path, string operation)
     {
-        var saving = L.T("Saving");
         var content = new StackPanel { Margin = new Thickness(22, 18, 22, 22) };
-        content.Children.Add(Studio.Label(saving, 18, strong: true));
+        content.Children.Add(Studio.Label(operation, 18, strong: true));
         var file = Studio.Label(Path.GetFileName(path), 13, "MutedBrush");
         file.Margin = new Thickness(0, 4, 0, 16);
         content.Children.Add(file);
         var indicator = new ProgressBar { Height = 5, IsIndeterminate = true };
-        AutomationProperties.SetName(indicator, saving);
+        AutomationProperties.SetName(indicator, operation);
         content.Children.Add(indicator);
         var dialog = new Window
         {

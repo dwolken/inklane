@@ -76,6 +76,8 @@ public static class DocumentStore
 
     public static void SaveJson(DocumentData data, string path)
     {
+        if (data.Kind == DocumentKind.Pdf && !Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("PDF markup must be saved to a JSON annotation file.");
         var bytes = Encoding.UTF8.GetBytes(Serialize(data));
         ProtectSourceImage(data, path);
         AtomicWrite(path, temporary => File.WriteAllBytes(temporary, bytes));
@@ -88,8 +90,19 @@ public static class DocumentStore
         catch (DecoderFallbackException ex) { throw new InvalidDataException("The annotation file contains invalid text encoding.", ex); }
     }
 
+    // The sidecar hash used for conflict detection must describe the bytes just parsed.
+    public static DocumentData LoadJson(string path, out string hash)
+    {
+        using var file = File.OpenRead(path);
+        var model = LoadJson(path);
+        hash = Convert.ToHexString(SHA256.HashData(file));
+        return model;
+    }
+
     public static void SavePdf(DocumentData data, string path)
     {
+        if (data.Kind == DocumentKind.Pdf)
+            throw new NotSupportedException("An external PDF and its editable annotation file must be kept together.");
         var json = Encoding.UTF8.GetBytes(Serialize(data));
         ProtectSourceImage(data, path);
         using var pdf = new PdfDocument();
@@ -154,7 +167,16 @@ public static class DocumentStore
 
     public static DocumentData LoadPdf(string path)
     {
-        try { return LoadPdfCore(path); }
+        using var input = File.OpenRead(path);
+        return ReadNotebook(input) ?? throw new NotSupportedException("This PDF has no editable Inklane notebook model.");
+    }
+
+    // Null identifies a foreign PDF only after checking the catalog and encryption.
+    // Failures in a claimed Inklane notebook must never fall back to a different editing mode.
+    public static DocumentData? ReadNotebook(Stream input)
+    {
+        if (input.Length > MaxPdfBytes) throw new InvalidDataException("The PDF exceeds 128 MiB.");
+        try { return LoadPdfCore(input); }
         catch (Exception ex) when (ex is PdfSharp.PdfSharpException or FormatException or
             ArgumentException or IndexOutOfRangeException or OverflowException or InvalidOperationException || ex.GetType() == typeof(Exception))
         {
@@ -166,17 +188,20 @@ public static class DocumentStore
         }
     }
 
-    private static DocumentData LoadPdfCore(string path)
+    private static DocumentData? LoadPdfCore(Stream input)
     {
-        CheckSize(path, MaxPdfBytes);
-        using var pdf = PdfReader.Open(path, PdfDocumentOpenMode.Import);
+        using var pdf = PdfReader.Open(input, PdfDocumentOpenMode.Import);
         // PDFsharp decrypts imported objects and then reports IsEncrypted=false. The parsed
         // security-handler object still identifies an encrypted source, including an empty user password.
         if (pdf.SecuritySettings.IsEncrypted || pdf.Internals.GetAllObjects().Any(o => o is PdfSharp.Pdf.Security.PdfStandardSecurityHandler))
             throw new NotSupportedException("Encrypted PDFs cannot be edited by Inklane without losing their security settings.");
         var catalog = pdf.Internals.Catalog;
         if (catalog.Elements.GetString("/InklaneFormat") != Format)
-            throw new NotSupportedException("This PDF was not created by Inklane. General PDF editing is not supported.");
+        {
+            if (catalog.Elements.Keys.Any(k => k.StartsWith("/Inklane", StringComparison.Ordinal)) || pdf.Info.Creator == "Inklane")
+                throw new NotSupportedException("The Inklane notebook format cannot be verified.");
+            return null;
+        }
         var metadata = catalog.Elements.GetDictionary("/InklaneData");
         if (metadata?.Stream is null)
             throw new InvalidDataException("The editable Inklane data is missing from this PDF.");
@@ -188,6 +213,7 @@ public static class DocumentStore
         DocumentData data;
         try { data = Deserialize(StrictUtf8.GetString(bytes)); }
         catch (DecoderFallbackException ex) { throw new InvalidDataException("The embedded annotation text is not valid UTF-8.", ex); }
+        if (data.Kind == DocumentKind.Pdf) throw new InvalidDataException("A notebook cannot contain an external PDF sidecar.");
         if (!string.IsNullOrWhiteSpace(data.Title) && pdf.Info.Title != data.Title)
             throw new NotSupportedException("The PDF title was changed outside Inklane.");
         if (data.Pages.Count != pdf.PageCount)
@@ -377,7 +403,19 @@ public static class DocumentStore
     public static void Validate(DocumentData data, bool decodeImages = false)
     {
         ArgumentNullException.ThrowIfNull(data);
-        if (data.SchemaVersion is not (1 or 2)) throw new NotSupportedException("This Inklane document version is not supported.");
+        if (data.Kind == DocumentKind.Pdf ? data.SchemaVersion != 3 : data.SchemaVersion is not (1 or 2))
+            throw new NotSupportedException("This Inklane document version is not supported.");
+        if (data.Kind == DocumentKind.Pdf)
+        {
+            var name = data.SourcePdfName;
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+                !Path.GetExtension(name).Equals(".pdf",StringComparison.OrdinalIgnoreCase) ||
+                data.SourcePdfSha256 is not { Length: 64 } identity || !identity.All(Uri.IsHexDigit) ||
+                data.SourceImagePath != null || data.SourceImageSha256 != null)
+                throw new InvalidDataException("The annotation file does not identify a valid source PDF.");
+        }
+        else if (data.SourcePdfName != null || data.SourcePdfSha256 != null)
+            throw new InvalidDataException("Unexpected PDF source information.");
         CheckTitle(data.Title);
         if (!Enum.IsDefined(data.Kind)) throw new InvalidDataException("The document kind is invalid.");
         if (data.Pages is null || data.Pages.Count is < 1 or > 1000)
@@ -394,6 +432,8 @@ public static class DocumentStore
         foreach (var page in data.Pages)
         {
             if (page is null) throw new InvalidDataException("A page is missing.");
+            if (data.Kind == DocumentKind.Pdf && (page.Pattern != PaperPattern.Blank || page.MarginMm != 0))
+                throw new InvalidDataException("PDF markup must use the source page geometry.");
             Range(page.Width, 1, 100000, "Page width");
             Range(page.Height, 1, 100000, "Page height");
             if (!Enum.IsDefined(page.Pattern)) throw new InvalidDataException("The paper pattern is invalid.");

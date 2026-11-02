@@ -25,6 +25,8 @@ public sealed partial class MainWindow : Window
     private string? _filePath, _diskHash;
     private string _savedState = "";
     private ImageSource? _image;
+    private PdfBackdrop? _pdf;
+    private string? SourcePath => _document.Kind == DocumentKind.Pdf ? _pdf?.Path : _document.SourceImagePath;
     private int _pageIndex;
     private string[] _folderImages = [];
     private int _folderIndex;
@@ -67,6 +69,7 @@ public sealed partial class MainWindow : Window
         _recoveryTimer.Tick += (_, _) => { _recoveryTimer.Stop(); WriteRecovery(); };
         PreviewKeyDown += OnKey;
         Closing += OnClosing;
+        Closed += (_, _) => _pdf?.Dispose();
         AllowDrop = true;
         DragOver += (_, e) => { e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
         Drop += (_, e) => { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } paths) OpenFile(paths[0]); };
@@ -77,8 +80,8 @@ public sealed partial class MainWindow : Window
     }
 
     private static DocumentData NewDocument(PageData? page = null) => new() { Kind = DocumentKind.Notebook, Pages = [page ?? new PageData { Width = Units.MmToDip(210), Height = Units.MmToDip(297), Pattern = PaperPattern.Blank, SpacingMm = 5, MarginMm = 15 }] };
-    private string DisplayName => _document.Kind == DocumentKind.Image
-        ? Path.GetFileName(_document.SourceImagePath) ?? L.T("Image")
+    private string DisplayName => _document.Kind != DocumentKind.Notebook
+        ? Path.GetFileName(SourcePath) ?? L.T(_document.Kind == DocumentKind.Image ? "Image" : "PdfType")
         : _document.Title.Length > 0 ? _document.Title : _filePath == null ? L.T("Untitled") : Path.GetFileName(_filePath);
     private bool IsDirty => _pendingEdit || _history.Count > 0 && _history[_historyIndex].Data != _savedState;
 
@@ -104,23 +107,23 @@ public sealed partial class MainWindow : Window
         var dirty = IsDirty;
         if (!_onHome) Title = $"{(dirty ? "● " : "")}{DisplayName} — Inklane";
         _documentTitle.Text = DisplayName;
-        _titleButton.ToolTip = _document.Kind == DocumentKind.Notebook ? L.T("RenameNotebook") + (_filePath == null ? "" : "\n" + _filePath) : _document.SourceImagePath;
+        _titleButton.ToolTip = _document.Kind == DocumentKind.Notebook ? L.T("RenameNotebook") + (_filePath == null ? "" : "\n" + _filePath) : SourcePath;
         _titleButton.Focusable = _titleButton.IsHitTestVisible = _document.Kind == DocumentKind.Notebook;
-        AutomationProperties.SetName(_titleButton, L.T("RenameNotebook") + " · " + DisplayName);
+        AutomationProperties.SetName(_titleButton, _document.Kind == DocumentKind.Notebook ? L.T("RenameNotebook") + " · " + DisplayName : DisplayName);
         var state = L.T(_saving ? "Saving" : dirty ? "Unsaved" : _filePath == null ? "Ready" : "Saved");
-        _status.Text = $"{L.T(_document.Kind == DocumentKind.Notebook ? "NotebookType" : "ImageType")}  ·  {state}";
+        _status.Text = $"{L.T(_document.Kind switch { DocumentKind.Notebook => "NotebookType", DocumentKind.Pdf => "PdfType", _ => "ImageType" })}  ·  {state}";
         foreach (var c in _undoControls) c.IsEnabled = _historyIndex > 0;
         foreach (var c in _redoControls) c.IsEnabled = _historyIndex < _history.Count - 1;
         foreach (var c in _saveControls) c.IsEnabled = !_saving;
-        var notebook = _document.Kind == DocumentKind.Notebook;
-        _pageLabel.Text = notebook ? L.F("Page", _pageIndex + 1, _document.Pages.Count) : _folderIndex < 0 ? L.F("MissingFolderImage", _folderImages.Length) : L.F("ImageNumber", _folderIndex + 1, _folderImages.Length);
-        var browse = L.T(notebook ? "BrowsePages" : "BrowseFolder");
+        var paged = _document.Kind != DocumentKind.Image;
+        _pageLabel.Text = paged ? L.F("Page", _pageIndex + 1, _document.Pages.Count) : _folderIndex < 0 ? L.F("MissingFolderImage", _folderImages.Length) : L.F("ImageNumber", _folderIndex + 1, _folderImages.Length);
+        var browse = L.T(paged ? "BrowsePages" : "BrowseFolder");
         _browseButton.ToolTip = browse;
-        _browseButton.IsEnabled = notebook || _folderImages.Length > 0;
+        _browseButton.IsEnabled = paged || _folderImages.Length > 0;
         AutomationProperties.SetName(_browseButton, browse + " · " + _pageLabel.Text);
-        _previous.IsEnabled = notebook ? _pageIndex > 0 : FolderNeighbor(-1) >= 0;
-        _next.IsEnabled = notebook ? _pageIndex + 1 < _document.Pages.Count : FolderNeighbor(1) < _folderImages.Length;
-        _addPage.Visibility = _paper.Visibility = notebook ? Visibility.Visible : Visibility.Collapsed;
+        _previous.IsEnabled = paged ? _pageIndex > 0 : FolderNeighbor(-1) >= 0;
+        _next.IsEnabled = paged ? _pageIndex + 1 < _document.Pages.Count : FolderNeighbor(1) < _folderImages.Length;
+        _addPage.Visibility = _paper.Visibility = _document.Kind == DocumentKind.Notebook ? Visibility.Visible : Visibility.Collapsed;
         _addPage.IsEnabled = _document.Pages.Count < 1000;
         UpdateNoteCount();
     }
@@ -183,6 +186,7 @@ public sealed partial class MainWindow : Window
         var step = _history[Math.Max(index,_historyIndex)];
         if (step.Reordered) SwapPageViews(step.PageBefore,step.PageAfter);
         int page = direction < 0 ? step.PageBefore : step.PageAfter;
+        if (!PreparePdfPage(page)) return;
         bool switchPage = page != _pageIndex || step.Reordered;
         _historyIndex = index; _pageIndex = page;
         RestoreSnapshot(_history[index].Data); ShowPage(switchPage); _recoveryTimer.Start();
@@ -208,6 +212,7 @@ public sealed partial class MainWindow : Window
     private void NewNotebook()
     {
         var paper = Dialogs.Paper(this); if (paper == null || !CanLeave()) return;
+        _pdf?.Dispose(); _pdf = null;
         ClearRecovery(); _sessionId = Guid.NewGuid().ToString("N"); _document = NewDocument(paper); _filePath = _diskHash = null; _image = null; _pageIndex = 0; SetupFolder(); _noteSearch.Clear(); ResetHistory(); ShowEditor(); ShowPage(); SetTool(EditorTool.Pen);
     }
     private void OpenDialog()
@@ -222,13 +227,33 @@ public sealed partial class MainWindow : Window
     public void OpenFile(string path)
     {
         if (!CanLeave()) return;
+        PdfBackdrop? nextPdf = null;
         try
         {
             path = Path.GetFullPath(path);
+            OfficeReviewLink? office = null;
+            if (IsOfficeFile(path))
+            {
+                office = PickOfficeReview(path);
+                if (office == null) return;
+                path = office.PdfPath;
+            }
             var extension = Path.GetExtension(path).ToLowerInvariant();
             DocumentData candidate; ImageSource? image = null; string? savePath; string? hash;
-            if (extension == ".pdf") { candidate = DocumentStore.LoadPdf(path); savePath = candidate.Kind == DocumentKind.Notebook ? path : null; hash = savePath != null ? DocumentStore.GetFileHash(path) : null; }
-            else if (extension == ".json") { candidate = DocumentStore.LoadJson(path); savePath = candidate.Kind == DocumentKind.Image ? path : null; hash = savePath != null ? DocumentStore.GetFileHash(path) : null; }
+            if (extension == ".pdf")
+            {
+                (candidate,nextPdf,hash) = PdfBackdrop.Open(this,path);
+                if (office != null && (nextPdf == null || candidate.SourcePdfSha256 != office.PdfHash))
+                    throw new InvalidDataException(L.T("OfficeNeedsPdf"));
+                savePath = candidate.Kind == DocumentKind.Notebook ? path : null;
+                if (nextPdf != null && File.Exists(path + ".inklane.json"))
+                {
+                    savePath = path + ".inklane.json";
+                    candidate = DocumentStore.LoadJson(savePath,out hash);
+                }
+                if (savePath == null) hash = null;
+            }
+            else if (extension == ".json") { candidate = DocumentStore.LoadJson(path,out hash); savePath = candidate.Kind != DocumentKind.Notebook ? path : null; if (savePath == null) hash = null; }
             else if (extension is ".png" or ".jpg" or ".jpeg")
             {
                 image = LoadImage(path);
@@ -239,20 +264,56 @@ public sealed partial class MainWindow : Window
                 savePath = File.Exists(sidecar) ? sidecar : null; hash = File.Exists(sidecar) ? DocumentStore.GetFileHash(sidecar) : null;
             }
             else throw new NotSupportedException();
+            if (candidate.Kind == DocumentKind.Pdf || nextPdf != null)
+            {
+                if (nextPdf == null)
+                {
+                    string source = Path.Combine(Path.GetDirectoryName(path)!, candidate.SourcePdfName!);
+                    if (!File.Exists(source))
+                    {
+                        var pick = new OpenFileDialog { Title = L.T("LocatePdf"), Filter = L.T("SourcePdfFilter"),
+                            InitialDirectory = Path.GetDirectoryName(path), FileName = candidate.SourcePdfName };
+                        if (_interaction.ChooseSourcePdf(this,pick) is not { } chosen) return;
+                        source = chosen;
+                    }
+                    nextPdf = PdfBackdrop.Open(this,source).Backdrop ?? throw new InvalidDataException(L.T("PdfChanged"));
+                }
+                nextPdf.Verify(candidate);
+                candidate.SourcePdfName = Path.GetFileName(nextPdf.Path);
+                image = nextPdf.Render(this,0);
+            }
             if (candidate.Kind == DocumentKind.Image && image == null)
             {
                 var source = candidate.SourceImagePath;
-                if (!File.Exists(source)) source = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileName(source ?? ""));
+                // Portable image pairs resolve relative to the sidecar, never the process working directory.
+                var sibling = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileName(source ?? ""));
+                if (string.IsNullOrWhiteSpace(source) || !Path.IsPathFullyQualified(source) || File.Exists(sibling)) source = sibling;
+                // A local sidecar must not cause Windows to contact a network share named by its contents.
+                if (new Uri(source).IsUnc && !new Uri(path).IsUnc) throw new InvalidDataException(L.T("ImageChanged"));
                 if (!File.Exists(source) || !string.Equals(DocumentStore.GetFileHash(source), candidate.SourceImageSha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(L.T("ImageChanged"));
                 candidate.SourceImagePath = source; image = LoadImage(source);
             }
-            ClearRecovery(); _document = candidate; _filePath = savePath; _diskHash = hash; _image = image; _pageIndex = 0;
-            _sessionId = candidate.SourceImagePath ?? path;
+            ClearRecovery(); _pdf?.Dispose(); _pdf = nextPdf; nextPdf = null;
+            _document = candidate; _filePath = savePath; _diskHash = hash; _image = image; _pageIndex = 0;
+            _sessionId = SourcePath ?? path;
             _noteSearch.Clear();
-            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); _surface.Focus(); RememberRecent(path);
+            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); _surface.Focus();
+            _activeOfficeReview = office;
+            if (office != null) RememberOfficeReview(office);
+            RememberRecent(office?.OfficePath ?? path);
         }
+        catch (InvalidDataException ex) when (path.EndsWith(".feedback.json",StringComparison.OrdinalIgnoreCase)) { Error(L.T("ReviewExportOnly"),ex); }
+        catch (Exception ex) when (IsExpected(ex) && L.IsOpenProblem(ex.Message)) { Error(ex.Message,ex); }
         catch (NotSupportedException) { Error(L.T("UnsupportedPdf")); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); }
+        finally { nextPdf?.Dispose(); }
+    }
+
+    private bool PreparePdfPage(int index)
+    {
+        if (_pdf == null) return true;
+        try { _image = _pdf.Render(this,index); return true; }
+        catch (Exception ex) when (IsExpected(ex)) { Error(L.T("PdfRenderFailed"),ex); return false; }
     }
     private static BitmapSource LoadImage(string path)
     {
@@ -298,7 +359,7 @@ public sealed partial class MainWindow : Window
     }
     private void RemovePage()
     {
-        if (_document.Pages.Count < 2) return;
+        if (_document.Kind != DocumentKind.Notebook || _document.Pages.Count < 2) return;
         if (_interaction.Choose(this, L.T("RemovePage"), L.T("RemovePagePrompt"), L.T("RemovePage"), L.T("Cancel")) != 0) return;
         if (!BeginPageChange()) return;
         ShiftPageViews(_pageIndex,-1);
@@ -307,6 +368,7 @@ public sealed partial class MainWindow : Window
     }
     private void EditPaper()
     {
+        if (_document.Kind != DocumentKind.Notebook) return;
         _surface.CommitEdits(); var current = _document.Pages[_pageIndex]; var next = Dialogs.Paper(this, current); if (next == null) return;
         CaptureHistory(); current.Pattern = next.Pattern; current.SpacingMm = next.SpacingMm; current.MarginMm = next.MarginMm; CaptureHistory(); ShowPage(false); DocumentChanged();
     }
@@ -318,32 +380,36 @@ public sealed partial class MainWindow : Window
         _surface.CommitEdits(); if (!CaptureHistory()) return false;
         try
         {
-        var path = _filePath;
-        if (!saveAs && path != null && File.Exists(path) && _diskHash != DocumentStore.GetFileHash(path))
-        { _interaction.ShowMessage(this, L.T("ExternalChange"), "Inklane"); saveAs = true; }
-        if (_document.Kind == DocumentKind.Image && path == null && !saveAs)
-        {
-            path = _document.SourceImagePath + ".inklane.json";
-            if (File.Exists(path)) { _interaction.ShowMessage(this, L.T("ExternalChange"), "Inklane"); saveAs = true; }
-        }
-        if (saveAs || path == null)
-        {
+            var path = _filePath;
+            string? sourcePath = SourcePath;
             var notebook = _document.Kind == DocumentKind.Notebook;
-            var dialog = new SaveFileDialog { Filter = L.T(notebook ? "PdfFilter" : "JsonFilter"), DefaultExt = notebook ? ".pdf" : ".json", AddExtension = true, FileName = path == null ? notebook ? SuggestedPdfName() : Path.GetFileName(_document.SourceImagePath) + ".inklane.json" : Path.GetFileName(path), InitialDirectory = Path.GetDirectoryName(path ?? _document.SourceImagePath) ?? "", OverwritePrompt = true };
-            path = _interaction.ChooseSavePath(this, dialog); if (path == null) return false;
-            if (_filePath == null && _document.Kind == DocumentKind.Image && SamePath(path, _document.SourceImagePath + ".inklane.json") && File.Exists(path)) { Error(L.T("ExternalChange")); return false; }
-            if (saveAs && _filePath != null && SamePath(path, _filePath) && File.Exists(path) && _diskHash != DocumentStore.GetFileHash(path)) { Error(L.T("ExternalChange")); return false; }
-        }
-            if (!DestinationAllowed(path, _document.Kind == DocumentKind.Notebook ? ".pdf" : ".json")) return false;
-            if (_document.Kind == DocumentKind.Image && (_document.SourceImagePath == null || !File.Exists(_document.SourceImagePath) || !string.Equals(DocumentStore.GetFileHash(_document.SourceImagePath), _document.SourceImageSha256, StringComparison.OrdinalIgnoreCase)))
-            { Error(L.T("ImageChanged")); return false; }
+            if (!saveAs && path != null && File.Exists(path) && _diskHash != DocumentStore.GetFileHash(path))
+            { _interaction.ShowMessage(this, L.T("ExternalChange"), "Inklane"); saveAs = true; }
+            if (!notebook && path == null && !saveAs)
+            {
+                path = sourcePath + ".inklane.json";
+                if (File.Exists(path)) { _interaction.ShowMessage(this, L.T("ExternalChange"), "Inklane"); saveAs = true; }
+            }
+            if (saveAs || path == null)
+            {
+                var dialog = new SaveFileDialog { Filter = L.T(notebook ? "PdfFilter" : "JsonFilter"), DefaultExt = notebook ? ".pdf" : ".json", AddExtension = true, FileName = path == null ? notebook ? SuggestedPdfName() : Path.GetFileName(sourcePath) + ".inklane.json" : Path.GetFileName(path), InitialDirectory = Path.GetDirectoryName(path ?? sourcePath) ?? "", OverwritePrompt = true };
+                path = _interaction.ChooseSavePath(this, dialog); if (path == null) return false;
+                if (_filePath == null && !notebook && SamePath(path, sourcePath + ".inklane.json") && File.Exists(path)) { Error(L.T("ExternalChange")); return false; }
+                if (saveAs && _filePath != null && SamePath(path, _filePath) && File.Exists(path) && _diskHash != DocumentStore.GetFileHash(path)) { Error(L.T("ExternalChange")); return false; }
+            }
+            if (!DestinationAllowed(path, notebook ? ".pdf" : ".json")) return false;
+            var identity = _document.Kind == DocumentKind.Pdf ? _document.SourcePdfSha256 : _document.SourceImageSha256;
+            if (!notebook && (sourcePath == null || !File.Exists(sourcePath) || !string.Equals(DocumentStore.GetFileHash(sourcePath), identity, StringComparison.OrdinalIgnoreCase)))
+            { Error(L.T(_document.Kind == DocumentKind.Pdf ? "PdfChanged" : "ImageChanged")); return false; }
             _saving = true; UpdateState();
             if (_document.Kind == DocumentKind.Notebook) SaveProgress.WriteNotebook(this, _document, _history[_historyIndex].Data, path);
             else DocumentStore.SaveJson(_document, path);
             _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = _history[_historyIndex].Data; ClearRecovery();
             if (_document.Kind == DocumentKind.Notebook) RenameViewSession(path);
-            var source = _document.SourceImagePath;
-            RememberRecent(source != null && SamePath(path, source + ".inklane.json") ? source : path);
+            var source = SourcePath;
+            RememberRecent(source != null && SamePath(path, source + ".inklane.json")
+                ? _activeOfficeReview != null && SamePath(_activeOfficeReview.PdfPath,source) ? _activeOfficeReview.OfficePath : source
+                : path);
             return true;
         }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); return false; }
@@ -369,7 +435,7 @@ public sealed partial class MainWindow : Window
     }
     private bool ProtectsOriginal(string path)
     {
-        if (_document.SourceImagePath != null && SamePath(path, _document.SourceImagePath)) { Error(L.T("ProtectOriginal")); return true; } return false;
+        if (SourcePath != null && SamePath(path, SourcePath)) { Error(L.T("ProtectOriginal")); return true; } return false;
     }
     private bool DestinationAllowed(string path, string extension, bool export = false)
     {
@@ -384,10 +450,26 @@ public sealed partial class MainWindow : Window
         try
         {
             var first = _document.Pages[_pageIndex];
-            var dialog = new PrintDialog { UserPageRangeEnabled = false };
-            dialog.PrintTicket.PageMediaSize = new PageMediaSize(Math.Min(first.Width, first.Height) < Units.MmToDip(160) ? PageMediaSizeName.ISOA5 : PageMediaSizeName.ISOA4);
+            var dialog = new PrintDialog { UserPageRangeEnabled = _pdf != null, MinPage = 1, MaxPage = (uint)_document.Pages.Count };
+            if (_pdf == null) dialog.PrintTicket.PageMediaSize = new PageMediaSize(Math.Min(first.Width, first.Height) < Units.MmToDip(160) ? PageMediaSizeName.ISOA5 : PageMediaSizeName.ISOA4);
             dialog.PrintTicket.PageOrientation = first.Width > first.Height ? PageOrientation.Landscape : PageOrientation.Portrait;
             if (dialog.ShowDialog() != true) return;
+            if (_pdf != null)
+            {
+                var capabilities = dialog.PrintQueue.GetPrintCapabilities(dialog.PrintTicket);
+                var area = capabilities.PageImageableArea;
+                var sheet = new Size(capabilities.OrientedPageMediaWidth ?? dialog.PrintableAreaWidth,
+                    capabilities.OrientedPageMediaHeight ?? dialog.PrintableAreaHeight);
+                var printable = area == null ? new Rect(sheet) : new Rect(area.OriginWidth,area.OriginHeight,area.ExtentWidth,area.ExtentHeight);
+                int start = 0, count = _document.Pages.Count;
+                if (dialog.PageRangeSelection == PageRangeSelection.UserPages)
+                {
+                    start = Math.Clamp(dialog.PageRange.PageFrom - 1,0,count - 1);
+                    count = Math.Clamp(dialog.PageRange.PageTo - start,1,count - start);
+                }
+                dialog.PrintDocument(new PdfMarkupPaginator(this,_document,_pdf,sheet,printable,start,count),DisplayName);
+                return;
+            }
             var pages = new FixedDocument();
             foreach (var page in _document.Pages)
             {
@@ -455,7 +537,7 @@ public sealed partial class MainWindow : Window
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_recoveryPath)!);
-            var state = new Recovery { Document = _document, FilePath = _filePath, DiskHash = _diskHash, PageIndex = _pageIndex, SavedAt = DateTimeOffset.Now, ProcessId = Environment.ProcessId };
+            var state = new Recovery { Document = _document, FilePath = _filePath, SourcePdfPath = _pdf?.Path, DiskHash = _diskHash, PageIndex = _pageIndex, SavedAt = DateTimeOffset.Now, ProcessId = Environment.ProcessId };
             AtomicWrite(_recoveryPath, s => JsonSerializer.Serialize(s, state));
             return true;
         }
@@ -480,8 +562,18 @@ public sealed partial class MainWindow : Window
                     var image = state.Document.Kind == DocumentKind.Image ? LoadImage(state.Document.SourceImagePath!) : null;
                     if (image != null && state.Document.SourceImageSha256 != DocumentStore.GetFileHash(state.Document.SourceImagePath!)) throw new InvalidDataException(L.T("ImageChanged"));
                     var snapshot = DocumentStore.SerializeForHistory(state.Document);
+                    int page = Math.Clamp(state.PageIndex,0,state.Document.Pages.Count-1);
+                    PdfBackdrop? source = null;
+                    if (state.Document.Kind == DocumentKind.Pdf)
+                    {
+                        if (state.SourcePdfPath == null) throw new InvalidDataException(L.T("PdfChanged"));
+                        source = PdfBackdrop.Open(this,state.SourcePdfPath).Backdrop ?? throw new InvalidDataException(L.T("PdfChanged"));
+                        try { source.Verify(state.Document); image = source.Render(this,page); }
+                        catch { source.Dispose(); throw; }
+                    }
+                    _pdf?.Dispose(); _pdf = source;
                     _document = state.Document; _image = image; _filePath = state.FilePath; _diskHash = state.DiskHash;
-                    _pageIndex = Math.Clamp(state.PageIndex,0,_document.Pages.Count-1);
+                    _pageIndex = page; _sessionId = SourcePath ?? _filePath ?? Guid.NewGuid().ToString("N");
                     SetupFolder(); ResetHistory(snapshot); ShowEditor(); ShowPage();
                     if (WriteRecovery()) File.Delete(path);
                     return;
@@ -499,6 +591,7 @@ public sealed partial class MainWindow : Window
     }
     private sealed class Recovery
     {
+        public string? SourcePdfPath { get; set; }
         public DocumentData? Document { get; set; }
         public string? FilePath { get; set; }
         public string? DiskHash { get; set; }
@@ -506,13 +599,13 @@ public sealed partial class MainWindow : Window
         public DateTimeOffset SavedAt { get; set; }
         public int ProcessId { get; set; }
     }
-    internal static void AtomicWrite(string path, Action<Stream> write)
+    internal static void AtomicWrite(string path, Action<Stream> write, bool allowReplace = true)
     {
         var temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, $".inklane-{Guid.NewGuid():N}.tmp");
         try
         {
             using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { write(stream); stream.Flush(true); }
-            if (File.Exists(path))
+            if (allowReplace && File.Exists(path))
             {
                 for (var attempt = 0; ; attempt++)
                 {

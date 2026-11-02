@@ -61,6 +61,10 @@ SOFTWARE.
 Self-contained distributions include the .NET runtime. Its license and third-party
 notices are included in the distribution's `licenses/` directory.
 
+## Windows Runtime projections
+
+The Windows build uses Microsoft's .NET SDK targeting pack to call the PDF renderer supplied by Windows. The application includes `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`. See the [targeting pack](https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.19041.57), [Windows SDK terms](https://aka.ms/WinSDKLicenseURL), and [C#/WinRT source and license](https://github.com/microsoft/CsWinRT/blob/master/LICENSE).
+
 ## Fonts
 
 The application uses installed Windows Segoe UI fonts. PDFsharp embeds the used

@@ -8,6 +8,7 @@ public interface IDocumentInteraction
 {
     int Choose(Window owner, string title, string message, params string[] buttons);
     string? ChooseSavePath(Window owner, SaveFileDialog dialog);
+    string? ChooseSourcePdf(Window owner, OpenFileDialog dialog) => dialog.ShowDialog(owner) == true ? dialog.FileName : null;
     void ShowMessage(Window owner, string message, string title, MessageBoxImage icon = MessageBoxImage.Information);
 }
 
