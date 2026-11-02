@@ -50,6 +50,18 @@ internal static partial class Program
         Run("Notebook title edits survive reopening without changing the file location", NotebookTitle);
         Run("Page duplication and reordering preserve independent objects and undo targets", ManagePages);
         Run("Folder browsing follows Explorer order, detects changes and protects pending edits", LiveImageFolder);
+        Run("Word and PowerPoint reviews remember verified exports and stop at a changed revision", OfficeReviewJourney);
+        Run("Automatic Office conversion refuses active content and external relationships before starting a renderer", OfficeConversionSafety);
+        if (Environment.GetEnvironmentVariable("INKLANE_TEST_OFFICE_RENDERER") != null)
+            Run("LibreOffice creates two independent, editable reviews through the Windows open workflow", DirectOfficeReview);
+        Run("Relative image sidecars travel with the source, even beside an unrelated namesake in the working directory", PortableImagePair);
+        Run("Source PDF markup uses displayed page geometry, editable sidecars and source pixels", PdfMarkupJourney);
+        Run("Feedback identifies the source image, includes every mark, and protects original work", ImageFeedback);
+        Run("PDF feedback uses displayed page coordinates and excludes underlying source contents", PdfFeedback);
+        Run("Notebook feedback requires a saved matching PDF and honors cancellation", NotebookFeedback);
+        Run("PDF recovery verifies original identity before restoring unsaved markup", PdfMarkupRecovery);
+        Run("Corrupt notebook markers, sidecar dimensions and source changes never fall back silently", PdfMarkupGuards);
+        Run("A separately saved PDF sidecar locates a matching source and respects cancellation", DetachedPdfSidecar);
         Console.WriteLine($"{checks - failures}/{checks} checks passed. Artifacts: {output}");
         app.Shutdown();
         System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
@@ -426,10 +438,17 @@ internal static partial class Program
     {
         public readonly Queue<int> Choices = new();
         public readonly Queue<string?> SavePaths = new();
+        public readonly Queue<string?> ReviewPdfs = new();
         public readonly List<(string Text, MessageBoxImage Icon)> Messages = [];
         public readonly List<string> SaveFilters = [];
         public readonly List<string> UnexpectedCalls = [];
         public int ChoiceCalls;
+        public string? ChooseSourcePdf(Window owner, OpenFileDialog picker)
+        {
+            if (ReviewPdfs.TryDequeue(out var answer)) return answer;
+            UnexpectedCalls.Add("Unexpected source picker: " + picker.Title);
+            return null;
+        }
         public int Choose(Window owner, string title, string message, params string[] buttons)
         {
             ChoiceCalls++;

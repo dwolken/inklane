@@ -138,7 +138,7 @@ public sealed partial class MainWindow
         {
             var menu = _browseButton.ContextMenu; menu.Items.Clear();
             if (_document.Kind == DocumentKind.Notebook) PageCommands(menu);
-            else Command(menu,"BrowseFolder",BrowsePositions);
+            else Command(menu,_document.Kind == DocumentKind.Pdf ? "BrowsePages" : "BrowseFolder",BrowsePositions);
         };
         nav.Children.Add(_previous); nav.Children.Add(_browseButton); nav.Children.Add(_next);
         _addPage = Studio.Action("AddPage", "Plus", AddPage); nav.Children.Add(_addPage);
@@ -223,8 +223,9 @@ public sealed partial class MainWindow
             Command(menu,"RenameNotebook",BeginRenameNotebook);
             var pages = new MenuItem { Header = L.T("ManagePages") }; PageCommands(pages); menu.Items.Add(pages);
         }
-        else Command(menu,"BrowseFolder",BrowsePositions);
+        else Command(menu,_document.Kind == DocumentKind.Pdf ? "BrowsePages" : "BrowseFolder",BrowsePositions);
         menu.Items.Add(new Separator());
+        Command(menu,"ExportFeedback",ExportFeedback).ToolTip = L.T("FeedbackHint");
         Command(menu,"ExportImage",ExportImage); Command(menu,"ExportJson",ExportJson);
         Command(menu,"Print",Print,"Ctrl+P");
         menu.Items.Add(new Separator());
@@ -302,6 +303,7 @@ public sealed partial class MainWindow
         PageViewport? next = _views.TryGetValue(key, out var saved) ? saved : null;
         if (!switchPage) next = previous;
         else if (next == null && _displayedSession == _sessionId) next = previous?.AtTop();
+        if (next == null && _document.Kind == DocumentKind.Pdf) next = new PageViewport(PageViewMode.Editing,1,0,0);
         _surface.LoadPage(_document.Pages[_pageIndex], _image, next);
         _displayedKey = key; _displayedSession = _sessionId;
         var image = _document.Kind == DocumentKind.Image;

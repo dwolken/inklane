@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Inklane · Image workspace</title>
+    <link rel="icon" href="../assets/inklane.svg" />
+    <link rel="stylesheet" href="editor.css" />
+    <script type="module" src="editor.js"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="../" aria-label="Inklane"
+        ><img src="../assets/inklane.svg" alt="" width="30" height="30" /><span>Inklane</span></a
+      >
+      <div id="document">
+        <strong id="name" data-i="workspace">Image workspace</strong
+        ><small id="state" data-i="browser">Browser edition</small>
+      </div>
+      <div class="file-actions">
+        <button id="open" data-i="open">Open</button>
+        <button class="primary" id="save" disabled data-label="save">
+          <span class="wide" data-i="save">Save annotations</span
+          ><span class="compact" data-i="saveShort">Save</span>
+        </button>
+        <details id="more">
+          <summary aria-label="More actions" data-label="more">
+            <svg viewBox="0 0 24 24"><path d="M4 12h1m6.5 0h1m6.5 0h1" /></svg>
+          </summary>
+          <div class="menu">
+            <button id="index" disabled data-i="index">Browse annotations</button
+            ><button id="download" disabled data-i="download">Download annotation copy</button
+            ><button id="feedback" disabled data-i="feedback">Export feedback…</button
+            ><button id="shortcuts" data-i="guide">How to use the workspace</button
+            ><button id="language"></button>
+          </div>
+        </details>
+      </div>
+    </header>
+    <main id="work">
+      <section id="welcome">
+        <img src="../assets/inklane.svg" width="48" height="48" alt="" />
+        <p class="eyebrow" data-i="workspace">Image workspace</p>
+        <h1 data-i="welcome">Mark up an image</h1>
+        <p data-i="intro">Draw, place text or pin a longer note to a detail.</p>
+        <button class="primary" id="start" data-i="choose">Choose an image</button>
+        <p class="muted" data-i="reopen">
+          To reopen saved work, choose the image and its .inklane.json file together.
+        </p>
+        <small data-i="local">Files stay on this device.</small>
+      </section>
+      <div id="tools" class="tools" role="group" data-label="tools" hidden></div>
+      <section id="viewport" tabindex="0" data-label="surface" hidden>
+        <div id="mat">
+          <div id="sheet">
+            <canvas id="source" aria-hidden="true"></canvas>
+            <div id="pictures"></div>
+            <svg id="marks" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+            <div id="objects"></div>
+          </div>
+        </div>
+      </section>
+      <aside id="card" hidden>
+        <div class="card-head">
+          <span id="badge"></span
+          ><input id="note-title" maxlength="200" data-label="title" autocomplete="off" /><button
+            id="close-card"
+            data-label="collapse"
+            class="icon"
+          >
+            ⌃
+          </button>
+        </div>
+        <textarea id="note-body" maxlength="1000000" data-label="noteBody"></textarea>
+      </aside>
+      <div id="message" role="status" hidden></div>
+    </main>
+    <footer hidden>
+      <div id="pen-properties">
+        <input type="color" id="ink-color" value="#6447b0" data-label="inkColor" /><select
+          id="ink-size"
+          data-label="inkSize"
+        >
+          <option value="1.5">1.5 px</option>
+          <option value="3" selected>3 px</option>
+          <option value="5">5 px</option>
+        </select>
+      </div>
+      <span id="hint"></span>
+      <div class="actions">
+        <button id="edit" data-i="edit" hidden>Edit</button
+        ><button id="duplicate" data-i="duplicate" hidden>Duplicate</button
+        ><button id="remove" data-i="remove" hidden>Delete</button>
+        <button id="undo" class="icon" data-label="undo">↶</button
+        ><button id="redo" class="icon" data-label="redo">↷</button>
+      </div>
+      <div class="zoom">
+        <button id="minus" class="icon" data-label="out">−</button
+        ><button id="fit" data-label="fit">100%</button
+        ><button id="plus" class="icon" data-label="in">+</button>
+      </div>
+    </footer>
+    <input id="files" type="file" accept=".png,.jpg,.jpeg,.json" multiple hidden />
+    <dialog id="picture-size">
+      <form id="size-form">
+        <h2 data-i="resize"></h2>
+        <label for="picture-width" data-i="pictureWidth"></label
+        ><input id="picture-width" type="number" min="1" step="any" required /><small
+          id="picture-height"
+        ></small>
+        <div class="relink-actions">
+          <button id="cancel-size" type="button" data-i="cancel"></button
+          ><button class="primary" data-i="done"></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="browse">
+      <div class="dialog-top">
+        <h2 data-i="index"></h2>
+        <form method="dialog"><button data-label="done" class="icon">×</button></form>
+      </div>
+      <input id="search" type="search" data-label="search" />
+      <div id="results"></div>
+    </dialog>
+    <dialog id="relink">
+      <h2 data-i="relink"></h2>
+      <p data-i="relinkHint"></p>
+      <p><strong id="source-name" dir="auto"></strong></p>
+      <div class="relink-actions">
+        <button id="pick-source" class="primary" data-i="choose"></button>
+        <form method="dialog"><button data-i="cancel"></button></form>
+      </div>
+    </dialog>
+    <dialog id="help">
+      <h2 data-i="guide"></h2>
+      <p data-i="helpOpen"></p>
+      <p data-i="helpEdit"></p>
+      <p data-i="helpSave"></p>
+      <form method="dialog"><button class="primary" data-i="done">Done</button></form>
+    </dialog>
+    <noscript
+      >This local image editor requires JavaScript. Der lokale Bildeditor benötigt JavaScript.</noscript
+    >
+  </body>
+</html>

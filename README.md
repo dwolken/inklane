@@ -1,8 +1,10 @@
 # Inklane
 
-[Product website](https://dwolken.github.io/inklane/) · [Windows downloads](https://github.com/dwolken/inklane/releases)
+[Product website](https://dwolken.github.io/inklane/) · [Open the browser editor](https://dwolken.github.io/inklane/editor/) · [Windows downloads](https://github.com/dwolken/inklane/releases)
 
 Inklane is a local Windows 11 workspace for marking up images and writing in printable PDF notebooks. Draw directly on a detail, add editable text, or pin a longer observation to a numbered point. The notes panel lets you search those observations and jump back to the drawing, even on a different page.
+
+The published Windows installer is **1.0.0-rc.2**. The **1.0.0-rc.3** source adds review of existing PDFs and Office documents using a matching PDF export. You can also annotate an image in the browser and reopen the editable marks on Windows.
 
 ![An Inklane notebook showing a courtyard section and its cross-page notes index](docs/screenshots/notebook.png)
 
@@ -49,7 +51,15 @@ Tool shortcuts apply outside text entry. Appearance follows Windows by default. 
 
 ## Files and compatibility
 
-A notebook PDF contains standard Ink, FreeText and Text annotations, vector paper, placed pictures, and an attached JSON model for editable reopening in Inklane. Other PDF readers can display the page and may expose annotation contents. Their note presentation varies. Editable PDF reopening covers notebooks saved by Inklane, including the original alpha format released in November 2026. A title or placed image uses the extended editable format and needs RC.2 or newer to reopen in Inklane. Earlier notebooks and sidecars still open. Inklane rejects detected external changes to protected PDF content. Keep third-party edits in a separate copy.
+**Review a PDF or Office document in the development build.** Open a PDF on Home and mark its pages. Save keeps your work next to the original as `filename.pdf.inklane.json`. Share both files with another Inklane user to continue editing. Export a marked page as PNG or print it to share its visible marks. A general PDF keeps its original pages, forms and annotations in the source file.
+
+For DOCX or PPTX, open the Office file and choose its matching PDF export. With LibreOffice in a standard Windows installation folder, **Create PDF copy** can also render supported self-contained files locally. Use an export from Word or PowerPoint for layout-sensitive files or documents with links and fields. Pick a new PDF filename for each revision. Inklane remembers the file pair on this computer and checks both fingerprints when you reopen the Office file. Annotations stay with the reviewed page or slide.
+
+**Share precise feedback.** In the browser editor or the RC.3 Windows build, choose **More actions → Export feedback**. Give the recipient the reviewed source and the resulting `.feedback.json`. The report records the source fingerprint, page, location, note text and ink geometry. It can be read by a script as well as by a person. [Feedback format and example](docs/feedback.md)
+
+**Work in a browser.** [Open the image editor](https://dwolken.github.io/inklane/editor/) and choose a PNG or JPEG. Save the annotations and keep the JSON with the original image. To continue on another device, reopen both files. The editor reads and writes supported Windows image sidecars. The small interactive example on the product page resets on reload.
+
+A notebook PDF contains standard Ink, FreeText and Text annotations, vector paper, placed pictures, and an attached JSON model for editable reopening in Inklane. Other PDF readers can display the page and may expose annotation contents. Their note presentation varies. Editable notebook reopening includes the original alpha format released in November 2026. A title or placed image needs RC.2 or newer. General PDF markup uses a separate schema 3 sidecar and needs this development build. Inklane rejects detected external changes to protected notebook content. Keep third-party edits in a separate copy.
 
 Normal saves use atomic replacement. Inklane checks image identity and detects conflicting file changes. Local recovery snapshots follow editing pauses. Documents, recovery files and recent paths stay on this computer. Settings and recovery live in `%LOCALAPPDATA%\Inklane`. Print uses the selected Windows driver with a 150 DPI raster at the document's physical dimensions.
 

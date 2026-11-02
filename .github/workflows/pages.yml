@@ -41,6 +41,7 @@ jobs:
         run: |
           npm ci --prefix website --ignore-scripts --no-audit
           node website/test.mjs .scratch/pages/inklane
+          node website/test-editor.mjs .scratch/pages/inklane
           echo "digest=$(sha256sum .scratch/pages/inklane/index.html | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - name: Package the tested site
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

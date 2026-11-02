@@ -134,6 +134,7 @@ public sealed partial class MainWindow
             DocumentStore.Serialize(notebook); // Reject oversize or invalid data before switching documents.
             if (!CanLeave()) return false;
             ClearRecovery(); _sessionId = Guid.NewGuid().ToString("N");
+            _pdf?.Dispose(); _pdf = null;
             _document = NewDocument(); _filePath = _diskHash = null; _image = null; _pageIndex = 0;
             SetupFolder(); _noteSearch.Clear();
             ResetHistory();
