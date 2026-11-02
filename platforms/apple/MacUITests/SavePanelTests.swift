@@ -122,7 +122,10 @@ final class SavePanelTests: XCTestCase {
         // Select the saved file in the actual Open panel and save it to a second, unused destination.
         app.terminate()
         app.launch()
-        try find(app.webViews.buttons["Open"]).click()
+        let openDocument = app.webViews.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH[c] 'Open document' OR title BEGINSWITH[c] 'Open document' OR identifier == 'start'"
+        )).firstMatch
+        try find(openDocument).click()
         let open = try chooser(app,button: "Open")
         go(app,to: folder)
         let row = matching(first + ".inklane",in: open)
