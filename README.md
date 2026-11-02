@@ -14,6 +14,8 @@ Choose the **Inklane-Setup** x64 executable on the [Windows releases page](https
 
 The candidate is unsigned. Windows may display the publisher as unknown. A portable ZIP and SHA-256 checksums are also available on the release page. For portable use, extract the complete folder and launch `Inklane.exe`.
 
+The shared workspace can also be built as an offline [Android app](platforms/android/README.md), [macOS or iOS app](platforms/apple/README.md), or [Linux desktop package](platforms/linux/README.md). Each bundles the editor and renderer and uses the system file picker. These are development builds. There are no mobile store releases or published native installers for these platforms; the [web workspace](https://dwolken.github.io/inklane/editor/) is the immediately available option.
+
 ## Windows workspace
 
 **Images.** Choose **Open an image** on Home. PNG and JPEG files open at a scale that shows the whole image. Use ← and → to browse other images in the folder. Click the image counter to jump to a filename. The list follows Explorer-style numeric order and updates when files are added or removed. Save writes the editable ink, text and notes to a neighboring `.inklane.json` file. Keep the image and its sidecar together. **More actions → Export annotated PNG** creates a separate image for sharing.
