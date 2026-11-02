@@ -7,6 +7,11 @@ on:
   pull_request:
     paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
   workflow_dispatch:
+    inputs:
+      apple_silicon_simulator:
+        description: Run the iPhone checks on the newest installed Apple silicon simulator
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,8 +30,8 @@ jobs:
             runner: macos-15-intel
             queue: macOS-intel
           - platform: iOS
-            runner: macos-26
-            queue: iOS
+            runner: ${{ inputs.apple_silicon_simulator && 'macos-26' || 'macos-15-intel' }}
+            queue: ${{ inputs.apple_silicon_simulator && 'iOS' || 'iOS-intel' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
@@ -97,10 +102,8 @@ jobs:
       - name: Save and reopen through the macOS system file panels
         if: matrix.platform == 'macOS'
         run: |
-          mkdir -p "$HOME/Downloads"
-          destination=$(mktemp -d "$HOME/Downloads/Inklane-review-XXXXXXXX")
           xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme InklaneMacUI \
             -destination "platform=macOS" -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
             -resultBundlePath "$RUNNER_TEMP/file-panels.xcresult" \
-            "INKLANE_UI_DIRECTORY=$destination" CODE_SIGN_IDENTITY=- test
+            CODE_SIGN_IDENTITY=- test

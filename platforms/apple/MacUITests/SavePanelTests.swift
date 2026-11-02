@@ -73,19 +73,9 @@ final class SavePanelTests: XCTestCase {
     func testUserSavesAndReopensAPortableReviewThroughSystemPanels() throws {
         continueAfterFailure = false
         let manager = FileManager.default
-        let configured = Bundle(for: Self.self).object(forInfoDictionaryKey: "InklaneUIDestination") as? String ?? ""
-        let folder: URL
-        if configured.isEmpty || configured.hasPrefix("$") {
-            folder = manager.temporaryDirectory.appendingPathComponent("Inklane-review-" + UUID().uuidString)
-            try manager.createDirectory(at: folder,withIntermediateDirectories: false)
-        } else {
-            folder = URL(fileURLWithPath: configured, isDirectory: true)
-            guard folder.lastPathComponent.hasPrefix("Inklane-review-"),
-                  try manager.contentsOfDirectory(atPath: folder.path).isEmpty else {
-                XCTFail("The CI review destination must be a fresh, empty directory.")
-                return
-            }
-        }
+        let folder = manager.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent("Inklane-review-" + UUID().uuidString, isDirectory:true)
+        try manager.createDirectory(at: folder,withIntermediateDirectories: false)
         let id = UUID().uuidString
         let marker = folder.appendingPathComponent("Location-" + id + ".inklane")
         try Data().write(to: marker,options: .withoutOverwriting)
@@ -133,7 +123,7 @@ final class SavePanelTests: XCTestCase {
         let stem = matching(first,in: open)
         if row.waitForExistence(timeout: 4) { row.doubleClick() }
         else { try find(stem).doubleClick() }
-        try find(app.webViews.buttons["Check the specimen"])
+        _ = try find(app.webViews.buttons["Check the specimen"])
         let reopened = try save(second,app: app,folder: folder,marker: marker)
         XCTAssertEqual(saved,reopened)
     }
