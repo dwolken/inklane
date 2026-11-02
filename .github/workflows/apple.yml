@@ -68,6 +68,11 @@ jobs:
       - name: Run the bundled application and exercise its document workflow
         id: exercise
         run: |
+          if [[ -n "${SIMULATOR_ID:-}" ]]; then
+            python3 platforms/apple/capture-simulator.py "$SIMULATOR_ID" "$RUNNER_TEMP/Inklane-iOS-field-guide-screen.png" &
+            capture_pid=$!
+            trap 'kill "$capture_pid" 2>/dev/null || true' EXIT
+          fi
           xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme Inklane \
             -destination "${APPLE_DEST:-platform=macOS}" -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
@@ -85,6 +90,7 @@ jobs:
           if [[ "$PLATFORM" == iOS ]]; then
             container=$(xcrun simctl get_app_container "$SIMULATOR_ID" io.github.dwolken.Inklane data)
             source="$container/Library/Caches/$file"
+            test -s "$RUNNER_TEMP/Inklane-iOS-field-guide-screen.png"
           else
             source="$HOME/Library/Containers/io.github.dwolken.Inklane/Data/Library/Caches/$file"
             if [[ ! -f "$source" ]]; then source="$HOME/Library/Caches/$file"; fi
@@ -96,7 +102,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Inklane-${{ matrix.platform }}-field-guide
-          path: ${{ runner.temp }}/Inklane-${{ matrix.platform }}-field-guide.png
+          path: ${{ runner.temp }}/Inklane-${{ matrix.platform }}-field-guide*.png
           retention-days: 2
           if-no-files-found: error
       - name: Save and reopen through the macOS system file panels

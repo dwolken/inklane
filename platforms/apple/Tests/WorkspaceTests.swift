@@ -54,7 +54,44 @@ final class WorkspaceTests: XCTestCase {
         _ = try await javascript(host, input, arguments: ["payload": bytes.base64EncodedString(), "filename": name])
     }
 
+    #if os(iOS)
+    private func measureViewport(_ host: WorkspaceHost, _ label: String) async throws -> Bool {
+        let result = try await javascript(host, """
+          (() => {
+            const v = visualViewport, f = document.activeElement, r = s => {
+              const b = document.querySelector(s).getBoundingClientRect(); return [b.left,b.top,b.right,b.bottom];
+            };
+            return { width: v.width, height: v.height, scale: v.scale, top: v.offsetTop, left: v.offsetLeft,
+              layout: document.documentElement.clientWidth, active: f.id || f.tagName, font: getComputedStyle(f).fontSize,
+              header: r('header'), save: r('#save'), footer: r('footer') };
+          })()
+          """)
+        let m = try XCTUnwrap(result as? [String: Any])
+        let view = host.webView
+        let details = try JSONSerialization.data(withJSONObject: m, options: [.sortedKeys])
+        NSLog("iPhone viewport %@ — webView %@ scrollViewZoom %.3f %@",
+              label, NSStringFromCGRect(view.bounds), Double(view.scrollView.zoomScale), String(decoding: details, as: UTF8.self))
+        guard let width = m["width"] as? Double, let height = m["height"] as? Double,
+              let scale = m["scale"] as? Double, let left = m["left"] as? Double, let top = m["top"] as? Double,
+              let header = m["header"] as? [Double], let footer = m["footer"] as? [Double],
+              let save = m["save"] as? [Double] else { return false }
+        return abs(scale-1) < 0.025 && abs(width-Double(view.bounds.width)) < 2 &&
+               header[0] >= left-2 && header[2] <= left+width+2 && save[2] <= left+width+2 &&
+               footer[3] <= top+height+2 && footer[1] >= top
+    }
+    #endif
+
     private func captureExample(_ host: WorkspaceHost) async throws {
+        #if os(iOS)
+        var fullWorkspace = false
+        for attempt in 0..<12 {
+            if try await measureViewport(host,"field guide after index dismissal (\(attempt))") {
+                try await Task.sleep(nanoseconds: 250_000_000)
+                if try await measureViewport(host,"field guide settled") { fullWorkspace = true; break }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        #endif
         let config = WKSnapshotConfiguration()
         config.afterScreenUpdates = true
         let image: WorkspaceImage = try await withCheckedThrowingContinuation { continuation in
@@ -74,6 +111,20 @@ final class WorkspaceTests: XCTestCase {
         let cache = try XCTUnwrap(FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         try png.write(to: cache.appendingPathComponent("Inklane-field-guide-review.png"), options: .atomic)
+        #if os(iOS)
+        // The CI helper takes an independent simulator screenshot on request. Keep the same
+        // native window and unmodified viewport visible until the compositor capture finishes.
+        if FileManager.default.fileExists(atPath: cache.appendingPathComponent("Inklane-screen.armed").path) {
+            try Data().write(to: cache.appendingPathComponent("Inklane-screen.ready"), options: .atomic)
+            let done = cache.appendingPathComponent("Inklane-screen.done").path
+            for _ in 0..<400 {
+                if FileManager.default.fileExists(atPath: done) { break }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: done),"Simulator compositor capture timed out")
+        }
+        XCTAssertTrue(fullWorkspace,"The field guide should show the complete toolbar and footer after text entry, without a pinch gesture.")
+        #endif
     }
 
     func testBundleReusesItsLoopbackOriginAndRejectsOtherPaths() async throws {
@@ -201,9 +252,15 @@ final class WorkspaceTests: XCTestCase {
     private func editExample(_ host: WorkspaceHost) async throws {
         try await perform(host, "document.querySelector('#sample-link').click()")
         try await wait(host, "document.querySelectorAll('.marker').length === 2")
+        #if os(iOS)
+        _ = try await measureViewport(host,"field guide before opening search")
+        #endif
         // Use the public notes index to open the same edit card at either screen width.
         try await perform(host, "document.querySelector('#index').click()")
         try await wait(host, "!!document.querySelector('#results button')")
+        #if os(iOS)
+        _ = try await measureViewport(host,"focused note search")
+        #endif
         try await perform(host, "document.querySelector('#results button').click()")
         try await wait(host, "!document.querySelector('#card').hidden")
         try await captureExample(host)
