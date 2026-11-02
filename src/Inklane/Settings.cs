@@ -11,6 +11,7 @@ public sealed class Settings
 {
     public string Appearance { get; set; } = "System";
     public List<string> RecentFiles { get; set; } = [];
+    public List<OfficeReviewLink> OfficeReviews { get; set; } = [];
     public string Language { get; set; } = "System";
     public static Settings Current { get; private set; } = new();
     public static void Load()
@@ -22,6 +23,10 @@ public sealed class Settings
             Current.Appearance ??= "System";
             Current.RecentFiles = (Current.RecentFiles ?? []).Where(p => !string.IsNullOrWhiteSpace(p) && Path.IsPathFullyQualified(p))
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();
+            Current.OfficeReviews = (Current.OfficeReviews ?? []).Where(item => item != null
+                && !string.IsNullOrWhiteSpace(item.OfficePath) && Path.IsPathFullyQualified(item.OfficePath)
+                && !string.IsNullOrWhiteSpace(item.PdfPath) && Path.IsPathFullyQualified(item.PdfPath)
+                && item.OfficeHash?.Length == 64 && item.PdfHash?.Length == 64).Take(12).ToList();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { Current = new(); }
     }

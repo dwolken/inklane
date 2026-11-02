@@ -103,18 +103,18 @@ public sealed partial class MainWindow
     {
         if (index == _pageIndex || index < 0 || index >= _document.Pages.Count) return;
         _surface.CommitEdits();
-        if (!CaptureHistory()) return;
+        if (!CaptureHistory() || !PreparePdfPage(index)) return;
         _pageIndex = index; ShowPage();
     }
 
-    private IEnumerable<string> BrowseLabels() => _document.Kind == DocumentKind.Notebook
+    private IEnumerable<string> BrowseLabels() => _document.Kind != DocumentKind.Image
         ? Enumerable.Range(1, _document.Pages.Count).Select(i => L.F("NotePage", i))
         : _folderImages.Select(p => Path.GetFileName(p));
 
     private void BrowsePositions()
     {
         if (_pagePicker.IsOpen) { _pagePicker.IsOpen = false; return; }
-        bool notebook = _document.Kind == DocumentKind.Notebook;
+        bool notebook = _document.Kind != DocumentKind.Image;
         if (!notebook) RefreshFolder();
         var files = _folderImages; // Keep the popup's rows paired with their original paths during filesystem changes.
         var list = new ListBox { ItemsSource = BrowseLabels().ToArray(), SelectedIndex = notebook ? _pageIndex : _folderIndex,

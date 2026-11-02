@@ -48,7 +48,7 @@ public sealed partial class MainWindow
         var recentHeader = new DockPanel { Margin = new Thickness(0,19,0,6) };
         _clearRecent = new Button { Content = L.T("ClearRecents"), Height = 30, FontSize = 12 };
         _clearRecent.SetResourceReference(StyleProperty,"QuietButton");
-        _clearRecent.Click += (_,_) => { Settings.Current.RecentFiles.Clear(); TrySaveSettings(); RefreshRecent(); };
+        _clearRecent.Click += (_,_) => { Settings.Current.RecentFiles.Clear(); Settings.Current.OfficeReviews.Clear(); TrySaveSettings(); RefreshRecent(); };
         DockPanel.SetDock(_clearRecent,Dock.Right); recentHeader.Children.Add(_clearRecent);
         recentHeader.Children.Add(Studio.Label(L.T("Recents"),16,strong:true)); page.Children.Add(recentHeader);
         page.Children.Add(_recentRows);
@@ -101,7 +101,7 @@ public sealed partial class MainWindow
         foreach (var file in recent.Where(p => !string.IsNullOrWhiteSpace(p)).Take(6))
         {
             var row = new DockPanel();
-            var icon = Studio.Icon(Path.GetExtension(file).Equals(".pdf",StringComparison.OrdinalIgnoreCase) ? "Notebook" : "Image",20);
+            var icon = Studio.Icon(IsOfficeFile(file) || Path.GetExtension(file).Equals(".pdf",StringComparison.OrdinalIgnoreCase) ? "Notebook" : "Image",20);
             icon.Margin = new Thickness(0,0,14,0); DockPanel.SetDock(icon,Dock.Left); row.Children.Add(icon);
             var lines = new StackPanel();
             lines.Children.Add(Studio.Label(Path.GetFileName(file),14,strong:true));

@@ -62,9 +62,28 @@ figcaption a:hover { background-color: var(--tint); border-radius: .3rem; }
 .spread { grid-template-columns: minmax(0, 1.55fr) minmax(0, .8fr); }
 .image-wrap { overflow: hidden; border-radius: .55rem; border: 1px solid #37333e; }
 .marginalia p, .paper-copy p:not(.kicker), .release-copy p:not(.kicker) { margin-top: .8rem; max-width: 38em; color: var(--muted); }
-.note-rule { display: flex; align-items: center; gap: .8rem; margin: 1.55rem 0 1rem; }
-.note-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.note-mark { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border: 1px solid #c99232; border-radius: .5rem; background: #ffdb94; color: #4a3112; font-weight: 650; font-size: .85rem; }
+.note-study { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); align-items: center; gap: clamp(2rem, 6vw, 6rem); padding-top: clamp(3rem, 6vw, 6rem); }
+.study-copy h2 { margin: .85rem 0 1rem; }
+.study-copy p:not(.kicker) { max-width: 34em; color: var(--muted); }
+.study-foot { font-size: .88rem; margin: 1.2rem 0 .3rem; }
+.sample-board { container-type: inline-size; position: relative; border: 1px solid var(--line); border-radius: .55rem; background: #f6f4ee; }
+.sample-board .plan { display: block; width: 100%; height: auto; border-radius: inherit; }
+.sample-detail { --x: 30%; --y: 16.1cqw; }
+.sample-detail.second { --x: 86.4%; --y: 27.8cqw; }
+.sample-pin { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); display: grid; place-items: center; width: 44px; height: 44px; cursor: pointer; list-style: none; z-index: 1; }
+.sample-pin::-webkit-details-marker { display: none; }
+.sample-pin b { display: grid; place-items: center; width: 28px; height: 28px; color: #493316; background: #ffdc97; border: 1px solid #ac813d; border-radius: 8px 8px 8px 2px; box-shadow: 0 2px 3px #3e342524; }
+.sample-pin:hover b, .sample-detail[open] .sample-pin b { background: #ffce70; box-shadow: 0 0 0 3px #fff9; }
+.sample-pin:focus-visible, .sample-card textarea:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; border-radius: .3rem; }
+.sample-card { position: absolute; top: calc(var(--y) + 18px); left: var(--x); width: min(16.5rem, 62%); z-index: 2; padding: .6rem .8rem; border: 1px solid #bca26e; border-radius: .4rem; background: #fff9e9; box-shadow: 0 3px 10px #322c2319; }
+.second .sample-card { left: auto; right: calc(100% - var(--x)); top: auto; bottom: calc(22.2cqw + 18px); }
+.sample-card label { display: block; color: #3f3423; font-size: .92rem; font-weight: 650; }
+.sample-card label span { margin-right: .25rem; color: #785b28; font: 600 .7rem Consolas,monospace; }
+.sample-card textarea { display: block; width: 100%; padding: .2rem 0; resize: none; border: 0; color: #493e2c; background: transparent; font: inherit; font-size: .92rem; line-height: 1.38; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@container (max-width: 33rem) {
+  .sample-detail .sample-card { position: static; width: auto; margin: 0 .65rem .65rem; }
+}
 .paper { grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr); margin-block: clamp(3.5rem, 7vw, 7.5rem); padding-top: clamp(3.5rem, 7vw, 7.5rem); border-top: 1px solid var(--line); }
 .paper-copy h2 { margin: .85rem 0 1.15rem; }
 .paper-copy .link { margin-top: 1rem; }
@@ -93,7 +112,7 @@ footer nav a { color: var(--muted); font-size: .88rem; }
   .download-inner { gap: 3rem; }
 }
 @media (max-width: 56rem) {
-  .hero, .spread, .paper, .download-inner { grid-template-columns: minmax(0, 1fr); }
+  .hero, .spread, .paper, .download-inner, .note-study { grid-template-columns: minmax(0, 1fr); }
   .masthead { min-height: 4.25rem; gap: .75rem; }
   .hero { gap: 2rem; padding-block: 3rem 2.2rem; }
   .hero-copy, .paper-copy { max-width: 40rem; }
@@ -117,8 +136,8 @@ footer nav a { color: var(--muted); font-size: .88rem; }
   footer { flex-wrap: wrap; gap: .3rem 1.2rem; }
 }
 @media (forced-colors: active) {
-  .button, .note-mark { border: 1px solid ButtonText; }
-  .rule, .note-rule::after { background: CanvasText; }
+  .button, .sample-pin b, .sample-card { border: 1px solid ButtonText; }
+  .rule { background: CanvasText; }
 }
 @media (max-width: 26rem) {
   .masthead { gap: 0; padding-top: .55rem; }

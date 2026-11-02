@@ -81,7 +81,7 @@ public sealed partial class MainWindow
                 x.title.Contains(query,StringComparison.CurrentCultureIgnoreCase) ||
                 x.note.Text.Contains(query,StringComparison.CurrentCultureIgnoreCase)).ToList();
             if (matches.Count == 0) continue;
-            if (_document.Kind == DocumentKind.Notebook)
+            if (_document.Kind != DocumentKind.Image)
             {
                 var heading = Studio.Label(L.F("NotePage",page+1),11,"MutedBrush",true);
                 heading.Margin = new Thickness(3,8,0,3); _noteRows.Children.Add(heading);
@@ -141,7 +141,7 @@ public sealed partial class MainWindow
         _surface.CommitEdits();
         if (!CaptureHistory() || page >= _document.Pages.Count) return false;
         if (ActualWidth < 920 && _notesPanel.Visibility == Visibility.Visible) ToggleNotes();
-        if (page != _pageIndex) { _pageIndex = page; ShowPage(); }
+        if (page != _pageIndex) { GoToPage(page); if (_pageIndex != page) return false; }
         _surface.UpdateLayout(); return _surface.RevealNote(id);
     }
 }

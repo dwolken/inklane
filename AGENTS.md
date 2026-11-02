@@ -9,3 +9,4 @@
 - Prefer maintainable, minimal solutions over unnecessary complexity.
 - Use meaningful Conventional Commits.
 - The repository and GitHub Pages site are public. Keep user documents and local QA data out of commits.
+- Integrate verified changes through pull requests after Windows and website checks pass where applicable. Merges to main deploy website changes. Creating releases, pushing release tags, and distributing installers require separate approval.

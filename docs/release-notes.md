@@ -1,17 +1,7 @@
-# Inklane 1.0.0-rc.2
+# Inklane 1.0.0-rc.3 build notes
 
-Windows 11 x64 release candidate. Download **Inklane-Setup-1.0.0-rc.2-x64.exe** and launch Inklane from Start after installation. Setup installs for the current user and includes the desktop runtime. The installer and portable build are unsigned. SHA-256 checksums accompany both downloads.
+This Windows candidate adds review of existing PDF pages and Office documents. Open a PDF, pin an explanation or draw a correction, and save the editable annotations beside the original. Word and PowerPoint reviews use a fixed PDF edition. Select an export from the authoring app or create a new copy with an existing standard LibreOffice installation. Some files, including documents containing links, macros or fields, require an author-exported PDF.
 
-## Editing
+**More actions → Export feedback** writes a report with the source filename, SHA-256, page dimensions and precise annotations. It includes the contents of collapsed notes and the sampled geometry of handwriting. Keep the editable sidecar to resume reviewing. External PDF markup requires this build. Earlier Inklane notebook PDFs and image sidecars remain supported.
 
-- Copy, cut, duplicate and paste ink, text, notes and pictures across Inklane documents and windows. Ctrl+click builds a selection. Right-click the canvas or press Shift+F10 for editing commands. Normal Windows text shortcuts work inside editors.
-- Paste a screenshot directly onto a page or image. Move it or drag its corner to resize it. Ctrl+V on Home starts a notebook from the clipboard. **Copy annotated image** and **Copy page as image** produce flattened pictures for other applications. **Copy original image** copies the source pixels without overlays.
-- Click a note’s heading to name it. F2 and the note index context menu also open its title. Search both titles and text across pages.
-- Click a notebook’s title to change its display name. **Save as** controls its filename and location. Click the page counter to jump. Its context menu lets you duplicate, reorder and remove pages.
-- Use ← and → to browse folder images when the canvas has no selection. Click the image counter to jump to a filename. The folder list updates when screenshots arrive or disappear.
-
-## Compatibility
-
-Historical Inklane notebooks and image sidecars still open. Files containing a title or an inserted picture need RC.2 or newer for editable reopening in Inklane. A saved notebook contains standard PDF page content and annotations, including note subjects and bodies. Imported third-party PDFs are outside the supported editing format.
-
-See the [validation record](https://github.com/dwolken/inklane/blob/v1.0.0-rc.2/docs/validation.md) for the Windows and PDF checks. Physical pen/printer qualification, Narrator, mixed-monitor transitions, a separate clean Windows 11 device, signing and the long-term PDF dependency decision remain open.
+The Windows setup is an unsigned, self-contained x64 application for Windows 11. See the [validation record](validation.md) for the scope of local testing.

@@ -2,6 +2,13 @@
 
 Inklane 1.0.0-rc.1 was exercised on Windows 11 at 125% display scaling. This record separates desktop observations, repeatable regression checks and device work that remains open.
 
+## Local document review and browser build
+
+- Windows rendered a two-page general PDF, including a cropped, rotated page. Its displayed dimensions and color landmarks agreed with an independent Poppler render. Named notes survived sidecar save, relocation and reopen. Recovery and both pages of the XPS print output were checked. An actual WPF window was inspected at 125% scaling.
+- Two-page files created by Word and PowerPoint were reviewed using their author-exported PDFs and, separately, locally converted using LibreOffice 26.8.2. Page counts, page sizes and extracted text agreed for these samples. A changed Office source with its old PDF was refused. Rendering fidelity for arbitrary Office layouts has not been established.
+- Edge on Windows exercised the separate marketing example and image editor. Browser checks covered file writes, canceled and conflicting saves, download and reopen, EXIF orientation, editing, English and German layouts and accessibility scans. Three historical Windows image fixtures reopened in the browser. Windows reopened a browser-authored image pair after relocation. Both editors produced the same structured feedback for the shared image.
+- Responsive layouts were examined using browser viewport sizes. Physical mobile devices, other browser engines, native macOS and Linux apps, physical pen and printer hardware remain outside these checks.
+
 ## Editing candidate · RC.2
 
 The local Release build passed 17 persistence checks, 27 WPF/clipboard checks and 19 lifecycle checks, with zero compiler warnings or errors.
@@ -49,6 +56,6 @@ Release compilation completed with zero warnings and errors. All **53 applicatio
 
 The real per-user installer passed 17 lifecycle checks under a non-elevated Windows token. Verification covered the Installed apps entry, the Start shortcut's normal launch, startup using the installed bundled runtime, a locked previous version, upgrade, downgrade refusal and registered uninstall. The checks preserved test notebooks, sidecars, unknown files, settings and existing file associations. They used an isolated Windows desktop and refused to claim an existing registered installation. Visual inspection of the actual German wizard caught and corrected an encoding error in its authored text.
 
-The release workflow repeats build, application, package and installer checks on Windows, verifies the downloaded artifact checksums, verifies the expected public repository and publishes candidate assets on a version tag. See the [Windows runs](https://github.com/dwolken/inklane/actions) and [release record](https://github.com/dwolken/inklane/releases).
+The Windows workflow repeats build, application, package and installer checks on pull requests and on `main`. These runs do not upload installers or local QA files. An authorized version tag runs the release path: it checks the downloaded package hashes and target repository before publishing candidate assets. See the [Windows runs](https://github.com/dwolken/inklane/actions/workflows/windows.yml) and [published releases](https://github.com/dwolken/inklane/releases).
 
 The candidate awaits user acceptance. [Physical pen, printer, Narrator and mixed-DPI checks](https://github.com/dwolken/inklane/issues/1) remain open. The pinned MIT PDFsharp 6.2.4 branch requires a [long-term maintenance decision](https://github.com/dwolken/inklane/issues/2). A NuGet vulnerability query including transitive dependencies reported no listed vulnerable packages on 2026-11-01. [Trusted signing and a separate clean Windows 11 machine](https://github.com/dwolken/inklane/issues/3) remain outstanding. Windows Server CI and this Windows 11 development host cover different environments from a clean consumer PC.
