@@ -12,13 +12,13 @@ final class SavePanelTests: XCTestCase {
     }
 
     private func chooser(_ app: XCUIApplication, button: String) throws -> XCUIElement {
-        let sheet = app.sheets.firstMatch
-        if sheet.waitForExistence(timeout: 6), sheet.buttons[button].exists { return sheet }
-        let service = XCUIApplication(bundleIdentifier: "com.apple.appkit.xpc.openAndSavePanelService")
-        for scope in [service.dialogs.firstMatch, service.windows.firstMatch, app.dialogs.firstMatch] {
-            if scope.exists && scope.buttons[button].exists { return scope }
-        }
-        XCTFail("The native \(button) panel was not accessible.")
+        // AppKit exposes the modal sheet immediately, but its remote controls can appear elsewhere
+        // in the host application's AX tree. The XPC service is not itself a launchable application.
+        let id = button == "Save" ? "save-panel" : "open-panel"
+        let explicit = app.descendants(matching: .any).matching(identifier:id).firstMatch
+        if app.sheets.firstMatch.waitForExistence(timeout: 8) { return app }
+        if explicit.exists || app.dialogs.firstMatch.exists { return app }
+        XCTFail("The host application did not present a native \(button) panel.")
         throw CocoaError(.fileReadUnknown)
     }
 
@@ -42,10 +42,12 @@ final class SavePanelTests: XCTestCase {
         if directoryName.waitForExistence(timeout: 3) || sentinel.exists || hiddenExtension.exists { return }
         let disclosure = panel.buttons.matching(NSPredicate(
             format: "label CONTAINS[c] 'show details' OR label CONTAINS[c] 'expand'")).firstMatch
-        if disclosure.exists { disclosure.click() }
-        else if panel.disclosureTriangles.firstMatch.exists { panel.disclosureTriangles.firstMatch.click() }
+        if disclosure.exists && disclosure.isHittable { disclosure.click() }
+        else if panel.sheets.disclosureTriangles.firstMatch.exists { panel.sheets.disclosureTriangles.firstMatch.click() }
         if !directoryName.exists && !sentinel.waitForExistence(timeout: 5) && !hiddenExtension.exists {
-            panel.buttons["Cancel"].click()
+            NSLog("File chooser AX: %d sheets, %d dialogs, %d text fields, %d outlines.",
+                  panel.sheets.count,panel.dialogs.count,panel.textFields.count,panel.outlines.count)
+            panel.typeKey(.escape,modifierFlags: [])
             XCTFail("The chooser did not display the disposable review folder.")
             throw CocoaError(.fileNoSuchFile)
         }
@@ -54,15 +56,19 @@ final class SavePanelTests: XCTestCase {
     private func save(_ baseName: String, app: XCUIApplication, folder: URL, marker: URL) throws -> Data {
         try find(app.webViews.buttons["Save"]).click()
         let panel = try chooser(app,button: "Save")
+        // A newly presented macOS Save panel selects the proposed filename. Normal keyboard input
+        // goes to that modal responder even if the XPC content is not a child of the sheet node.
+        app.typeKey("a",modifierFlags: .command)
+        app.typeText(baseName + ".inklane")
         go(app,to: folder)
         try identifyFolder(folder,marker: marker,in: panel)
-        let name = try find(panel.textFields.firstMatch)
-        name.click()
-        name.typeKey("a", modifierFlags: .command)
-        name.typeText(baseName + ".inklane")
         let destination = folder.appendingPathComponent(baseName + ".inklane")
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
-        try find(panel.buttons["Save"]).click()
+        let saveButtons = panel.buttons.matching(identifier:"Save").allElementsBoundByIndex.filter {
+            $0.isEnabled && $0.isHittable
+        }
+        if saveButtons.count == 1 { saveButtons[0].click() }
+        else { app.typeKey(.return,modifierFlags: []) }
         let exists = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             FileManager.default.fileExists(atPath: destination.path)
         }, object: nil)
