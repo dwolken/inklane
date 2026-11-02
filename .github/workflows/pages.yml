@@ -15,6 +15,12 @@ on:
 
 permissions: {}
 
+# Superseded pull-request builds do not need a second browser runner. Main
+# deployments and release-triggered refreshes keep their own run and artifact.
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     if: >-
@@ -53,7 +59,8 @@ jobs:
 
   apple-browser:
     needs: build
-    runs-on: macos-15
+    # Exercise Intel WebKit as well as the Apple Silicon native workspace jobs.
+    runs-on: macos-15-intel
     timeout-minutes: 12
     permissions:
       contents: read
