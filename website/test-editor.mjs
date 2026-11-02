@@ -424,8 +424,8 @@ try {
     await page.screenshot({ path: resolve(output, "native-" + basename(source) + ".png") });
   }
   await (await import("./test-documents.mjs")).verifyDocuments(browser,origin + base,output);
-  for (const language of ["en","de"]) {
-    const phone = await browser.newContext({ viewport: { width:390, height:844 }, isMobile:true, hasTouch:true, locale:language });
+  for (const [language,width,height] of [["en",390,844],["de",390,844],["en",320,740],["de",320,740]]) {
+    const phone = await browser.newContext({ viewport: { width, height }, isMobile:true, hasTouch:true, locale:language });
     try {
       const screen = await phone.newPage();
       await screen.goto(origin + base + "editor/?sample=review&lang=" + language);
@@ -444,7 +444,10 @@ try {
       assert.ok(gap >= 3 && gap <= 10, "The remark should sit just outside the landscape document.");
       assert.ok(offPage.card.top >= offPage.desk.top && offPage.card.bottom <= offPage.desk.bottom);
       assert.deepEqual(await marker.boundingBox(), before, "Opening the remark must leave the source in place.");
-      await screen.screenshot({path:resolve(output,"phone-remark-" + language + ".png")});
+      const footerFits = () => screen.locator("footer").evaluate(el => el.scrollWidth <= el.clientWidth);
+      assert.ok(await footerFits(), "Object actions and zoom must fit the phone footer.");
+      assert.equal(await screen.getByRole("button",{name:language === "de" ? "Duplizieren" : "Duplicate",exact:true}).count(),1);
+      await screen.screenshot({path:resolve(output,"phone-remark-" + language + "-" + width + ".png")});
       await screen.locator("#close-card").click();
       await screen.locator("#more summary").click();
       await screen.locator("#new-sheet").click();
@@ -454,6 +457,8 @@ try {
       await screen.mouse.click(sheet.x+sheet.width*.45,sheet.y+sheet.height*.4);
       await card.waitFor();
       const onPage = await geometry();
+      assert.deepEqual(await screen.locator("#sheet").boundingBox(),sheet,"Choosing an object on printable paper must leave the page in place.");
+      assert.ok(await footerFits(), "Page navigation, object actions and zoom must fit the phone footer.");
       assert.ok(Math.min(onPage.sheet.bottom,onPage.card.bottom) > Math.max(onPage.sheet.top,onPage.card.top));
       assert.equal(await card.getAttribute("data-desk"), null, "A tall sheet should keep the remark at its anchor.");
     } finally {
