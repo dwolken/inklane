@@ -41,6 +41,17 @@ export async function verifyDocuments(browser, base, output) {
   try {
     await page.goto(base + "editor/");
     await click("new-notebook");
+    await page.locator("#book-title").fill("Undo checkpoint");
+    await page.locator("#paper-form button.primary").click();
+    await click("add-page");
+    await page.waitForFunction(async () => (await (await import("./drafts.js")).listDrafts()).some(d => d.name === "Undo checkpoint"));
+    await click("undo");
+    await more("home");
+    await visible("new-notebook");
+    await page.reload();
+    await visible("new-notebook");
+    assert.equal(await page.evaluate(async () => (await (await import("./drafts.js")).listDrafts()).some(d => d.name === "Undo checkpoint")), false);
+    await click("new-notebook");
     await page.locator("#book-title").fill("Field corrections");
     await page.locator("#paper-size").selectOption("A5");
     await page.locator("#pattern").selectOption("Squared");
