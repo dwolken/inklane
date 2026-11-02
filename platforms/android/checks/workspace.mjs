@@ -156,11 +156,20 @@ try {
       y:Math.round(y1 + (y2-y1)*(named ? 0.5 : marker.v))
     };
   },'Android accessibility bounds for the review surface');
-  await js(`window.__deviceTap = []; for(const type of ['pointerdown','pointerup','pointercancel','gotpointercapture','lostpointercapture','click']) {
-    document.addEventListener(type,e=>{ if(window.__deviceTap.length<16) window.__deviceTap.push([e.type,e.target.id||e.target.className||e.target.tagName,e.clientX,e.clientY]); },{capture:true});
+  await js(`window.__deviceTap = []; for (const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture','click']) {
+    for (const capture of [true,false]) window.addEventListener(type, e=>{
+      if (window.__deviceTap.length < 40) window.__deviceTap.push([
+        e.type, capture ? 'before' : 'after', e.target.id || e.target.className || e.target.tagName,
+        e.pointerType, e.detail, e.clientX, e.clientY, !document.querySelector('#card').hidden
+      ]);
+    }, {capture});
   }`);
   adb('shell','input','tap',String(targetBounds.x),String(targetBounds.y));
   await waitFor(()=>visible('#close-card'),'visible expanded note');
+  // Check after the compatibility-click window, not just between pointerup and click.
+  await sleep(800);
+  assert.ok(await visible('#close-card'),'The note stays expanded after touch compatibility events.');
+  console.log('Android marker input:', JSON.stringify(await js('window.__deviceTap')));
   assert.equal(await js(find('#note-body')+'.value'),'Leave room for the handle.');
   await tap('#close-card');
   await tap('#more summary');
