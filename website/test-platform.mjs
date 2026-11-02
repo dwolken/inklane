@@ -42,7 +42,7 @@ const engine = process.env.INKLANE_ENGINE || 'chromium';
 const profileRoot=resolve('.scratch/platform-profiles'); await mkdir(profileRoot,{recursive:true});
 const profile=await mkdtemp(resolve(profileRoot,engine+'-'));
 const context=await (engine==='webkit'?webkit:chromium).launchPersistentContext(profile,{
-  viewport:{width:1060,height:760},locale:'en-US',
+  viewport:process.env.INKLANE_INSTALL_CHECK?null:{width:1060,height:760},locale:'en-US',
   headless: !process.env.INKLANE_INSTALL_CHECK,
   ...(engine==='webkit'?{}:process.env.BROWSER_PATH?{executablePath:process.env.BROWSER_PATH}:{channel:process.platform==='win32'?'msedge':'chrome'})
 });
@@ -67,6 +67,8 @@ try {
       if (process.env.GITHUB_ACTIONS!=='true') throw Error('Installation test requires an ephemeral Actions runner.');
       await session.send('PWA.install',{manifestId,installUrlOrBundleUrl:manifestId});
       try {
+        // CDP installation skips the browser's normal user-facing window choice.
+        await session.send('PWA.changeAppUserSettings',{manifestId,displayMode:'standalone'});
         const next=context.waitForEvent('page');
         await session.send('PWA.launch',{manifestId});
         const appWindow=await next;
