@@ -1,4 +1,92 @@
 const labels = {
+  rename: ["Rename notebook…", "Notizbuch umbenennen …"],
+  moveBack: ["Move earlier", "Nach vorne verschieben"],
+  moveForward: ["Move later", "Nach hinten verschieben"],
+  copyPage: ["Duplicate page", "Seite duplizieren"],
+  deletePage: ["Delete page", "Seite löschen"],
+  deletePageConfirm: [
+    "Delete this page and its annotations? You can undo this change.",
+    "Diese Seite mit ihren Anmerkungen löschen? Sie können dies rückgängig machen."
+  ],
+  nativeSaved: ["File saved", "Datei gespeichert"],
+  keep: ["Keep a copy", "Kopie behalten"],
+  fitPage: ["Fit whole page", "Ganze Seite einpassen"],
+  recoverHint: ["Reopen", "Weiterarbeiten"],
+  printNotes: ["Anchored notes", "Verankerte Notizen"],
+  fileTab: ["Document", "Dokument"],
+  newHint: ["On this device", "Auf diesem Gerät"],
+  draftStatus: ["Local draft", "Lokaler Entwurf"],
+  saveNotebook: ["Save notebook", "Notizbuch speichern"],
+  identityPdf: [
+    "These annotations belong to a different PDF. Choose the unchanged original.",
+    "Diese Anmerkungen gehören zu einer anderen PDF. Wählen Sie das unveränderte Original."
+  ],
+  pdfGeometry: [
+    "This page exceeds the supported dimensions.",
+    "Die Seite überschreitet die unterstützte Größe."
+  ],
+  pdfInvalid: ["This PDF could not be opened.", "Diese PDF konnte nicht geöffnet werden."],
+  pdfPassword: [
+    "This PDF is password-protected. Open an unlocked copy.",
+    "Diese PDF ist passwortgeschützt. Öffnen Sie eine entsperrte Kopie."
+  ],
+  page: ["Page", "Seite"],
+  addPage: ["Add page", "Seite hinzufügen"],
+  goto: ["Go to page", "Zur Seite"],
+  next: ["Next page", "Nächste Seite"],
+  prev: ["Previous page", "Vorherige Seite"],
+  pages: ["Pages", "Seiten"],
+  recovered: ["Recovered on this device", "Auf diesem Gerät wiederhergestellt"],
+  forgetConfirm: [
+    "Remove this draft from this browser? Downloaded files stay on your device.",
+    "Diesen Entwurf aus dem Browser entfernen? Heruntergeladene Dateien bleiben auf Ihrem Gerät."
+  ],
+  forget: ["Remove local draft", "Lokalen Entwurf entfernen"],
+  draftError: [
+    "Local recovery is unavailable. Save a file to keep your work.",
+    "Lokale Wiederherstellung nicht verfügbar. Speichern Sie Ihre Arbeit als Datei."
+  ],
+  portableExtension: [
+    "Choose a name ending in .inklane.",
+    "Wählen Sie einen Dateinamen mit der Endung .inklane."
+  ],
+  print: ["Print notebook…", "Notizbuch drucken …"],
+  portableDone: [
+    "Workspace download requested. Open the .inklane file to continue.",
+    "Download angefordert. Öffnen Sie die .inklane-Datei zum Weiterarbeiten."
+  ],
+  portable: ["Download portable workspace", "Arbeitsmappe herunterladen"],
+  sampleBody2: [
+    "Add a scale bar beside the seed head before printing.",
+    "Vor dem Druck einen Maßstabsbalken neben dem Fruchtstand ergänzen."
+  ],
+  sampleTitle2: ["Scale", "Maßstab"],
+  sampleBody: [
+    "Keep the pale tips. They distinguish this specimen from the earlier study.",
+    "Die hellen Spitzen bitte beibehalten. Sie unterscheiden dieses Exemplar von der früheren Studie."
+  ],
+  sampleTitle: ["Petal colour", "Blütenfarbe"],
+  sampleName: ["Field guide.png", "Feldführer.png"],
+  openSample: ["Open the field guide", "Feldführer öffnen"],
+  recent: ["On this device", "Auf diesem Gerät"],
+  untitled: ["Untitled notebook", "Unbenanntes Notizbuch"],
+  notebookName: ["Notebook name", "Name des Notizbuchs"],
+  squared: ["Squared", "Kariert"],
+  ruled: ["Ruled", "Liniert"],
+  blank: ["Blank", "Blanko"],
+  customSpacing: ["Spacing in mm", "Abstand in mm"],
+  custom: ["Custom", "Eigener Wert"],
+  spacing: ["Spacing", "Abstand"],
+  sizeLabel: ["Page size", "Papierformat"],
+  landscape: ["Landscape", "Querformat"],
+  portrait: ["Portrait", "Hochformat"],
+  orientation: ["Orientation", "Ausrichtung"],
+  paper: ["Paper", "Papier"],
+  createBook: ["Create notebook", "Notizbuch anlegen"],
+  create: ["New notebook", "Neues Notizbuch"],
+  paperTypes: ["Blank, ruled or squared paper", "Blanko, liniert oder kariert"],
+  supported: ["PDF, PNG, JPEG or Inklane", "PDF, PNG, JPEG oder Inklane"],
+  home: ["Documents", "Dokumente"],
   feedbackOnly: [
     "This is an exported feedback report. To edit, open the image with its .inklane.json annotation file.",
     "Dies ist ein exportierter Feedbackbericht. Zum Bearbeiten öffnen Sie das Bild mit seiner .inklane.json-Anmerkungsdatei."
@@ -12,15 +100,15 @@ const labels = {
   index: ["Browse annotations", "Anmerkungen durchsuchen"],
   search: ["Find an annotation", "Anmerkung suchen"],
   empty: ["No matching annotations", "Keine passenden Anmerkungen"],
-  relink: ["Choose the original image", "Originalbild auswählen"],
+  relink: ["Choose the original file", "Originaldatei auswählen"],
   relinkHint: [
-    "This annotation file contains the marks. Open the original PNG or JPEG to place them on the image.",
-    "Diese Datei enthält die Markierungen. Öffnen Sie das ursprüngliche PNG- oder JPEG-Bild, um sie anzuzeigen."
+    "Open the unchanged source to place these annotations.",
+    "Öffnen Sie das unveränderte Original für diese Anmerkungen."
   ],
   cancel: ["Cancel", "Abbrechen"],
   inkColor: ["Ink color", "Stiftfarbe"],
   inkSize: ["Stroke width", "Strichbreite"],
-  workspace: ["Image workspace", "Bildarbeitsplatz"],
+  workspace: ["Workspace", "Arbeitsbereich"],
   browser: ["Browser edition", "Browser-Version"],
   open: ["Open", "Öffnen"],
   save: ["Save annotations", "Anmerkungen speichern"],
@@ -29,17 +117,17 @@ const labels = {
   guide: ["How to use the workspace", "Hilfe zum Arbeitsbereich"],
   welcome: ["Mark up an image", "Ein Bild kommentieren"],
   intro: [
-    "Draw, place text or pin a longer note to a detail.",
-    "Zeichnen Sie, fügen Sie Text ein oder heften Sie eine Notiz an ein Detail."
+    "Open your work to review it, or start with a fresh page.",
+    "Öffnen Sie ein Dokument zum Kommentieren oder beginnen Sie mit einem leeren Blatt."
   ],
-  choose: ["Choose an image", "Bild auswählen"],
+  choose: ["Open document", "Dokument öffnen"],
   reopen: [
     "To reopen saved work, choose the image and its .inklane.json file together.",
     "Zum Weiterarbeiten wählen Sie das Bild zusammen mit seiner .inklane.json-Datei aus."
   ],
   local: ["Files stay on this device.", "Ihre Dateien bleiben auf diesem Gerät."],
   tools: ["Editing tools", "Werkzeuge"],
-  surface: ["Image and annotations", "Bild mit Anmerkungen"],
+  surface: ["Document and annotations", "Dokument mit Anmerkungen"],
   select: ["Select", "Auswahl"],
   pen: ["Pen", "Stift"],
   text: ["Text", "Text"],
@@ -50,7 +138,7 @@ const labels = {
   remove: ["Delete", "Löschen"],
   undo: ["Undo", "Rückgängig"],
   redo: ["Redo", "Wiederholen"],
-  fit: ["Fit image", "Bild einpassen"],
+  fit: ["Fit document", "Dokument einpassen"],
   out: ["Zoom out", "Verkleinern"],
   in: ["Zoom in", "Vergrößern"],
   title: ["Note title", "Notiztitel"],
@@ -58,36 +146,36 @@ const labels = {
   collapse: ["Collapse note", "Notiz einklappen"],
   bodyPlaceholder: ["Write your note…", "Notiz schreiben …"],
   done: ["Done", "Fertig"],
-  ready: ["Local image", "Lokales Bild"],
+  ready: ["Local document", "Lokales Dokument"],
   changed: ["Unsaved changes", "Ungespeicherte Änderungen"],
   saved: ["Annotations saved", "Anmerkungen gespeichert"],
   loaded: ["Annotations opened", "Anmerkungen geöffnet"],
   loading: ["Opening files…", "Dateien werden geöffnet …"],
   saving: ["Saving…", "Wird gespeichert …"],
   downloaded: [
-    "Download requested. Keep the JSON file with the original image.",
-    "Download angefordert. Bewahren Sie die JSON-Datei beim Originalbild auf."
+    "Download requested. Keep the JSON file with the original.",
+    "Download angefordert. Bewahren Sie die JSON-Datei mit dem Original auf."
   ],
   helpOpen: [
-    "Open a PNG or JPEG. To continue an earlier session, select the original image and its annotation file together. With the image open, you can also open the JSON file separately.",
-    "Öffnen Sie eine PNG- oder JPEG-Datei. Zum Weiterarbeiten wählen Sie das Originalbild zusammen mit der zugehörigen Anmerkungsdatei aus. Bei geöffnetem Bild können Sie die JSON-Datei auch einzeln öffnen."
+    "Open a PDF, PNG, JPEG or portable Inklane file. To restore an annotation layer, open its JSON file and choose the unchanged source.",
+    "Öffnen Sie eine PDF-, PNG-, JPEG- oder Inklane-Datei. Zum Laden gespeicherter Anmerkungen öffnen Sie die JSON-Datei und wählen die unveränderte Quelldatei."
   ],
   helpEdit: [
     "Select an object to move it, use the arrow keys to nudge it, or press F2 to edit text. Click a note number to read or collapse the card. Escape finishes editing. Ctrl/Cmd+Z undoes an edit.",
     "Verschieben Sie ein ausgewähltes Objekt mit der Maus oder den Pfeiltasten. F2 bearbeitet Text. Klicken Sie auf eine Notiznummer, um die Karte zu öffnen oder einzuklappen. Esc beendet die Texteingabe. Strg/Cmd+Z macht Änderungen rückgängig."
   ],
   helpSave: [
-    "Save annotations writes a separate .inklane.json file. If your browser only supports downloads, check that the download finished before closing the tab. Keep the image and JSON together to reopen in Inklane.",
-    "Speichern legt eine separate .inklane.json-Datei an. Unterstützt Ihr Browser nur Downloads, prüfen Sie vor dem Schließen, ob die Datei heruntergeladen wurde. Zum erneuten Öffnen in Inklane benötigen Sie das Bild und die JSON-Datei."
+    "A portable workspace includes the source and the editable marks. Saving annotations for an image or PDF writes a separate layer. Check your downloads before closing the tab.",
+    "Eine Arbeitsmappe enthält das Original und die bearbeitbaren Markierungen. Für Bilder und PDFs können Sie die Anmerkungen getrennt speichern. Prüfen Sie Ihre Downloads vor dem Schließen."
   ],
   selectHint: [
     "Select a mark to move or edit it.",
     "Zum Verschieben oder Bearbeiten eine Markierung auswählen."
   ],
-  penHint: ["Draw directly on the image.", "Direkt auf das Bild zeichnen."],
-  textHint: ["Click the image to place text.", "Zum Platzieren von Text ins Bild klicken."],
+  penHint: ["Draw on the page.", "Auf der Seite zeichnen."],
+  textHint: ["Click to place text.", "Klicken, um Text einzufügen."],
   noteHint: ["Click a detail to anchor a note.", "Für eine verankerte Notiz auf ein Detail klicken."],
-  panHint: ["Drag to move around the image.", "Ziehen, um die Ansicht zu verschieben."],
+  panHint: ["Drag to pan.", "Ziehen, um die Ansicht zu verschieben."],
   discard: [
     "Discard unsaved changes and open the selected file?",
     "Ungespeicherte Änderungen verwerfen und die ausgewählte Datei öffnen?"
@@ -97,16 +185,16 @@ const labels = {
     "Bitte das Originalbild zusammen mit der Anmerkungsdatei auswählen."
   ],
   files: [
-    "Choose one PNG or JPEG, optionally with its annotation JSON.",
-    "Wählen Sie eine PNG- oder JPEG-Datei, gegebenenfalls mit ihrer Anmerkungsdatei."
+    "Choose one PDF, PNG, JPEG or Inklane workspace. A PDF or image can be opened with its annotation JSON.",
+    "Wählen Sie eine PDF-, PNG-, JPEG- oder Inklane-Datei. Bilder und PDFs lassen sich zusammen mit ihrer Anmerkungsdatei öffnen."
   ],
   invalid: [
     "This annotation file contains invalid or unsupported data.",
     "Die Anmerkungsdatei enthält ungültige oder nicht unterstützte Daten."
   ],
   version: [
-    "This editor supports Inklane image annotations in versions 1 and 2.",
-    "Dieser Editor unterstützt Inklane-Bildanmerkungen der Versionen 1 und 2."
+    "Supported layers use image versions 1 and 2 or PDF version 3.",
+    "Unterstützt werden Bildanmerkungen der Versionen 1 und 2 sowie PDF-Anmerkungen der Version 3."
   ],
   identity: [
     "These annotations belong to a different image. Choose the unchanged original.",
@@ -126,8 +214,8 @@ const labels = {
     "Die Anmerkungen konnten nicht gespeichert werden. Ihre Änderungen sind weiterhin geöffnet."
   ],
   conflict: [
-    "Choose a new .inklane.json filename. The chosen file is different from the copy you opened.",
-    "Bitte einen neuen .inklane.json-Dateinamen wählen. Die gewählte Datei weicht von der geöffneten Kopie ab."
+    "Choose a new filename. The file differs from the copy you opened.",
+    "Bitte einen neuen Dateinamen wählen. Die gewählte Datei weicht von der geöffneten Kopie ab."
   ],
   extension: [
     "Choose a filename ending in .inklane.json.",

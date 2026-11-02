@@ -1,0 +1,9 @@
+{
+  "start_url": "./", "scope": "./", "name": "Inklane", "short_name": "Inklane",
+  "description": "Review documents and keep annotations beside the mark they explain.",
+  "display": "standalone", "background_color": "#f6f5f1", "theme_color": "#29253e",
+  "icons": [
+    {"src":"icons/app-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icons/app-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}

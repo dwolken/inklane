@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Inklane/Inklane.csproj" />
     <Compile Include="../TestResources.cs" />
+    <None Include="../fixtures/browser-notebook.inklane" Link="browser-notebook.inklane" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Inklane/App.xaml" Link="AppResources.xaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

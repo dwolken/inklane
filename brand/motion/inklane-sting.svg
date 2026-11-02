@@ -1,120 +1,149 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1920" height="1080" viewBox="0 0 1920 1080" aria-labelledby="title description" role="img">
   <title id="title">Inklane</title>
-  <desc id="desc">A note opens beside its anchor on a drawing. Its lines fold into the Inklane mark and the name appears.</desc>
+  <desc id="description">Two violet surfaces turn around a shared fold. The view pulls back to reveal the Inklane mark and wordmark.</desc>
   <style>
-    .word { font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 136px; font-weight: 650; letter-spacing: -6px; fill: #242234 }
+    .word { font: 650 30px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -1.15px; fill: #262337 }
     #still { display: none }
-    @media (prefers-reduced-motion: reduce) { #motion { display: none } #still { display: inline } }
+    @media (prefers-reduced-motion: reduce) { #film { display: none } #still { display: inline } }
   </style>
   <defs>
+    <!-- The five resting contours and their inks are the desktop master. -->
     <linearGradient id="folio" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
       <stop stop-color="#36315D"/><stop offset="1" stop-color="#211F39"/>
     </linearGradient>
-    <!-- The five final contours come from the desktop identity, in its 48-unit coordinate space. -->
     <path id="sheet" d="M11 3h19q1.2 0 2.1.9l9 9q.9.9.9 2.1v23a6 6 0 0 1-6 6H11a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6Z"/>
     <path id="corner" d="M30 3q1.2 0 2.1.9l9 9q.9.9.9 2.1h-7a5 5 0 0 1-5-5Z"/>
     <path id="margin" d="M12 12h7v17l-7 7Z"/>
     <path id="lane" d="m12 36 13-13h10v7h-7l-6 6Z"/>
     <path id="crease" d="m12 36 7-7v7Z"/>
-    <g id="mark">
+    <g id="master">
       <use xlink:href="#sheet" fill="url(#folio)" stroke="#5D5681" stroke-width=".7"/>
-      <use xlink:href="#corner" fill="#8075C1"/>
-      <use xlink:href="#margin" fill="#E1DBFF"/>
-      <use xlink:href="#lane" fill="#B3A1FF"/>
-      <use xlink:href="#crease" fill="#8577C8"/>
+      <use xlink:href="#corner" fill="#8075C1"/><use xlink:href="#margin" fill="#E1DBFF"/>
+      <use xlink:href="#lane" fill="#B3A1FF"/><use xlink:href="#crease" fill="#8577C8"/>
     </g>
-    <text id="name" class="word" x="0" y="585">Inklane</text>
-    <clipPath id="name-window"><rect x="0" y="400" width="0" height="245">
-      <animate attributeName="width" from="0" to="550" begin="2.48s" dur=".74s" calcMode="spline" keySplines=".4 0 .16 1" fill="freeze"/>
-    </rect></clipPath>
-  </defs>
-  <rect width="1920" height="1080" fill="#faf9f6"/>
-  <g id="motion">
-    <!-- A detail of a measured drawing. The pin sits directly on the sill. -->
-    <g transform="translate(960 540) scale(4.2) translate(-24 -24)" fill="none" stroke-linejoin="round">
-      <g opacity="0">
-        <animate attributeName="opacity" values="0;.9;.9;0" keyTimes="0;.22;.63;1" dur="1.71s" fill="freeze"/>
-        <path d="M-116 38h42V9l14-10h17v39h38" stroke="#a9a4ad" stroke-width=".6"/>
-        <path d="M-116 40h45V10l12-8h13v38h41" stroke="#c5c0c6" stroke-width=".45"/>
-        <path d="M-98 45h65m-65-1.5v3m65-3v3" stroke="#d1cbd0" stroke-width=".5"/>
-      </g>
-      <path d="M-43 38h9l9-9h6" stroke="#9c885f" stroke-width=".6" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1">
-        <animate attributeName="stroke-dashoffset" values="1;0;0;1" keyTimes="0;.27;.74;1" begin=".15s" dur="1.49s" fill="freeze"/>
+    <text id="name" class="word" x="49" y="34.2">Inklane</text>
+    <clipPath id="sheet-clip"><use xlink:href="#sheet"/></clipPath>
+    <clipPath id="letter-mask">
+      <path d="M37 6L39 6L27 42L25 42Z">
+        <animate attributeName="d" begin="1.49s" dur=".86s" calcMode="spline" keySplines=".28 .02 .18 1" fill="freeze"
+          from="M37 6L39 6L27 42L25 42Z" to="M37 6L160 6L148 42L25 42Z"/>
       </path>
-      <g transform="translate(-43 38)">
-        <g opacity="0">
-          <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.8;1" dur="1.6s" fill="freeze"/>
-          <g>
-            <animateTransform attributeName="transform" type="scale" values=".35;1.05;1" keyTimes="0;.7;1" dur=".34s" fill="freeze"/>
-            <rect x="-5.6" y="-5.6" width="11.2" height="11.2" rx="3.4" fill="#ffdb94" stroke="#b99047" stroke-width=".3"/>
-            <path d="m-1.45-1.25 1.8-1.25v5" stroke="#513b21" stroke-width=".78" stroke-linecap="round"/>
-          </g>
+    </clipPath>
+    <linearGradient id="silk" x1="0" y1="1" x2=".58" y2="0" gradientUnits="objectBoundingBox">
+      <stop stop-color="#675899"/><stop offset=".44" stop-color="#C3B4EE"/><stop offset=".83" stop-color="#EBE6FA"/><stop offset="1" stop-color="#F3EDFC"/>
+    </linearGradient>
+    <linearGradient id="underfold" x1="0" y1="1" x2="1" y2="0" gradientUnits="objectBoundingBox">
+      <stop stop-color="#514369"/><stop offset=".42" stop-color="#8B71BE"/><stop offset="1" stop-color="#C4AFF4"/>
+    </linearGradient>
+    <linearGradient id="crease-light" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#F4ECFF"/><stop offset=".52" stop-color="#BDABD9"/><stop offset="1" stop-color="#75659F"/>
+    </linearGradient>
+    <filter id="penumbra" x="-55%" y="-55%" width="210%" height="210%">
+      <feGaussianBlur stdDeviation=".42"/>
+    </filter>
+    <linearGradient id="surface-light" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#695185"/><stop offset="1" stop-color="#29233E"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="#F6F4F0"/>
+  <svg id="film" width="1920" height="1080" viewBox="12 24 18 10.125">
+    <!-- Camera keys are in the master mark's 48-unit drawing space. -->
+    <animate attributeName="viewBox" dur="2.54s" fill="freeze" calcMode="linear"
+      values="12 24 18 10.125;
+              11.995 23.994 18.015 10.133;
+              11.964 23.957 18.114 10.189;
+              11.884 23.86 18.369 10.332;
+              11.736 23.682 18.841 10.598;
+              11.501 23.401 19.591 11.02;
+              11.16 22.999 20.68 11.633;
+              10.691 22.453 22.178 12.475;
+              10.067 21.74 24.167 13.594;
+              9.258 20.833 26.749 15.046;
+              8.226 19.699 30.045 16.9;
+              6.923 18.298 34.203 19.239;
+              5.295 16.586 39.396 22.16;
+              3.282 14.509 45.822 25.775;
+              0.814 12.011 53.699 30.206;
+              -2.18 9.032 63.253 35.58;
+              -5.767 5.516 74.699 42.018;
+              -10.003 1.417 88.218 49.622;
+              -14.921 -3.289 103.913 58.451;
+              -20.519 -8.596 121.775 68.499;
+              -26.743 -14.452 141.638 79.672;
+              -33.481 -20.752 163.142 91.768;
+              -40.556 -27.333 185.72 104.467;
+              -47.728 -33.977 208.606 117.341;
+              -54.711 -40.425 230.891 129.876;
+              -61.201 -46.403 251.602 141.526;
+              -66.91 -51.653 269.823 151.775;
+              -71.609 -55.967 284.819 160.211;
+              -75.162 -59.225 296.155 166.587;
+              -77.55 -61.414 303.777 170.875;
+              -78.889 -62.64 308.049 173.278;
+              -79.42 -63.126 309.743 174.231;
+              -79.5 -63.2 310 174.375"/>
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="-12 17 31;-9 17 31;3 17 31;0 17 31" dur="1.78s"
+        keyTimes="0;.4;.76;1" calcMode="spline" keySplines=".35 .1 .65 .95;.4 0 .48 1;.3 .03 .2 1" fill="freeze"/>
+      <g id="unfold">
+        <set attributeName="visibility" to="hidden" begin="1.84s" fill="freeze"/>
+      <use xlink:href="#sheet" fill="url(#folio)" stroke="#5D5681" stroke-width=".7"/>
+      <g clip-path="url(#sheet-clip)">
+        <use xlink:href="#sheet" fill="url(#surface-light)">
+          <animate attributeName="opacity" values=".8;.8;0" keyTimes="0;.62;1" dur="1.78s" fill="freeze"/>
+        </use>
+        <use xlink:href="#corner" fill="#8075C1"/>
+        <!-- The lower ribbon crosses the frame on the same 45 degree seam as the margin. -->
+        <g fill="url(#underfold)">
+          <path id="lower-plane" d="M12 36 25 23H54v7H28l-6 6Z">
+          <animate attributeName="d" begin=".65s" dur=".99s" fill="freeze" calcMode="spline" keySplines=".45 .01 .28 1"
+            from="M12 36 25 23H54v7H28l-6 6Z" to="M12 36 25 23H35v7H28l-6 6Z"/>
+          </path>
         </g>
+        <use xlink:href="#lower-plane" fill="#B3A1FF" opacity="0">
+          <animate attributeName="opacity" begin=".93s" dur=".78s" from="0" to="1" fill="freeze"/>
+        </use>
+        <!-- The upper plane rotates around the diagonal from 12,36 to 19,29.
+             At the middle key it is edge-on. Its cast shadow closes against the seam. -->
+        <path fill="#161124" filter="url(#penumbra)" opacity=".30" d="M35.6 38.1 35.9 30.8 19 29 12 36Z">
+          <animate attributeName="d" values="M35.6 38.1 35.9 30.8 19 29 12 36Z;M31 39.3 31.2 31 19 29 12 36Z;M25.4 29.6 27.9 23.6 19 29 12 36Z;M12 12 19 12 19 29 12 36Z"
+            keyTimes="0;.31;.68;1" dur="1.28s" calcMode="spline" keySplines=".3 .02 .63 .98;.42 .01 .69 .98;.30 .04 .21 1" fill="freeze"/>
+          <animate attributeName="opacity" values=".30;.42;0" keyTimes="0;.56;1" dur="1.32s" fill="freeze"/>
+        </path>
+        <g id="turn" fill="#E1DBFF">
+          <path id="turning-plane" d="M35.7 35.7 35.8 28.8 19 29 12 36Z">
+            <animate id="hinge" attributeName="d" dur="1.26s" fill="freeze"
+              values="M35.7 35.7 35.8 28.8 19 29 12 36Z;M32.8 32.8 33.7 26.7 19 29 12 36Z;M23.9 23.9 27.43 20.43 19 29 12 36Z;M15.8 15.8 21.69 14.69 19 29 12 36Z;M12 12 19 12 19 29 12 36Z"
+              keyTimes="0;.27;.49;.71;1" calcMode="spline" keySplines=".33 0 .7 .67;.34 .23 .72 .72;.33 .32 .67 .87;.26 .29 .22 1"/>
+          </path>
+          <use xlink:href="#turning-plane" fill="url(#silk)" style="fill:url(#silk)" opacity=".84">
+            <animate attributeName="opacity" dur="1.33s" values=".9;.94;.55;0" keyTimes="0;.46;.72;1" fill="freeze"/>
+          </use>
+          <!-- A narrow cut edge catches light near the apex before it goes flush. -->
+          <path d="M35.7 35.7 35.8 28.8" fill="none" stroke="#F7EBFF" stroke-width=".12" opacity=".77">
+            <animate attributeName="d" dur="1.26s" fill="freeze"
+              values="M35.7 35.7 35.8 28.8;M32.8 32.8 33.7 26.7;M23.9 23.9 27.43 20.43;M15.8 15.8 21.69 14.69;M12 12 19 12"
+              keyTimes="0;.27;.49;.71;1" calcMode="spline" keySplines=".33 0 .7 .67;.34 .23 .72 .72;.33 .32 .67 .87;.26 .29 .22 1"/>
+            <animate attributeName="opacity" dur="1.27s" values=".81;.98;0" keyTimes="0;.52;1" fill="freeze"/>
+          </path>
+        </g>
+        <use xlink:href="#crease" fill="#8577C8"/>
+        <use xlink:href="#crease" fill="url(#crease-light)" opacity=".84">
+          <animate attributeName="opacity" dur="1.36s" values=".84;.47;0" keyTimes="0;.55;1" fill="freeze"/>
+        </use>
       </g>
+      </g>
+      <use xlink:href="#master" visibility="hidden">
+        <set attributeName="visibility" to="visible" begin="1.84s" fill="freeze"/>
+      </use>
     </g>
-
-    <g transform="translate(837 0)" clip-path="url(#name-window)">
-      <g opacity="0">
-        <animate attributeName="opacity" from="0" to="1" begin="2.48s" dur=".26s" fill="freeze"/>
-        <animateTransform attributeName="transform" type="translate" from="0 7" to="0 0"
-                          begin="2.42s" dur=".73s" calcMode="spline" keySplines=".24 .75 .20 1" fill="freeze"/>
+    <g clip-path="url(#letter-mask)">
+      <g><animateTransform attributeName="transform" type="translate" begin="1.48s" dur=".86s" from="-4 0" to="0 0" calcMode="spline" keySplines=".35 .01 .20 1" fill="freeze"/>
         <use xlink:href="#name"/>
       </g>
     </g>
-
-    <!-- Keep the left edge of the expanding card attached to its leader.
-         The last four Bézier paths match the corresponding closed mark contours. -->
-    <g transform="translate(960 540)">
-      <animateTransform attributeName="transform" type="translate" from="960 540" to="737 540"
-                        begin="2.00s" dur=".87s" calcMode="spline" keySplines=".42 0 .16 1" fill="freeze"/>
-      <g transform="scale(4.2) translate(-24 -24)">
-        <g opacity="0">
-          <animate attributeName="opacity" from="0" to="1" begin=".24s" dur=".18s" fill="freeze"/>
-          <path fill="url(#folio)" stroke="#5D5681" stroke-width=".7"
-                d="M11 3 L30 3 Q31.2 3 32.1 3.9 L41.1 12.9 Q42 13.8 42 15 L42 38 A6 6 0 0 1 36 44 L11 44 A6 6 0 0 1 5 38 L5 9 A6 6 0 0 1 11 3 Z">
-            <animate attributeName="d" begin=".24s" dur="1.97s" fill="freeze" calcMode="spline"
-                     keyTimes="0;.26;.52;1" keySplines=".2 .75 .19 1;0 0 1 1;.50 0 .20 1"
-                     values="M-18 26 L-15 26 Q-14.6 26 -14 26.5 L-13 27.5 Q-12.6 28 -12.6 28.4 L-12.6 30 A1 1 0 0 1 -13.6 31 L-18 31 A1 1 0 0 1 -19 30 L-19 27 A1 1 0 0 1 -18 26 Z;
-                             M-15 5 L62 5 Q63.2 5 64.1 5.9 L72.1 13.9 Q73 14.8 73 16 L73 39 A4 4 0 0 1 69 43 L-15 43 A4 4 0 0 1 -19 39 L-19 9 A4 4 0 0 1 -15 5 Z;
-                             M-15 5 L62 5 Q63.2 5 64.1 5.9 L72.1 13.9 Q73 14.8 73 16 L73 39 A4 4 0 0 1 69 43 L-15 43 A4 4 0 0 1 -19 39 L-19 9 A4 4 0 0 1 -15 5 Z;
-                             M11 3 L30 3 Q31.2 3 32.1 3.9 L41.1 12.9 Q42 13.8 42 15 L42 38 A6 6 0 0 1 36 44 L11 44 A6 6 0 0 1 5 38 L5 9 A6 6 0 0 1 11 3 Z"/>
-          </path>
-          <path fill="#8075C1" d="M30 3 Q31.2 3 32.1 3.9 L41.1 12.9 Q42 13.8 42 15 L35 15 A5 5 0 0 1 30 10 Z">
-            <animate attributeName="d" begin=".24s" dur="1.97s" fill="freeze" calcMode="spline"
-                     keyTimes="0;.26;.52;1" keySplines=".2 .75 .19 1;0 0 1 1;.50 0 .20 1"
-                     values="M-15 26 Q-14.6 26 -14 26.5 L-13 27.5 Q-12.6 28 -12.6 28.4 L-14 28.4 A1 1 0 0 1 -15 27.4 Z;
-                             M62 5 Q63.2 5 64.1 5.9 L72.1 13.9 Q73 14.8 73 16 L66 16 A4 4 0 0 1 62 12 Z;
-                             M62 5 Q63.2 5 64.1 5.9 L72.1 13.9 Q73 14.8 73 16 L66 16 A4 4 0 0 1 62 12 Z;
-                             M30 3 Q31.2 3 32.1 3.9 L41.1 12.9 Q42 13.8 42 15 L35 15 A5 5 0 0 1 30 10 Z"/>
-          </path>
-        </g>
-        <!-- The heading draws from the margin. The two reading lines tuck into the folded lane. -->
-        <path fill="#E1DBFF" d="M-11 17 L-11 14 L-11 14 L-11 17 Z">
-          <animate attributeName="d" begin=".51s" dur="1.58s" fill="freeze" calcMode="spline"
-                   keyTimes="0;.17;.46;1" keySplines=".22 .72 .2 1;0 0 1 1;.50 0 .18 1"
-                   values="M-11 17 L-11 14 L-11 14 L-11 17 Z; M-11 17 L-11 14 L18 14 L18 17 Z;
-                           M-11 17 L-11 14 L18 14 L18 17 Z;M12 12 L19 12 L19 29 L12 36 Z"/>
-        </path>
-        <path fill="#B3A1FF" d="M-11 24 L-11 24 L-11 24 L-11 25.4 L-11 25.4 L-11 25.4 Z">
-          <animate attributeName="d" begin=".59s" dur="1.61s" fill="freeze" calcMode="spline"
-                   keyTimes="0;.23;.47;1" keySplines=".22 .72 .2 1;0 0 1 1;.50 0 .18 1"
-                   values="M-11 24 L-11 24 L-11 24 L-11 25.4 L-11 25.4 L-11 25.4 Z;
-                           M-11 24 L29 24 L57 24 L57 25.4 L28 25.4 L-11 25.4 Z;
-                           M-11 24 L29 24 L57 24 L57 25.4 L28 25.4 L-11 25.4 Z;
-                           M12 36 L25 23 L35 23 L35 30 L28 30 L22 36 Z"/>
-        </path>
-        <path fill="#8577C8" d="M-11 30 L-11 30 L-11 31.4 L-11 31.4 Z">
-          <animate attributeName="d" begin=".66s" dur="1.53s" fill="freeze" calcMode="spline"
-                   keyTimes="0;.19;.45;1" keySplines=".22 .72 .2 1;0 0 1 1;.50 0 .18 1"
-                   values="M-11 30 L-11 30 L-11 31.4 L-11 31.4 Z; M-11 30 L35 30 L35 31.4 L-11 31.4 Z;
-                           M-11 30 L35 30 L35 31.4 L-11 31.4 Z; M12 36 L19 29 L19 36 L12 36 Z"/>
-        </path>
-      </g>
-    </g>
-  </g>
-  <g id="still">
-    <use xlink:href="#mark" transform="translate(737 540) scale(4.2) translate(-24 -24)"/>
-    <use xlink:href="#name" transform="translate(837 0)"/>
-  </g>
+  </svg>
+  <svg id="still" width="1920" height="1080" viewBox="-79.5 -63.2 310 174.375">
+    <use xlink:href="#master"/><use xlink:href="#name"/>
+  </svg>
 </svg>

@@ -67,6 +67,11 @@ The Windows build uses Microsoft's .NET SDK targeting pack to call the PDF rende
 
 ## Fonts
 
+The browser workspace uses Mozilla [PDF.js](https://github.com/mozilla/pdf.js) under Apache-2.0.
+Its local distribution includes the PDF.js license and the supplied notices for character maps,
+standard fonts, ICC profiles and image decoders under `editor/pdf-lib/`. No PDF scripting
+engine or third-party hosted scripts are loaded.
+
 The application uses installed Windows Segoe UI fonts. PDFsharp embeds the used
 glyphs in generated PDFs. Windows font files are not bundled with Inklane.
 

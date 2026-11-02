@@ -730,3 +730,370 @@ summary {
 #picture-height {
   color: var(--muted);
 }
+
+/* A document occupies the window. Its library sits at a comfortable reading width. */
+:root {
+  --wash: #f2f0f5;
+  --rail: #fbfafc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wash: #2b2834;
+    --rail: #24222c;
+  }
+}
+body {
+  background: var(--rail);
+}
+body:has(#welcome:not([hidden])) main {
+  overflow: auto;
+}
+header {
+  min-height: 54px;
+  padding-block: 6px;
+}
+#welcome {
+  width: min(800px, 100%);
+  max-width: none;
+  margin: auto;
+  padding: clamp(25px, 6vw, 76px) clamp(18px, 7vw, 64px);
+  text-align: left;
+}
+.welcome-lead {
+  margin-bottom: 28px;
+}
+.library-mark {
+  display: inline-flex;
+  color: var(--accent);
+  background: var(--pressed);
+  padding: 11px;
+  border-radius: 15px;
+}
+.library-mark svg {
+  width: 29px;
+  height: 29px;
+  stroke-width: 2;
+}
+#welcome h1 {
+  font-weight: 625;
+  letter-spacing: -0.055em;
+  margin: 20px 0 9px;
+  font-size: clamp(35px, 5vw, 53px);
+}
+#welcome p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+  max-width: 41ch;
+  font-size: 16px;
+}
+.launch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+#welcome .launch {
+  display: grid;
+  justify-items: start;
+  justify-content: stretch;
+  align-content: start;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 0;
+  gap: 4px;
+}
+#welcome .launch:hover {
+  background: var(--pressed);
+  border-color: var(--accent);
+}
+.launch svg {
+  color: var(--accent);
+  width: 23px;
+  height: 23px;
+  margin-bottom: 14px;
+}
+.launch strong {
+  font-size: 17px;
+  font-weight: 620;
+}
+.launch small {
+  font-size: 13px;
+  font-weight: 400;
+}
+.sample-link {
+  color: var(--accent);
+  padding: 6px 0;
+  border-radius: 3px;
+  margin-top: 18px;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#recent {
+  margin-top: 26px;
+}
+#recent h2 {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+#draft-list > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+}
+#draft-list > div > button:first-child {
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 0;
+  gap: 2px;
+}
+#draft-list strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#draft-list small {
+  font-size: 12px;
+}
+#pages {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+#page-count {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding-inline: 4px;
+  white-space: nowrap;
+}
+#pages .icon {
+  width: 29px;
+}
+#page-choices {
+  display: grid;
+  gap: 4px;
+  max-height: 60dvh;
+  overflow: auto;
+  margin-top: 14px;
+  grid-template-columns: repeat(2, minmax(90px, 1fr));
+}
+#page-choices [aria-current="page"] {
+  background: var(--pressed);
+  color: var(--accent);
+}
+#new-document {
+  width: min(380px, calc(100vw - 28px));
+}
+#paper-form {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+#paper-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+}
+#paper-form input,
+#paper-form select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 11px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 15px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+#paper-form h2 {
+  margin: 0 0 7px;
+}
+.menu {
+  max-height: calc(100dvh - 62px);
+  overflow: auto;
+}
+#keep-sample {
+  display: none;
+}
+#viewport {
+  background: var(--desk);
+}
+#sheet {
+  box-shadow:
+    0 1px 3px #23172e22,
+    0 8px 40px #23172e0b;
+}
+#sheet[data-tool="select"] :is(.marker, .placed, .picture) {
+  cursor: grab;
+}
+#sheet[data-tool="select"] :is(.marker, .placed, .picture):active {
+  cursor: grabbing;
+}
+#sheet[data-tool="text"] {
+  cursor: text;
+}
+.tools {
+  background: var(--rail);
+}
+#card {
+  border-color: #cda457;
+  background: #fff9e9;
+  box-shadow: 0 8px 26px #3429191e;
+  padding: 11px;
+  gap: 6px;
+}
+#card .card-head {
+  gap: 5px;
+}
+#badge {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: #f7deb2;
+  flex: none;
+}
+#card textarea {
+  height: 78px;
+}
+.print-frame {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  border: 0;
+  pointer-events: none;
+}
+.embedded header {
+  display: none;
+}
+.embedded #keep-sample {
+  display: inline-flex;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.embedded #mat {
+  padding: 0;
+}
+.embedded #sheet {
+  box-shadow: none;
+}
+.embedded #viewport {
+  background: #efece5;
+}
+.embedded #hint {
+  font-size: 12px;
+}
+.embedded footer {
+  min-height: 38px;
+}
+.embedded .tools {
+  width: 61px;
+  padding-inline: 3px;
+}
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+@media (max-width: 660px) {
+  #welcome {
+    margin: auto;
+    padding: 24px 18px;
+  }
+  .library-mark {
+    padding: 8px;
+    border-radius: 10px;
+  }
+  .welcome-lead {
+    margin-bottom: 20px;
+  }
+  #welcome .launch {
+    padding: 14px 11px;
+    gap: 5px;
+  }
+  .launch strong {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  .launch small {
+    font-size: 12px;
+  }
+  .launch svg {
+    margin-bottom: 8px;
+  }
+  .embedded .tools {
+    width: 100%;
+  }
+  .embedded footer {
+    min-height: 37px;
+  }
+  .embedded .actions button:not(.icon) {
+    max-width: 86px;
+  }
+  #pages .icon {
+    width: 25px;
+  }
+  .file-actions {
+    gap: 2px;
+  }
+}
+@media (max-height: 540px) and (min-width: 661px) {
+  #welcome {
+    padding-block: 16px;
+  }
+  #welcome .welcome-lead {
+    margin-bottom: 12px;
+  }
+  #welcome .library-mark {
+    display: none;
+  }
+  #welcome h1 {
+    margin-top: 0;
+    font-size: 34px;
+  }
+}
+#page-manage {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+}
+#page-manage button {
+  font-size: 13px;
+  text-align: left;
+}
+#rename-form {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+#rename-form label {
+  font-size: 13px;
+  color: var(--muted);
+}
+#rename-title {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--fg);
+}
