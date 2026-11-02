@@ -68,7 +68,8 @@ let zoom = 1,
   serial = 0,
   state = "ready";
 let pendingSidecar = null,
-  lastTap = null;
+  lastTap = null,
+  handledSurfacePointer = null;
 const strokeShapes = new WeakMap();
 let undoStack = [],
   redoStack = [],
@@ -682,10 +683,15 @@ function render() {
       el.setAttribute("aria-expanded", String(item.id === openNote));
       el.title = item.title || t("nativeNote") + " " + n;
       el.onclick = (e) => {
-        if (!e.detail && !busy) {
-          setNoteOpen(openNote === item.id ? null : item.id);
-          render();
-        }
+        if (busy) return;
+        // The sheet already handled this physical tap or drag on pointerup.
+        // A WebView can synthesize a second, positioned click with detail 0.
+        const previous = handledSurfacePointer;
+        if (previous && (previous.pan || previous.id === item.id) && performance.now() - previous.time < 750 &&
+            (e.detail > 0 || e.pointerType || Math.hypot(e.clientX - previous.x, e.clientY - previous.y) < 3))
+          return;
+        setNoteOpen(openNote === item.id ? null : item.id);
+        render();
       };
     } else {
       el.style.fontSize = item.fontSize * zoom + "px";
@@ -819,6 +825,7 @@ function cancelGesture() {
 }
 function startGesture(e) {
   if (busy || !data || gesture || (e.button !== 0 && e.button !== 1) || e.target.matches("textarea")) return;
+  handledSurfacePointer = null;
   const p = point(e),
     id = e.target.closest("[data-id]")?.dataset.id;
   flush();
@@ -936,12 +943,15 @@ function endGesture(e) {
   moveGesture(e);
   if (!gesture) return;
   cancelGesture();
+  const sel = g.mode === "object" ? find(g.id) : null;
+  if (g.mode === "pan" || sel?.obj.isNote) {
+    handledSurfacePointer = { id:g.id, pan:g.mode === "pan", x:e.clientX, y:e.clientY, time:performance.now() };
+  }
   if (g.mode === "pen") {
     change("ink", page().ink.length, null, g.stroke);
     render();
   }
   if (g.mode === "object") {
-    const sel = find(g.id);
     if (!sel) return;
     if (g.moved) {
       const next = moved(sel.obj, (e.clientX - g.startX) / zoom, (e.clientY - g.startY) / zoom, page());
@@ -1088,6 +1098,7 @@ document.addEventListener("click", (e) => {
   if (!$("#more").contains(e.target)) closeMenu();
 });
 document.addEventListener("keydown", (e) => {
+  handledSurfacePointer = null;
   if (document.querySelector("dialog[open]") || busy || e.isComposing || (gesture && e.key !== "Escape"))
     return;
   const key = e.key.toLowerCase(),

@@ -449,6 +449,20 @@ try {
       } else await marker.click();
       const card = screen.locator("#card");
       await card.waitFor();
+      if (width === 390 && language === "en") {
+        // Some WebViews follow pointerup with a positioned click whose detail
+        // is zero. That is still the same tap, not a second keyboard command.
+        await marker.evaluate((el, point) => el.dispatchEvent(new MouseEvent("click", {
+          bubbles:true, detail:0, clientX:point.x, clientY:point.y
+        })), {x:Math.round(before.x + before.width/2), y:Math.round(before.y + before.height/2)});
+        assert.ok(await card.isVisible(),"One physical tap followed by a compatibility click must expand a remark once.");
+        await marker.focus();
+        await screen.keyboard.press("Enter");
+        assert.ok(await card.isHidden(),"An independent keyboard activation must still collapse the remark.");
+        await marker.focus();
+        await screen.keyboard.press("Enter");
+        assert.ok(await card.isVisible(),"An independent keyboard activation must reopen the remark.");
+      }
       const geometry = () => screen.evaluate(() => {
         const box = id => document.querySelector(id).getBoundingClientRect().toJSON();
         return {sheet:box("#sheet"),card:box("#card"),desk:box("#viewport")};
@@ -463,6 +477,26 @@ try {
       assert.equal(await screen.getByRole("button",{name:language === "de" ? "Duplizieren" : "Duplicate",exact:true}).count(),1);
       await screen.screenshot({path:resolve(output,"phone-remark-" + language + "-" + width + ".png")});
       await screen.locator("#close-card").click();
+      if (width === 390 && language === "en") {
+        await screen.locator('button[data-tool="pan"]').click();
+        const box = await marker.boundingBox(), x = box.x + box.width/2, y = box.y + box.height/2;
+        // Pan from the source onto a marker. A compatibility click at the
+        // endpoint must leave the note alone, with or without a click count.
+        await screen.mouse.move(x - box.width, y);
+        await screen.mouse.down();
+        await screen.mouse.move(x, y, {steps:4});
+        await screen.mouse.up();
+        for (const detail of [1,0]) {
+          await marker.evaluate((el,p) => el.dispatchEvent(new MouseEvent("click", {
+            bubbles:true, detail:p.detail, clientX:p.x, clientY:p.y
+          })), {detail,x:Math.round(x),y:Math.round(y)});
+          assert.ok(await card.isHidden(),"A pan ending on a remark must not activate it.");
+        }
+        await marker.focus();
+        await screen.keyboard.press("Enter");
+        assert.ok(await card.isVisible(),"Keyboard can still open a remark while Pan is selected.");
+        await screen.locator("#close-card").click();
+      }
       await screen.locator("#more summary").click();
       await screen.locator("#new-sheet").click();
       await screen.locator("#paper-form button.primary").click();
