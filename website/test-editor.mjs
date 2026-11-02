@@ -424,6 +424,95 @@ try {
     await page.screenshot({ path: resolve(output, "native-" + basename(source) + ".png") });
   }
   await (await import("./test-documents.mjs")).verifyDocuments(browser,origin + base,output);
+  for (const [language,width,height] of [["en",390,844],["de",390,844],["en",320,740],["de",320,740]]) {
+    const phone = await browser.newContext({ viewport: { width, height }, isMobile:true, hasTouch:true, locale:language });
+    try {
+      const screen = await phone.newPage();
+      await screen.goto(origin + base + "editor/?sample=review&lang=" + language);
+      const marker = screen.locator(".marker").first();
+      await marker.waitFor();
+      const before = await marker.boundingBox();
+      if (width === 390 && language === "en") {
+        // A touch target can lose its implicit capture to the sheet. That
+        // notification bubbles and must not cancel the sheet's active gesture.
+        await screen.locator("#sheet").evaluate(el => el.addEventListener("pointerdown",
+          e => { el.dataset.testPointer = String(e.pointerId); }, {once:true, capture:true}));
+        await screen.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+        await screen.mouse.down();
+        await screen.locator("#sheet").evaluate(el => {
+          const pointerId = Number(el.dataset.testPointer);
+          if (!el.hasPointerCapture(pointerId)) throw new Error("The sheet must own the active pointer.");
+          el.querySelector(".marker").dispatchEvent(new PointerEvent("lostpointercapture", {pointerId, bubbles:true}));
+          if (!el.hasPointerCapture(pointerId)) throw new Error("A child capture notification cancelled the sheet gesture.");
+        });
+        await screen.mouse.up();
+      } else await marker.click();
+      const card = screen.locator("#card");
+      await card.waitFor();
+      if (width === 390 && language === "en") {
+        // Some WebViews follow pointerup with a positioned click whose detail
+        // is zero. That is still the same tap, not a second keyboard command.
+        await marker.evaluate((el, point) => el.dispatchEvent(new MouseEvent("click", {
+          bubbles:true, detail:0, clientX:point.x, clientY:point.y
+        })), {x:Math.round(before.x + before.width/2), y:Math.round(before.y + before.height/2)});
+        assert.ok(await card.isVisible(),"One physical tap followed by a compatibility click must expand a remark once.");
+        await marker.focus();
+        await screen.keyboard.press("Enter");
+        assert.ok(await card.isHidden(),"An independent keyboard activation must still collapse the remark.");
+        await marker.focus();
+        await screen.keyboard.press("Enter");
+        assert.ok(await card.isVisible(),"An independent keyboard activation must reopen the remark.");
+      }
+      const geometry = () => screen.evaluate(() => {
+        const box = id => document.querySelector(id).getBoundingClientRect().toJSON();
+        return {sheet:box("#sheet"),card:box("#card"),desk:box("#viewport")};
+      });
+      const offPage = await geometry();
+      const gap = Math.max(offPage.sheet.top - offPage.card.bottom, offPage.card.top - offPage.sheet.bottom);
+      assert.ok(gap >= 3 && gap <= 10, "The remark should sit just outside the landscape document.");
+      assert.ok(offPage.card.top >= offPage.desk.top && offPage.card.bottom <= offPage.desk.bottom);
+      assert.deepEqual(await marker.boundingBox(), before, "Opening the remark must leave the source in place.");
+      const footerFits = () => screen.locator("footer").evaluate(el => el.scrollWidth <= el.clientWidth);
+      assert.ok(await footerFits(), "Object actions and zoom must fit the phone footer.");
+      assert.equal(await screen.getByRole("button",{name:language === "de" ? "Duplizieren" : "Duplicate",exact:true}).count(),1);
+      await screen.screenshot({path:resolve(output,"phone-remark-" + language + "-" + width + ".png")});
+      await screen.locator("#close-card").click();
+      if (width === 390 && language === "en") {
+        await screen.locator('button[data-tool="pan"]').click();
+        const box = await marker.boundingBox(), x = box.x + box.width/2, y = box.y + box.height/2;
+        // Pan from the source onto a marker. A compatibility click at the
+        // endpoint must leave the note alone, with or without a click count.
+        await screen.mouse.move(x - box.width, y);
+        await screen.mouse.down();
+        await screen.mouse.move(x, y, {steps:4});
+        await screen.mouse.up();
+        for (const detail of [1,0]) {
+          await marker.evaluate((el,p) => el.dispatchEvent(new MouseEvent("click", {
+            bubbles:true, detail:p.detail, clientX:p.x, clientY:p.y
+          })), {detail,x:Math.round(x),y:Math.round(y)});
+          assert.ok(await card.isHidden(),"A pan ending on a remark must not activate it.");
+        }
+        await marker.focus();
+        await screen.keyboard.press("Enter");
+        assert.ok(await card.isVisible(),"Keyboard can still open a remark while Pan is selected.");
+        await screen.locator("#close-card").click();
+      }
+      await screen.locator("#more summary").click();
+      await screen.locator("#new-sheet").click();
+      await screen.locator("#paper-form button.primary").click();
+      await screen.locator("button[data-tool=note]").click();
+      const sheet = await screen.locator("#sheet").boundingBox();
+      await screen.mouse.click(sheet.x+sheet.width*.45,sheet.y+sheet.height*.4);
+      await card.waitFor();
+      const onPage = await geometry();
+      assert.deepEqual(await screen.locator("#sheet").boundingBox(),sheet,"Choosing an object on printable paper must leave the page in place.");
+      assert.ok(await footerFits(), "Page navigation, object actions and zoom must fit the phone footer.");
+      assert.ok(Math.min(onPage.sheet.bottom,onPage.card.bottom) > Math.max(onPage.sheet.top,onPage.card.top));
+      assert.equal(await card.getAttribute("data-desk"), null, "A tall sheet should keep the remark at its anchor.");
+    } finally {
+      await phone.close();
+    }
+  }
   console.log(
     "Browser editor passed image/sidecar round trip, real file write and conflict protection, editing history, wrong-file refusal, mobile layout and accessibility checks."
   );

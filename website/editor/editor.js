@@ -68,7 +68,8 @@ let zoom = 1,
   serial = 0,
   state = "ready";
 let pendingSidecar = null,
-  lastTap = null;
+  lastTap = null,
+  handledSurfacePointer = null;
 const strokeShapes = new WeakMap();
 let undoStack = [],
   redoStack = [],
@@ -682,10 +683,15 @@ function render() {
       el.setAttribute("aria-expanded", String(item.id === openNote));
       el.title = item.title || t("nativeNote") + " " + n;
       el.onclick = (e) => {
-        if (!e.detail && !busy) {
-          setNoteOpen(openNote === item.id ? null : item.id);
-          render();
-        }
+        if (busy) return;
+        // The sheet already handled this physical tap or drag on pointerup.
+        // A WebView can synthesize a second, positioned click with detail 0.
+        const previous = handledSurfacePointer;
+        if (previous && (previous.pan || previous.id === item.id) && performance.now() - previous.time < 750 &&
+            (e.detail > 0 || e.pointerType || Math.hypot(e.clientX - previous.x, e.clientY - previous.y) < 3))
+          return;
+        setNoteOpen(openNote === item.id ? null : item.id);
+        render();
       };
     } else {
       el.style.fontSize = item.fontSize * zoom + "px";
@@ -750,6 +756,8 @@ function positionCard() {
     y = rect.top + note.y * zoom;
   const inView = x + 27 >= view.left && x <= view.right && y + 27 >= view.top && y <= view.bottom;
   card.style.visibility = inView ? "visible" : "hidden";
+  delete card.dataset.desk;
+  if (!inView) return;
   let left = x + 32,
     desiredTop = y;
   if (left + card.offsetWidth > view.right - 5) left = x - card.offsetWidth - 5;
@@ -757,7 +765,25 @@ function positionCard() {
     left = x + 13 - card.offsetWidth / 2;
     desiredTop = y + 31 + card.offsetHeight <= view.bottom ? y + 31 : y - card.offsetHeight - 5;
   }
+  const centerX = x + 13;
+  if (view.width <= 600 && view.height > view.width && centerX > view.left + 8 && centerX < view.right - 8) {
+    // On a phone a landscape page often has room for the whole note just beyond an edge.
+    // Prefer the nearer edge only while a short leader can still visibly join card and marker.
+    const choices = [
+      { side: "above", top: rect.top - 7 - card.offsetHeight, distance: y - rect.top },
+      { side: "below", top: rect.bottom + 7, distance: rect.bottom - (y + 27) }
+    ].filter(choice => choice.top >= view.top + 5 &&
+      choice.top + card.offsetHeight <= view.bottom - 5 && choice.distance <= Math.min(140, view.height / 4));
+    const best = choices.sort((a,b) => a.distance - b.distance)[0];
+    if (best) {
+      left = centerX - card.offsetWidth / 2;
+      desiredTop = best.top;
+      card.dataset.desk = best.side;
+      card.style.setProperty("--leader-length", Math.max(0, best.distance + 7) + "px");
+    }
+  }
   left = Math.max(view.left + 4, Math.min(left, view.right - card.offsetWidth - 5));
+  if (card.dataset.desk) card.style.setProperty("--leader-x", centerX - left + "px");
   const top = Math.max(view.top + 4, Math.min(desiredTop, view.bottom - card.offsetHeight - 6));
   card.style.left = left - outer.left + "px";
   card.style.top = top - outer.top + "px";
@@ -799,6 +825,7 @@ function cancelGesture() {
 }
 function startGesture(e) {
   if (busy || !data || gesture || (e.button !== 0 && e.button !== 1) || e.target.matches("textarea")) return;
+  handledSurfacePointer = null;
   const p = point(e),
     id = e.target.closest("[data-id]")?.dataset.id;
   flush();
@@ -843,6 +870,9 @@ function startGesture(e) {
     return;
   }
   if (mode === "object") {
+    // Claim the pointer on the stable sheet before rendering replaces the
+    // original marker, which touch screens can implicitly capture on contact.
+    if (id) sheet.setPointerCapture(e.pointerId);
     if (id !== openNote && openNote) setNoteOpen(null);
     if (id && tool === "pen") tool = "select";
     selected = id ?? null;
@@ -871,7 +901,7 @@ function startGesture(e) {
     marks.append(g.preview);
   }
   gesture = g;
-  sheet.setPointerCapture(e.pointerId);
+  if (!sheet.hasPointerCapture(e.pointerId)) sheet.setPointerCapture(e.pointerId);
 }
 function moveGesture(e) {
   const g = gesture;
@@ -913,12 +943,15 @@ function endGesture(e) {
   moveGesture(e);
   if (!gesture) return;
   cancelGesture();
+  const sel = g.mode === "object" ? find(g.id) : null;
+  if (g.mode === "pan" || sel?.obj.isNote) {
+    handledSurfacePointer = { id:g.id, pan:g.mode === "pan", x:e.clientX, y:e.clientY, time:performance.now() };
+  }
   if (g.mode === "pen") {
     change("ink", page().ink.length, null, g.stroke);
     render();
   }
   if (g.mode === "object") {
-    const sel = find(g.id);
     if (!sel) return;
     if (g.moved) {
       const next = moved(sel.obj, (e.clientX - g.startX) / zoom, (e.clientY - g.startY) / zoom, page());
@@ -940,7 +973,8 @@ sheet.onpointermove = moveGesture;
 sheet.onpointerup = endGesture;
 sheet.onpointercancel = cancelGesture;
 sheet.onlostpointercapture = (e) => {
-  if (e.pointerId === gesture?.pointer) cancelGesture();
+  if (e.target === sheet && e.pointerId === gesture?.pointer && !sheet.hasPointerCapture(e.pointerId))
+    cancelGesture();
 };
 sheet.ondblclick = (e) => {
   if (e.target.matches(".placed") && !busy) {
@@ -1064,6 +1098,7 @@ document.addEventListener("click", (e) => {
   if (!$("#more").contains(e.target)) closeMenu();
 });
 document.addEventListener("keydown", (e) => {
+  handledSurfacePointer = null;
   if (document.querySelector("dialog[open]") || busy || e.isComposing || (gesture && e.key !== "Escape"))
     return;
   const key = e.key.toLowerCase(),

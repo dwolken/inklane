@@ -1,0 +1,9 @@
+<resources>
+    <style name="InklaneTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">#211F2B</item>
+        <item name="android:colorAccent">#C5B5FF</item>
+    </style>
+</resources>

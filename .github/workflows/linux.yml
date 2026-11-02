@@ -1,0 +1,38 @@
+name: Linux desktop workspace
+on:
+  pull_request:
+    paths: ['platforms/linux/**', 'platforms/apple/Sources/NativeSave.js', 'website/**', 'tests/fixtures/browser-notebook.inklane', 'src/Inklane/Assets/**', '.github/workflows/linux.yml']
+  push:
+    branches: [main]
+    paths: ['platforms/linux/**', 'platforms/apple/Sources/NativeSave.js', 'website/**', 'tests/fixtures/browser-notebook.inklane', 'src/Inklane/Assets/**', '.github/workflows/linux.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaged-workspace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Build offline Debian package
+        run: |
+          npm ci --prefix website --ignore-scripts --no-audit
+          python3 platforms/linux/package.py
+      - name: Install and exercise the GTK application
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ./.scratch/linux/inklane.deb xvfb xauth xdotool dbus-x11 desktop-file-utils
+          desktop-file-validate /usr/share/applications/io.github.dwolken.Inklane.desktop
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/inklane-test/config"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/inklane-test/cache"
+          export XDG_DATA_HOME="$RUNNER_TEMP/inklane-test/data"
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME"
+          dbus-run-session -- xvfb-run -a /usr/bin/python3 platforms/linux/smoke.py tests/fixtures/browser-notebook.inklane
