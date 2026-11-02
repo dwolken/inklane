@@ -1,12 +1,14 @@
 # Inklane
 
+[Product website](https://dwolken.github.io/inklane/) · [Windows downloads](https://github.com/dwolken/inklane/releases)
+
 Inklane is a local Windows 11 workspace for marking up images and writing in printable PDF notebooks. Draw directly on a detail, add editable text, or pin a longer observation to a numbered point. The notes panel lets you search those observations and jump back to the drawing, even on a different page.
 
 ![An Inklane notebook showing a courtyard section and its cross-page notes index](docs/screenshots/notebook.png)
 
 ## Install
 
-Download **[Inklane Setup for Windows x64](https://github.com/dwolken/inklane/releases/download/v1.0.0-rc.1/Inklane-Setup-1.0.0-rc.1-x64.exe)** from the [private release candidate](https://github.com/dwolken/inklane/releases/tag/v1.0.0-rc.1). Run Setup and choose **Install**. Open **Inklane** from Start. The installer includes the .NET desktop runtime and installs for the current Windows user. Uninstall through **Settings → Apps → Installed apps**.
+Download **[Inklane Setup for Windows x64](https://github.com/dwolken/inklane/releases/download/v1.0.0-rc.1/Inklane-Setup-1.0.0-rc.1-x64.exe)** from the [release candidate](https://github.com/dwolken/inklane/releases/tag/v1.0.0-rc.1). Run Setup and choose **Install**. Open **Inklane** from Start. The installer includes the .NET desktop runtime and installs for the current Windows user. Uninstall through **Settings → Apps → Installed apps**.
 
 The candidate is unsigned. Windows may display the publisher as unknown. A portable ZIP and SHA-256 checksums are also available on the release page. For portable use, extract the complete folder and launch `Inklane.exe`.
 
@@ -53,4 +55,4 @@ dotnet run --project src/Inklane
 
 Packaging uses locked dependencies and a hash-pinned portable NSIS compiler. It builds the self-contained application, starts it, and writes an installer, ZIP and checksums in `artifacts/`. On a machine where Inklane has no registered installation, `./scripts/package.ps1 -VerifyInstaller` also exercises installation, upgrade, launch and removal. The check guards existing installations and test documents. Windows CI runs the release checks.
 
-The [validation record](docs/validation.md) distinguishes actual desktop inspection, numerical checks and remaining device tests. See the [changelog](CHANGELOG.md), [architecture decisions](docs/architecture.md), and [dependency notices](THIRD-PARTY-NOTICES.md). Inklane is private software.
+The [validation record](docs/validation.md) distinguishes actual desktop inspection, numerical checks and remaining device tests. See the [changelog](CHANGELOG.md), [architecture decisions](docs/architecture.md), and [dependency notices](THIRD-PARTY-NOTICES.md).

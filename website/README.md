@@ -1,0 +1,18 @@
+# Inklane product website
+
+The [English site](https://dwolken.github.io/inklane/) and [German translation](https://dwolken.github.io/inklane/de/) are static HTML. Both have their own canonical URL and remain readable without JavaScript. On the neutral entry page, a German browser gets the German translation. Other languages default to English. The language switch remembers an explicit choice and preserves the current section. A direct German link stays German. Images and icons come directly from the desktop project.
+
+From the repository root, use Python 3.9+, Node.js 22+ and an installed Edge (Windows) or Chrome (Linux).
+
+```sh
+python website/build.py
+npm ci --prefix website --ignore-scripts
+node website/test.mjs
+python -m http.server 8000 --bind 127.0.0.1 --directory .scratch/website
+```
+
+Open [the local project URL](http://127.0.0.1:8000/inklane/). Set `BROWSER_PATH` to check another installed Chromium executable. The test loads the built site under its production base path, checks keyboard navigation, links, screenshot dimensions, translated metadata, JavaScript-disabled access and accessibility at desktop and mobile widths.
+
+The build reads GitHub’s public release API and verifies the installer’s anonymous download URL. It prefers a published stable release with a matching x64 installer. Until one exists, it uses the most recently published matching prerelease. A failed check stops deployment. Versions and download URLs are rendered into both pages at build time.
+
+Enable **GitHub Actions** under **Settings → Pages → Build and deployment → Source**. The Product website workflow checks pull requests, deploys changes on `main`, and refreshes after successful tagged Windows builds. Use its manual run on `main` after editing a release outside that pipeline. Deployment checks the public HTML against the tested build.
