@@ -2,6 +2,13 @@
 
 Inklane 1.0.0-rc.1 was exercised on Windows 11 at 125% display scaling. This record separates desktop observations, repeatable regression checks and device work that remains open.
 
+## Local document review and browser build
+
+- Windows rendered a two-page general PDF, including a cropped, rotated page. Its displayed dimensions and color landmarks agreed with an independent Poppler render. Named notes survived sidecar save, relocation and reopen. Recovery and both pages of the XPS print output were checked. An actual WPF window was inspected at 125% scaling.
+- Two-page files created by Word and PowerPoint were reviewed using their author-exported PDFs and, separately, locally converted using LibreOffice 26.8.2. Page counts, page sizes and extracted text agreed for these samples. A changed Office source with its old PDF was refused. Rendering fidelity for arbitrary Office layouts has not been established.
+- Edge on Windows exercised the separate marketing example and image editor. Browser checks covered file writes, canceled and conflicting saves, download and reopen, EXIF orientation, editing, English and German layouts and accessibility scans. Three historical Windows image fixtures reopened in the browser. Windows reopened a browser-authored image pair after relocation. Both editors produced the same structured feedback for the shared image.
+- Responsive layouts were examined using browser viewport sizes. Physical mobile devices, other browser engines, native macOS and Linux apps, physical pen and printer hardware remain outside these checks.
+
 ## Editing candidate · RC.2
 
 The local Release build passed 17 persistence checks, 27 WPF/clipboard checks and 19 lifecycle checks, with zero compiler warnings or errors.

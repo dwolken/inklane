@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Review ordinary PDF pages with editable ink, text, pictures and anchored notes in a separate sidecar. Word documents and PowerPoint presentations can be reviewed against a fixed PDF copy.
+- Export feedback tied to the exact image or PDF revision, with page positions, full note text and ink samples.
+- Open, annotate, save and reopen local images in the browser. A separate bilingual sample lets visitors try anchored notes on a courtyard plan.
+- Added a standalone Inklane logo sting with editable SVG and HD video.
+
 ## 1.0.0-rc.2 · 2026-11-02
 
 - Copy, cut, paste and duplicate editable groups across pages, documents and Inklane windows. Text editing retains its own Windows shortcuts.
