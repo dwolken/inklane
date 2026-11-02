@@ -23,7 +23,7 @@ jobs:
       matrix:
         include:
           - platform: macOS
-            runner: macos-15
+            runner: macos-26
           - platform: iOS
             runner: macos-26
     runs-on: ${{ matrix.runner }}
@@ -57,10 +57,36 @@ jobs:
           subprocess.run(["xcrun","simctl","bootstatus",device["udid"],"-b"],check=True,timeout=240)
           with open(os.environ["GITHUB_ENV"],"a") as env:
               env.write("APPLE_DEST=platform=iOS Simulator,id=" + device["udid"] + "\n")
+              env.write("SIMULATOR_ID=" + device["udid"] + "\n")
           PY
       - name: Run the bundled application and exercise its document workflow
+        id: exercise
         run: |
           xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme Inklane \
             -destination "${APPLE_DEST:-platform=macOS}" -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
             -resultBundlePath "$RUNNER_TEMP/workspace.xcresult" CODE_SIGN_IDENTITY=- test
+      - name: Collect the bundled field guide capture
+        id: capture
+        if: "!cancelled() && steps.exercise.outcome != 'skipped'"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          file="Inklane-field-guide-review.png"
+          if [[ "$PLATFORM" == iOS ]]; then
+            container=$(xcrun simctl get_app_container "$SIMULATOR_ID" io.github.dwolken.Inklane data)
+            source="$container/Library/Caches/$file"
+          else
+            source="$HOME/Library/Containers/io.github.dwolken.Inklane/Data/Library/Caches/$file"
+            if [[ ! -f "$source" ]]; then source="$HOME/Library/Caches/$file"; fi
+          fi
+          test -s "$source"
+          cp "$source" "$RUNNER_TEMP/Inklane-$PLATFORM-field-guide.png"
+      - name: Retain the example workspace image
+        if: "!cancelled() && steps.capture.outcome == 'success'"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Inklane-${{ matrix.platform }}-field-guide
+          path: ${{ runner.temp }}/Inklane-${{ matrix.platform }}-field-guide.png
+          retention-days: 2
+          if-no-files-found: error

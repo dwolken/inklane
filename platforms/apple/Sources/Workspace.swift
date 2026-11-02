@@ -19,7 +19,10 @@ struct InklaneApp: App {
 }
 
 struct WorkspaceView: View {
-    @StateObject private var host = WorkspaceHost()
+    @StateObject private var host: WorkspaceHost
+    init(host: WorkspaceHost? = nil) {
+        _host = StateObject(wrappedValue: host ?? WorkspaceHost())
+    }
     var body: some View {
         ZStack {
             BrowserView(webView: host.webView)

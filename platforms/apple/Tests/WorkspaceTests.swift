@@ -1,10 +1,14 @@
 import XCTest
 import WebKit
+import CoreGraphics
+import SwiftUI
 @testable import Inklane
 #if os(iOS)
 import UIKit
+private typealias WorkspaceImage = UIImage
 #else
 import AppKit
+private typealias WorkspaceImage = NSImage
 #endif
 
 @MainActor
@@ -25,6 +29,38 @@ final class WorkspaceTests: XCTestCase {
     }
     private func perform(_ host: WorkspaceHost, _ script: String) async throws {
         _ = try await host.webView.evaluateJavaScript(script + "; true")
+    }
+    private func openFile(_ bytes: Data, _ name: String, in host: WorkspaceHost) async throws {
+        let input = """
+        const bytes = Uint8Array.from(atob(payload), x => x.charCodeAt(0));
+        const transfer = new DataTransfer(); transfer.items.add(new File([bytes], filename));
+        const input = document.querySelector('#files'); input.files = transfer.files;
+        input.dispatchEvent(new Event('change',{bubbles:true})); return true;
+        """
+        _ = try await host.webView.callAsyncJavaScript(input,
+            arguments: ["payload": bytes.base64EncodedString(), "filename": name], in: nil, contentWorld: .page)
+    }
+
+    private func captureExample(_ host: WorkspaceHost) async throws {
+        let config = WKSnapshotConfiguration()
+        config.afterScreenUpdates = true
+        let image: WorkspaceImage = try await withCheckedThrowingContinuation { continuation in
+            host.webView.takeSnapshot(with: config) { image, error in
+                if let image { continuation.resume(returning: image) }
+                else { continuation.resume(throwing: error ?? CocoaError(.fileWriteUnknown)) }
+            }
+        }
+        #if os(iOS)
+        let png = try XCTUnwrap(image.pngData())
+        #else
+        let tiff = try XCTUnwrap(image.tiffRepresentation)
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: tiff))
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        #endif
+        XCTAssertGreaterThan(image.size.width, 300)
+        let cache = try XCTUnwrap(FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        try png.write(to: cache.appendingPathComponent("Inklane-field-guide-review.png"), options: .atomic)
     }
 
     func testBundleReusesItsLoopbackOriginAndRejectsOtherPaths() async throws {
@@ -65,18 +101,16 @@ final class WorkspaceTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let oldWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)
-        let controller = UIViewController()
+        let controller = UIHostingController(rootView: WorkspaceView(host: host))
         window.rootViewController = controller
         window.makeKeyAndVisible()
-        host.webView.frame = controller.view.bounds
-        host.webView.autoresizingMask = [.flexibleHeight,.flexibleWidth]
-        controller.view.addSubview(host.webView)
         defer { window.isHidden = true; oldWindow?.makeKeyAndVisible() }
         #else
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1050, height: 730),
                               styleMask: [.titled,.closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        window.contentView = host.webView
+        window.contentViewController = NSHostingController(rootView: WorkspaceView(host: host))
+        window.setContentSize(NSSize(width: 1050,height: 730))
         window.makeKeyAndOrderFront(nil)
         defer { window.close() }
         #endif
@@ -102,6 +136,25 @@ final class WorkspaceTests: XCTestCase {
         """
         _ = try await host.webView.callAsyncJavaScript(restart, arguments: [:], in: nil, contentWorld: .page)
         XCTAssertNil(host.exporter.pendingFile)
+        // Exercise the bundled PDF worker and observe the pixels of two distinct source pages.
+        let pdf = NSMutableData()
+        let consumer = try XCTUnwrap(CGDataConsumer(data: pdf as CFMutableData))
+        var bounds = CGRect(x: 0, y: 0, width: 240, height: 360)
+        let graphics = try XCTUnwrap(CGContext(consumer: consumer, mediaBox: &bounds, nil))
+        for color in [CGColor(red: 1, green: 0, blue: 0, alpha: 1), CGColor(red: 0, green: 0, blue: 1, alpha: 1)] {
+            graphics.beginPDFPage(nil)
+            graphics.setFillColor(color)
+            graphics.fill(bounds)
+            graphics.endPDFPage()
+        }
+        graphics.closePDF()
+        try await openFile(pdf as Data, "Review.pdf", in: host)
+        let pixel = "document.querySelector('#source').getContext('2d').getImageData(2,2,1,1).data"
+        try await wait(host, "document.querySelector('#page-count').textContent.includes('2') && \(pixel)[0] > 220 && \(pixel)[2] < 30")
+        try await perform(host, "document.querySelector('#next-page').click()")
+        try await wait(host, "\(pixel)[2] > 220 && \(pixel)[0] < 30")
+        try await perform(host, "document.querySelector('#home').click()")
+        try await wait(host, "!document.querySelector('#welcome').hidden")
         // Exercise both the new-document dialog and real multipage navigation.
         try await perform(host, "document.querySelector('#new-notebook').click(); document.querySelector('#paper-size').value='A5'; document.querySelector('#paper-form').requestSubmit()")
         try await wait(host, "!document.querySelector('#pages').hidden && !document.querySelector('#save').disabled")
@@ -117,6 +170,7 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "!!document.querySelector('#results button')")
         try await perform(host, "document.querySelector('#results button').click()")
         try await wait(host, "!document.querySelector('#card').hidden")
+        try await captureExample(host)
         try await perform(host, """
             for(const [id,value] of [['#note-title','Recheck scale'],['#note-body','Keep the scale bar at this position.']]) {
               const field=document.querySelector(id); field.focus();field.value=value;
@@ -160,14 +214,7 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "!document.querySelector('#welcome').hidden")
 
         // Feed the exact staged portable bytes through the normal file input and check both attached marks.
-        let input = """
-        const bytes = Uint8Array.from(atob(payload), x => x.charCodeAt(0));
-        const transfer = new DataTransfer(); transfer.items.add(new File([bytes], 'Review.inklane'));
-        const input = document.querySelector('#files'); input.files = transfer.files;
-        input.dispatchEvent(new Event('change',{bubbles:true})); return true;
-        """
-        _ = try await host.webView.callAsyncJavaScript(input, arguments: ["payload": portable.base64EncodedString()],
-                                                      in: nil, contentWorld: .page)
+        try await openFile(portable, "Review.inklane", in: host)
         try await wait(host, "document.querySelectorAll('.marker').length === 2 && !!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
         try await perform(host, "document.querySelector('#index').click(); document.querySelector('#results button').click()")
         try await wait(host, "document.querySelector('#note-body').value === 'Keep the scale bar at this position.'")
