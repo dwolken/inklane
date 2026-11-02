@@ -69,8 +69,9 @@ final class WorkspaceTests: XCTestCase {
         let m = try XCTUnwrap(result as? [String: Any])
         let view = host.webView
         let details = try JSONSerialization.data(withJSONObject: m, options: [.sortedKeys])
-        NSLog("iPhone viewport %@ — webView %@ scrollViewZoom %.3f %@",
-              label, NSStringFromCGRect(view.bounds), Double(view.scrollView.zoomScale), String(decoding: details, as: UTF8.self))
+        NSLog("iPhone viewport %@ — webView %.2f x %.2f points, scrollViewZoom %.3f %@",
+              label, Double(view.bounds.width), Double(view.bounds.height), Double(view.scrollView.zoomScale),
+              String(decoding: details, as: UTF8.self))
         guard let width = m["width"] as? Double, let height = m["height"] as? Double,
               let scale = m["scale"] as? Double, let left = m["left"] as? Double, let top = m["top"] as? Double,
               let header = m["header"] as? [Double], let footer = m["footer"] as? [Double],

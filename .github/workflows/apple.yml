@@ -7,18 +7,13 @@ on:
   pull_request:
     paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
   workflow_dispatch:
-    inputs:
-      apple_silicon_simulator:
-        description: Run the iPhone checks on the newest installed Apple silicon simulator
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 jobs:
   workspace:
-    name: ${{ matrix.platform }} workspace
+    name: ${{ matrix.label }} workspace
     concurrency:
       group: apple-${{ matrix.queue }}-${{ github.ref }}
       cancel-in-progress: false
@@ -27,11 +22,17 @@ jobs:
       matrix:
         include:
           - platform: macOS
+            label: macOS
             runner: macos-15-intel
             queue: macOS-intel
           - platform: iOS
-            runner: ${{ inputs.apple_silicon_simulator && 'macos-26' || 'macos-15-intel' }}
-            queue: ${{ inputs.apple_silicon_simulator && 'iOS' || 'iOS-intel' }}
+            label: iOS 18
+            runner: macos-15-intel
+            queue: iOS-intel
+          - platform: iOS
+            label: iOS Apple silicon
+            runner: macos-26
+            queue: iOS
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
@@ -101,7 +102,7 @@ jobs:
         if: "!cancelled() && steps.capture.outcome == 'success'"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Inklane-${{ matrix.platform }}-field-guide
+          name: Inklane-${{ matrix.queue }}-field-guide
           path: ${{ runner.temp }}/Inklane-${{ matrix.platform }}-field-guide*.png
           retention-days: 2
           if-no-files-found: error

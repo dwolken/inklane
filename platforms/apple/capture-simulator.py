@@ -13,9 +13,13 @@ while time.monotonic() < deadline:
         cache = Path(bundle.stdout.strip()) / "Library/Caches"
         cache.mkdir(parents=True, exist_ok=True)
         (cache / "Inklane-screen.armed").touch()
-        if (cache / "Inklane-screen.ready").is_file():
-            subprocess.run(["xcrun", "simctl", "io", device, "screenshot", output], check=True, timeout=35)
-            (cache / "Inklane-screen.done").touch()
-            sys.exit(0)
-    time.sleep(0.5)
+        # Poll the local handshake files, leaving CoreSimulator alone while Xcode
+        # launches the app. Reacquire the container if a reinstall replaces it.
+        while cache.is_dir() and time.monotonic() < deadline:
+            if (cache / "Inklane-screen.ready").is_file():
+                subprocess.run(["xcrun", "simctl", "io", device, "screenshot", output], check=True, timeout=35)
+                (cache / "Inklane-screen.done").touch()
+                sys.exit(0)
+            time.sleep(0.25)
+    time.sleep(2)
 raise SystemExit("The example workspace never requested its simulator screenshot.")
