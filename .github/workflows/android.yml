@@ -1,0 +1,55 @@
+name: Android workspace
+on:
+  pull_request:
+    paths: ['platforms/android/**', 'website/**', 'src/Inklane/Assets/**', '.github/workflows/android.yml']
+  push:
+    branches: [main]
+    paths: ['platforms/android/**', 'website/**', 'src/Inklane/Assets/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-workspace-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        with:
+          gradle-version: '8.11.1'
+          cache-read-only: true
+      - name: Assemble the development app
+        run: |
+          npm ci --prefix website --ignore-scripts --no-audit
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+          gradle -p platforms/android --no-daemon assembleDebug
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-inklane.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Open, annotate, save and reopen on Android
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          script: node platforms/android/checks/workspace.mjs
+      - name: Retain the synthetic review screen
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && hashFiles('.scratch/android-review.png') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-review-screen
+          path: .scratch/android-review.png
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error

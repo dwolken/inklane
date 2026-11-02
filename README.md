@@ -6,7 +6,9 @@ Inklane keeps feedback on the material it describes. Circle a detail, type a cor
 
 The [web workspace](https://dwolken.github.io/inklane/editor/) opens PDFs and images and creates printable notebooks without an account. The published Windows installer is **1.0.0-rc.2**; existing PDF review and Office review against a fixed PDF edition require the newer Windows source build.
 
-![An Inklane notebook showing a courtyard section and its cross-page notes index](docs/screenshots/notebook.png)
+[![The Inklane workspace with an editable explanation pinned to a flower on the field guide](docs/screenshots/workspace.png)](https://dwolken.github.io/inklane/editor/?sample=review)
+
+To start a review, open a document, choose **Pen**, **Text** or **Note**, and mark the page. Select a mark to move it; choose a note's number to edit its title or explanation. Save a portable copy to keep the original and the editable marks together, or export a feedback report for someone reviewing the same source.
 
 ## Install
 
@@ -14,7 +16,11 @@ Choose the **Inklane-Setup** x64 executable on the [Windows releases page](https
 
 The candidate is unsigned. Windows may display the publisher as unknown. A portable ZIP and SHA-256 checksums are also available on the release page. For portable use, extract the complete folder and launch `Inklane.exe`.
 
+The shared workspace can also be built as an offline [Android app](platforms/android/README.md) or [Linux desktop package](platforms/linux/README.md). Both development builds include the editor and PDF renderer and use the system file picker. To use Inklane without building from source, open the [web workspace](https://dwolken.github.io/inklane/editor/).
+
 ## Windows workspace
+
+![A Windows notebook showing a section drawing and its cross-page notes index](docs/screenshots/notebook.png)
 
 **Images.** Choose **Open an image** on Home. PNG and JPEG files open at a scale that shows the whole image. Use ← and → to browse other images in the folder. Click the image counter to jump to a filename. The list follows Explorer-style numeric order and updates when files are added or removed. Save writes the editable ink, text and notes to a neighboring `.inklane.json` file. Keep the image and its sidecar together. **More actions → Export annotated PNG** creates a separate image for sharing.
 
