@@ -62,6 +62,7 @@ let zoom = 1,
   fit = true,
   gesture = null,
   busy = false,
+  printing = false,
   revision = 0,
   savedRevision = 0,
   serial = 0,
@@ -130,14 +131,16 @@ function updateStatus() {
   $("#new-notebook").disabled = $("#new-sheet").disabled = $("#home").disabled = busy;
   $("#rename-book").hidden = !notebook;
   $("#rename-book").disabled = busy;
-  $("#print").hidden = !notebook || globalThis.inklaneNativePrinting === false;
+  $("#print").hidden = !active || globalThis.inklaneNativePrinting === false;
   $("#print").disabled = busy;
   $("#download").hidden = !active || Boolean(notebook);
   $("#portable").disabled = busy || !active;
   $("#save .wide").textContent = t(notebook || portableMode ? "saveShort" : "save");
   $("#save").setAttribute("aria-label", t(notebook ? "saveNotebook" : portableMode ? "saveShort" : "save"));
   $("#name").textContent = active ? image.name : t("workspace");
-  $("#state").textContent = t(!active ? "newHint" : busy ? "saving" : dirty() ? "changed" : state);
+  $("#state").textContent = t(
+    !active ? "newHint" : busy ? (printing ? "preparingPrint" : "saving") : dirty() ? "changed" : state
+  );
   $("#feedback").disabled =
     $("#index").disabled =
     $("#save").disabled =
@@ -1004,10 +1007,14 @@ $("#feedback").onclick = async () => {
   try {
     busy = true;
     updateStatus();
-    const revision = data.kind === "Notebook"
-      ? { name: image.name + ".inklane", mediaType: "application/vnd.inklane.workspace",
-          hash: await digest(await (await portableFile(data, image)).arrayBuffer()) }
-      : image;
+    const revision =
+      data.kind === "Notebook"
+        ? {
+            name: image.name + ".inklane",
+            mediaType: "application/vnd.inklane.workspace",
+            hash: await digest(await (await portableFile(data, image)).arrayBuffer())
+          }
+        : image;
     const blob = await feedbackFile(data, revision);
     await requestDownload(blob, image.name + ".feedback.json", "feedbackDownload");
   } catch (error) {
@@ -1336,12 +1343,14 @@ function captureRecovery() {
   if (!dirty()) {
     // A previous edit can already be durable. Queue removal behind any write
     // in flight, so Undo → Home cannot leave the undone version in Documents.
-    return (recoverQueue = recoverQueue.catch(() => {}).then(async () => {
-      if (entry.stored) {
-        await removeDraft(entry.id);
-        entry.stored = false;
-      }
-    }));
+    return (recoverQueue = recoverQueue
+      .catch(() => {})
+      .then(async () => {
+        if (entry.stored) {
+          await removeDraft(entry.id);
+          entry.stored = false;
+        }
+      }));
   }
   const doc = { ...data, pages: [...data.pages] };
   if (changedDraft()) {
@@ -1719,18 +1728,49 @@ $("#paper-form").onsubmit = async (e) => {
     render();
   }
 };
-$("#print").onclick = async () => {
-  closeMenu();
-  if (data?.kind !== "Notebook" || busy) return;
+async function printOutput(selectedPage = null) {
+  if (!data || busy || globalThis.inklaneNativePrinting === false) return;
   flush();
+  printing = busy = true;
   render();
   try {
-    const { printNotebook } = await import("./print.js");
-    await printNotebook(data, strokeVisual, t("printNotes"));
+    const { printReview } = await import("./print.js");
+    await printReview(data, image, strokeVisual, t, selectedPage);
   } catch (error) {
-    errorMessage(error, "fileError");
+    errorMessage(error, "printFailed");
+  } finally {
+    printing = busy = false;
+    updateStatus();
+  }
+}
+$("#print").onclick = async () => {
+  closeMenu();
+  if (!data || busy || globalThis.inklaneNativePrinting === false) return;
+  if (data.kind !== "Pdf" || data.pages.length === 1) {
+    await printOutput();
+    return;
+  }
+  const current = data;
+  try {
+    const { canPrintAll } = await import("./print.js");
+    if (busy || data !== current) return;
+    const all = canPrintAll(data);
+    $("#print-all").textContent = t("allPages") + " (" + data.pages.length + ")";
+    $("#print-all").disabled = !all;
+    $("#print-current").textContent = t("currentPage") + " (" + (pageIndex + 1) + ")";
+    $("#print-range").value = all ? "all" : "current";
+    $("#print-limit").hidden = all;
+    $("#print-options").showModal();
+  } catch (error) {
+    errorMessage(error, "printFailed");
   }
 };
+$("#print-form").onsubmit = (e) => {
+  e.preventDefault();
+  $("#print-options").close();
+  printOutput($("#print-range").value === "current" ? pageIndex : null);
+};
+$("#cancel-print").onclick = () => $("#print-options").close();
 showRecent();
 if (["field-guide", "review"].includes(new URLSearchParams(location.search).get("sample"))) sample();
 

@@ -1097,3 +1097,25 @@ body:has(dialog[open]) {
   background: var(--paper);
   color: var(--fg);
 }
+#print-form {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+#print-form label {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--muted);
+}
+#print-range {
+  font: inherit;
+  padding: 8px;
+  background: var(--paper);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+#print-limit {
+  margin: 0;
+  max-width: 32ch;
+}

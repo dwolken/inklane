@@ -50,7 +50,24 @@ const labels = {
     "Choose a name ending in .inklane.",
     "Wählen Sie einen Dateinamen mit der Endung .inklane."
   ],
-  print: ["Print notebook…", "Notizbuch drucken …"],
+  print: ["Print review…", "Mit Anmerkungen drucken …"],
+  printTitle: ["Print review", "Mit Anmerkungen drucken"],
+  allPages: ["All pages", "Alle Seiten"],
+  currentPage: ["Current page", "Aktuelle Seite"],
+  continuePrint: ["Continue to print", "Weiter zum Drucken"],
+  preparingPrint: ["Preparing print…", "Druck wird vorbereitet …"],
+  printLimit: [
+    "For a document this size, print one page at a time.",
+    "Dokumente dieser Größe lassen sich seitenweise drucken."
+  ],
+  printBounds: [
+    "The selected sheet exceeds the print size limit of 5.08 metres.",
+    "Das gewählte Blatt überschreitet die Druckgrößenbeschränkung von 5,08 Metern."
+  ],
+  printFailed: [
+    "Could not prepare the print copy. Your original and edits are unchanged.",
+    "Die Druckfassung konnte nicht erstellt werden. Original und Anmerkungen sind weiterhin verfügbar."
+  ],
   portableDone: [
     "Workspace download requested. Open the .inklane file to continue.",
     "Download angefordert. Öffnen Sie die .inklane-Datei zum Weiterarbeiten."

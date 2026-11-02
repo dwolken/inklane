@@ -19,7 +19,7 @@
         ><img src="../assets/inklane.svg" alt="" width="30" height="30" /><span>Inklane</span></a
       >
       <div id="document">
-        <strong id="name" data-i="workspace">Image workspace</strong
+        <strong id="name" data-i="workspace">Workspace</strong
         ><small id="state" data-i="browser">Browser edition</small>
       </div>
       <div class="file-actions">
@@ -41,7 +41,7 @@
             ><button id="feedback" disabled data-i="feedback">Export feedback…</button
             ><button id="portable" disabled data-i="portable">Save portable copy…</button
             ><button id="whole-page" disabled data-i="fitPage"></button
-            ><button id="print" disabled data-i="print">Print notebook…</button>
+            ><button id="print" disabled data-i="print">Print review…</button>
             <button id="shortcuts" data-i="guide">How to use the workspace</button
             ><button id="language"></button>
           </div>
@@ -203,6 +203,21 @@
         <div class="relink-actions">
           <button type="button" id="cancel-rename" data-i="cancel"></button
           ><button class="primary" data-i="done"></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="print-options" aria-labelledby="print-heading">
+      <form id="print-form">
+        <h2 id="print-heading" data-i="printTitle"></h2>
+        <label for="print-range" data-i="pages"></label>
+        <select id="print-range">
+          <option id="print-all" value="all"></option>
+          <option id="print-current" value="current"></option>
+        </select>
+        <p id="print-limit" hidden data-i="printLimit"></p>
+        <div class="relink-actions">
+          <button type="button" id="cancel-print" data-i="cancel"></button
+          ><button type="submit" class="primary" data-i="continuePrint"></button>
         </div>
       </form>
     </dialog>
