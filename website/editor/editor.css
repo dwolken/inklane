@@ -996,7 +996,14 @@ header {
   box-shadow: none;
 }
 .embedded #viewport {
+  overscroll-behavior: auto;
   background: #efece5;
+}
+.embedded #sheet[data-tool="select"] {
+  touch-action: pan-y;
+}
+.embedded #sheet[data-tool="select"] [data-id] {
+  touch-action: none;
 }
 .embedded #hint {
   font-size: 12px;
