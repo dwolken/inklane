@@ -27,7 +27,6 @@ final class FileExport: NSObject, WKScriptMessageHandlerWithReply {
     private(set) weak var picker: UIDocumentPickerViewController?
     #else
     private(set) weak var picker: NSSavePanel?
-    var makeSavePanel: () -> NSSavePanel = { NSSavePanel() }
     #endif
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
@@ -112,7 +111,7 @@ final class FileExport: NSObject, WKScriptMessageHandlerWithReply {
         topController(controller).present(prompt, animated: true)
         #else
         guard let window = webView?.window else { clearTransfer(); throw CocoaError(.fileWriteUnknown) }
-        let panel = makeSavePanel()
+        let panel = NSSavePanel()
         panel.nameFieldStringValue = file.lastPathComponent
         panel.canCreateDirectories = true
         if let type = UTType(filenameExtension: file.pathExtension) { panel.allowedContentTypes = [type] }

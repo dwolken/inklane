@@ -92,3 +92,13 @@ jobs:
           path: ${{ runner.temp }}/Inklane-${{ matrix.platform }}-field-guide.png
           retention-days: 2
           if-no-files-found: error
+      - name: Save and reopen through the macOS system file panels
+        if: matrix.platform == 'macOS'
+        run: |
+          mkdir -p "$HOME/Downloads"
+          destination=$(mktemp -d "$HOME/Downloads/Inklane-review-XXXXXXXX")
+          xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme InklaneMacUI \
+            -destination "platform=macOS" -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/file-panels.xcresult" \
+            "INKLANE_UI_DIRECTORY=$destination" CODE_SIGN_IDENTITY=- test

@@ -14,7 +14,7 @@ python3 website/build.py --workspace-only --output platforms/apple/Workspace
 open platforms/apple/Inklane.xcodeproj
 ```
 
-Select the **Inklane** scheme, choose **My Mac** or an **iPhone simulator** and run. Choose **Product → Test** to exercise the bundled application and the native file export bridge. The deployment targets are macOS 14 and iOS 17. Installing on an iPhone or iPad requires a development signing identity and provisioning.
+Select the **Inklane** scheme, choose **My Mac** or an **iPhone simulator** and run. Choose **Product → Test** to exercise the bundled application and the native file export bridge. On macOS the **InklaneMacUI** scheme also drives the system Save and Open panels from a separate UI test process. The deployment targets are macOS 14 and iOS 17. Installing on an iPhone or iPad requires a development signing identity and provisioning.
 
 WebKit loads the bundled assets from a read-only listener bound to the device’s IPv4 loopback interface. The app retains its chosen port so the WebKit storage origin stays the same on later launches. Only bundled editor assets are served. Document bytes reach the host through a bounded message bridge when the user saves a file.
 

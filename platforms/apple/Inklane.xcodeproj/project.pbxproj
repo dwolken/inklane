@@ -4,6 +4,63 @@
 	classes = {};
 	objectVersion = 56;
 	objects = {
+		BA0000000000000000000200 /* SavePanelTests.swift */ = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift;
+			path = MacUITests/SavePanelTests.swift; sourceTree = "<group>";
+		};
+		BA0000000000000000000208 /* UI test Info.plist */ = {
+			isa = PBXFileReference; lastKnownFileType = text.plist.xml;
+			path = MacUITests/Info.plist; sourceTree = "<group>";
+		};
+		BA0000000000000000000201 /* InklaneMacUITests.xctest */ = {
+			isa = PBXFileReference; explicitFileType = wrapper.cfbundle;
+			path = InklaneMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		BA0000000000000000000202 /* SavePanelTests.swift in Sources */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000200;
+		};
+		BA0000000000000000000203 /* UI sources */ = {
+			isa = PBXSourcesBuildPhase; buildActionMask = 2147483647;
+			files = (BA0000000000000000000202,); runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA0000000000000000000204 /* UI configurations */ = {
+			isa = XCConfigurationList; buildConfigurations = (BA0000000000000000000205, BA0000000000000000000206,);
+			defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;
+		};
+		BA0000000000000000000205 /* UI Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = InklaneMacUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.dwolken.Inklane.MacUITests;
+				INFOPLIST_FILE = MacUITests/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				SUPPORTED_PLATFORMS = macosx; SDKROOT = macosx;
+				TEST_TARGET_NAME = Inklane;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+			};
+			name = Debug;
+		};
+		BA0000000000000000000206 /* UI Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = InklaneMacUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.dwolken.Inklane.MacUITests;
+				INFOPLIST_FILE = MacUITests/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				SUPPORTED_PLATFORMS = macosx; SDKROOT = macosx;
+				TEST_TARGET_NAME = Inklane;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+			};
+			name = Release;
+		};
+		BA0000000000000000000207 /* InklaneMacUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA0000000000000000000204;
+			buildPhases = (BA0000000000000000000203,);
+			buildRules = (); dependencies = (BA0000000000000000000040,);
+			name = InklaneMacUITests; productName = InklaneMacUITests;
+			productReference = BA0000000000000000000201; productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		BA0000000000000000000010 /* Sources/Workspace.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
@@ -116,12 +173,12 @@
 		};
 		BA0000000000000000000030 /* Main group */ = {
 			isa = PBXGroup;
-			children = (BA0000000000000000000010, BA0000000000000000000011, BA0000000000000000000012, BA0000000000000000000013, BA0000000000000000000014, BA0000000000000000000015, BA0000000000000000000016, BA0000000000000000000017, BA0000000000000000000018, BA0000000000000000000051, BA0000000000000000000031,);
+			children = (BA0000000000000000000010, BA0000000000000000000011, BA0000000000000000000012, BA0000000000000000000013, BA0000000000000000000014, BA0000000000000000000015, BA0000000000000000000016, BA0000000000000000000017, BA0000000000000000000018, BA0000000000000000000051, BA0000000000000000000031, BA0000000000000000000200, BA0000000000000000000208,);
 			sourceTree = "<group>";
 		};
 		BA0000000000000000000031 /* Products */ = {
 			isa = PBXGroup;
-			children = (BA0000000000000000000021, BA0000000000000000000022,);
+			children = (BA0000000000000000000021, BA0000000000000000000022, BA0000000000000000000201,);
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -187,7 +244,7 @@
 		};
 		BA0000000000000000000001 /* Project object */ = {
 			isa = PBXProject;
-			attributes = { LastUpgradeCheck = 1630; BuildIndependentTargetsInParallel = YES; TargetAttributes = { BA0000000000000000000038 = { TestTargetID = BA0000000000000000000037; }; }; };
+			attributes = { LastUpgradeCheck = 1630; BuildIndependentTargetsInParallel = YES; TargetAttributes = { BA0000000000000000000207 = { TestTargetID = BA0000000000000000000037; }; BA0000000000000000000038 = { TestTargetID = BA0000000000000000000037; }; }; };
 			buildConfigurationList = BA0000000000000000000042;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
@@ -197,7 +254,7 @@
 			productRefGroup = BA0000000000000000000031;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (BA0000000000000000000037, BA0000000000000000000038,);
+			targets = (BA0000000000000000000037, BA0000000000000000000038, BA0000000000000000000207,);
 		};
 		BA0000000000000000000042 /* Configuration list */ = {
 			isa = XCConfigurationList;

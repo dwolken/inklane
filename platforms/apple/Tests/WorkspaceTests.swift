@@ -131,11 +131,7 @@ final class WorkspaceTests: XCTestCase {
         NSLog("Apple workspace 4. Reopen the on-device draft and portable file.")
         try await recoverDraft(host)
         try await readPortable(portable,in: host)
-        #if os(macOS)
-        NSLog("Apple workspace 5. Confirm a native file save and compare its contents.")
-        try await savePortable(portable,in: host)
-        #endif
-        NSLog("Apple workspace 6. Completed document journeys.")
+        NSLog("Completed hosted document journeys. AppKit’s affirmative file-panel journey runs in the separate Mac UI scheme.")
     }
 
     private func restartBridge(_ host: WorkspaceHost) async throws {
@@ -259,44 +255,4 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "document.querySelector('#note-body').value === 'Keep the scale bar at this position.'")
     }
 
-    #if os(macOS)
-    private func savePortable(_ portable: Data, in host: WorkspaceHost) async throws {
-        // Let AppKit approve an actual destination and verify what the application wrote there.
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        host.exporter.makeSavePanel = {
-            let panel = NSSavePanel()
-            // The sandboxed AppKit sheet transfers its configuration to a remote view when presented.
-            panel.directoryURL = folder
-            return panel
-        }
-        try await perform(host, "document.querySelector('#close-card').click(); document.querySelector('#save').click()")
-        for _ in 0..<120 {
-            if let picker = host.exporter.picker, picker.isVisible, picker.sheetParent != nil { break }
-            try await Task.sleep(nanoseconds: 100_000_000)
-        }
-        let save = try XCTUnwrap(host.exporter.picker)
-        XCTAssertTrue(save.isVisible)
-        let targetDirectory = try XCTUnwrap(save.directoryURL).resolvingSymlinksInPath().standardizedFileURL
-        guard targetDirectory.path == folder.resolvingSymlinksInPath().standardizedFileURL.path else {
-            DispatchQueue.main.async { save.cancel(nil) }
-            XCTFail("The native sheet did not select the temporary export directory.")
-            return
-        }
-        let suggestedName = try XCTUnwrap(host.exporter.pendingFile).lastPathComponent
-        DispatchQueue.main.async {
-            NSLog("Apple workspace 5a. Send the Save action to the attached sheet.")
-            NSApp.sendAction(#selector(NSSavePanel.ok(_:)), to: save, from: nil)
-            NSLog("Apple workspace 5b. AppKit returned from the Save action.")
-        }
-        let destination = folder.appendingPathComponent(suggestedName)
-        for _ in 0..<120 {
-            if FileManager.default.fileExists(atPath: destination.path) { break }
-            try await Task.sleep(nanoseconds: 100_000_000)
-        }
-        let saved = try Data(contentsOf: destination)
-        XCTAssertEqual(saved, portable)
-    }
-    #endif
 }
