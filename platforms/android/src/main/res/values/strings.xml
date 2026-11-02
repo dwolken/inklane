@@ -1,0 +1,10 @@
+<resources>
+    <style name="InklaneTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#FAF9F7</item>
+        <item name="android:colorAccent">#6447B0</item>
+    </style>
+    <string name="open_error">The document picker is unavailable.</string>
+</resources>

@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application' version '8.10.1'
+}
+
+android {
+    namespace 'dev.inklane.android'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'dev.inklane.android'
+        minSdk 30
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0-dev'
+    }
+    buildFeatures { buildConfig true }
+    sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/workspace'))
+}
+
+def prepareWorkspace = tasks.register('prepareWorkspace', Exec) {
+    def output = layout.buildDirectory.dir('generated/workspace')
+    inputs.dir('../../website/editor')
+    inputs.dir('../../website/assets')
+    inputs.files('../../website/build_workspace.py', '../../website/offline-worker.js', '../../website/build.py', '../../website/package-lock.json', '../../src/Inklane/Assets/inklane.svg', fileTree('../../website') { include '*.png', '*.svg' })
+    inputs.dir('native')
+    outputs.dir(output)
+    commandLine providers.gradleProperty('python').getOrElse('python'), 'native/bundle.py', output.get().asFile
+}
+tasks.named('preBuild').configure { dependsOn prepareWorkspace }
