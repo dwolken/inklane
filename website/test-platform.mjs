@@ -42,7 +42,7 @@ const engine = process.env.INKLANE_ENGINE || 'chromium';
 const profileRoot=resolve('.scratch/platform-profiles'); await mkdir(profileRoot,{recursive:true});
 const profile=await mkdtemp(resolve(profileRoot,engine+'-'));
 const context=await (engine==='webkit'?webkit:chromium).launchPersistentContext(profile,{
-  viewport:{width:1060,height:760},locale:'en-US',
+  viewport:process.env.INKLANE_INSTALL_CHECK?null:{width:1060,height:760},locale:'en-US',
   headless: !process.env.INKLANE_INSTALL_CHECK,
   ...(engine==='webkit'?{}:process.env.BROWSER_PATH?{executablePath:process.env.BROWSER_PATH}:{channel:process.platform==='win32'?'msedge':'chrome'})
 });
@@ -57,13 +57,18 @@ try {
     const session=await context.newCDPSession(page);
     const {errors:manifestErrors,data}=await session.send('Page.getAppManifest'); assert.equal(manifestErrors.length,0);
     const app=JSON.parse(data); assert.equal(app.display,'standalone'); assert.equal(app.scope,'./');
+    // A relative manifest id resolves against the origin root, not the project
+    // directory. The default derived from start_url keeps this installation scoped.
+    const manifestId=origin+'/inklane/editor/';
+    const identity=await session.send('Page.getAppId'); assert.equal(identity.appId,manifestId);
     const installability=await session.send('Page.getInstallabilityErrors'); assert.deepEqual(installability.installabilityErrors,[]);
     if (process.env.INKLANE_INSTALL_CHECK) {
       // Use a disposable CI profile and OS. Never install a test app into a developer desktop.
       if (process.env.GITHUB_ACTIONS!=='true') throw Error('Installation test requires an ephemeral Actions runner.');
-      const manifestId=origin+'/inklane/editor/';
       await session.send('PWA.install',{manifestId,installUrlOrBundleUrl:manifestId});
       try {
+        // CDP installation skips the browser's normal user-facing window choice.
+        await session.send('PWA.changeAppUserSettings',{manifestId,displayMode:'standalone'});
         const next=context.waitForEvent('page');
         await session.send('PWA.launch',{manifestId});
         const appWindow=await next;
