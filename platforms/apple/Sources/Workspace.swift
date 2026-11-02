@@ -120,7 +120,11 @@ final class WorkspaceHost: NSObject, ObservableObject, WKNavigationDelegate, WKU
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         // Reopening the library makes the last persisted draft available.
+        exporter.discardUnpresentedTransfer()
         if let origin { webView.load(URLRequest(url: origin)) }
+    }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        exporter.discardUnpresentedTransfer()
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         if (error as NSError).code != NSURLErrorCancelled { failed = true }

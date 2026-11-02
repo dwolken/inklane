@@ -95,6 +95,12 @@ final class FileExport: NSObject, WKScriptMessageHandlerWithReply {
         picker = nil
     }
 
+    // A new WebKit process cannot finish a transfer started by the process that exited.
+    // Once the native picker is open, its delegate owns the result and the staged bytes.
+    func discardUnpresentedTransfer() {
+        if !exporting { clearTransfer() }
+    }
+
     private func present(_ file: URL, completion: @escaping (Bool, Error?) -> Void) throws {
         #if os(iOS)
         guard let controller = webView?.window?.rootViewController else { clearTransfer(); throw CocoaError(.fileWriteUnknown) }

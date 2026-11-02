@@ -15,7 +15,12 @@ final class WorkspaceTests: XCTestCase {
             if let value = try? await host.webView.evaluateJavaScript(script), value as? Bool == true { return }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        XCTFail("Condition did not become true: \(script); URL \(host.webView.url?.path ?? "none"); host failed: \(host.failed)", file: file, line: line)
+        let state = try? await host.webView.evaluateJavaScript("""
+          [document.readyState, document.querySelector('#state')?.textContent,
+           document.querySelector('#message')?.textContent, document.querySelectorAll('.marker').length,
+           document.querySelectorAll('#draft-list button strong').length].join(' | ')
+          """)
+        XCTFail("Condition did not become true: \(script); URL \(host.webView.url?.path ?? "none"); state \(state ?? "unknown"); host failed: \(host.failed)", file: file, line: line)
         throw CocoaError(.fileReadUnknown)
     }
     private func perform(_ host: WorkspaceHost, _ script: String) async throws {
@@ -79,6 +84,24 @@ final class WorkspaceTests: XCTestCase {
         host.start()
         try await wait(host, "typeof document.querySelector('#sample-link')?.onclick === 'function'")
         try await wait(host, "window.isSecureContext && !!crypto.subtle && typeof window.inklaneSaveCopy === 'function'")
+        let partial = """
+        globalThis.previousProcess = true;
+        const bridge = window.webkit.messageHandlers.exportFile;
+        const token = await bridge.postMessage({op:'begin',filename:'Partial.inklane',size:2});
+        await bridge.postMessage({op:'append',token,bytes:'YQ=='}); return token;
+        """
+        _ = try await host.webView.callAsyncJavaScript(partial, arguments: [:], in: nil, contentWorld: .page)
+        let interrupted = try XCTUnwrap(host.exporter.pendingFile)
+        host.webViewWebContentProcessDidTerminate(host.webView)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: interrupted.path))
+        try await wait(host, "!globalThis.previousProcess && typeof document.querySelector('#sample-link')?.onclick === 'function'")
+        let restart = """
+        const bridge = window.webkit.messageHandlers.exportFile;
+        const token = await bridge.postMessage({op:'begin',filename:'New transfer.inklane',size:0});
+        return await bridge.postMessage({op:'discard',token});
+        """
+        _ = try await host.webView.callAsyncJavaScript(restart, arguments: [:], in: nil, contentWorld: .page)
+        XCTAssertNil(host.exporter.pendingFile)
         // Exercise both the new-document dialog and real multipage navigation.
         try await perform(host, "document.querySelector('#new-notebook').click(); document.querySelector('#paper-size').value='A5'; document.querySelector('#paper-form').requestSubmit()")
         try await wait(host, "!document.querySelector('#pages').hidden && !document.querySelector('#save').disabled")
@@ -108,6 +131,8 @@ final class WorkspaceTests: XCTestCase {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         let stagedURL = try XCTUnwrap(host.exporter.pendingFile)
+        host.exporter.discardUnpresentedTransfer()
+        XCTAssertEqual(host.exporter.pendingFile, stagedURL, "The native picker still owns this file.")
         let portable = try Data(contentsOf: stagedURL)
         XCTAssertGreaterThan(portable.count, 100_000)
         let picker = try XCTUnwrap(host.exporter.picker)
@@ -125,9 +150,11 @@ final class WorkspaceTests: XCTestCase {
         // Reload the real WKWebView and restore the on-device IndexedDB draft.
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden && document.querySelectorAll('#draft-list button').length >= 4")
+        try await perform(host, "globalThis.previousDraftLibrary = true")
         host.webView.reload()
-        try await wait(host, "!!document.querySelector('#draft-list button')")
-        try await perform(host, "document.querySelector('#draft-list button').click()")
+        let savedImage = "[...document.querySelectorAll('#draft-list button')].find(b => b.querySelector('strong')?.textContent.endsWith('.png'))"
+        try await wait(host, "!globalThis.previousDraftLibrary && !!(\(savedImage))")
+        try await perform(host, "(\(savedImage)).click()")
         try await wait(host, "!!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden")
