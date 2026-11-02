@@ -64,8 +64,13 @@ try {
       });
       assert.deepEqual(figures.map(f => f.slice(0, 2)), [[1484, 952], [1484, 952], [747, 552]]);
       assert.ok(figures.every(f => f[2]?.length > 20));
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-      assert.equal(overflow, false, `${lang} horizontal overflow at ${width}px`);
+      const overflow = await page.evaluate(() => {
+        if (document.documentElement.scrollWidth <= innerWidth) return null;
+        const elements = [...document.querySelectorAll("body *")].filter(el => el.getBoundingClientRect().right > innerWidth)
+          .map(el => [el.tagName, el.className, Math.round(el.getBoundingClientRect().right), el.textContent.trim().slice(0, 45)]);
+        return { scrollWidth: document.documentElement.scrollWidth, elements };
+      });
+      assert.equal(overflow, null, `${lang} horizontal overflow at ${width}px: ${JSON.stringify(overflow)}`);
       if (process.env.SITE_CAPTURE_DIR && [1440, 820, 390, 320].includes(width)) {
         await mkdir(process.env.SITE_CAPTURE_DIR, { recursive: true });
         const file = join(process.env.SITE_CAPTURE_DIR, `${lang}-${width}`);
