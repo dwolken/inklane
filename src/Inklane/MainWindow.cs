@@ -242,11 +242,12 @@ public sealed partial class MainWindow : Window
             DocumentData candidate; ImageSource? image = null; string? savePath; string? hash;
             if (extension == ".pdf")
             {
-                (candidate,nextPdf,hash) = PdfBackdrop.Open(this,path);
+                bool hasLayer = File.Exists(path + ".inklane.json");
+                (candidate,nextPdf,hash) = PdfBackdrop.Open(this,path,asSource:hasLayer);
                 if (office != null && (nextPdf == null || candidate.SourcePdfSha256 != office.PdfHash))
                     throw new InvalidDataException(L.T("OfficeNeedsPdf"));
                 savePath = candidate.Kind == DocumentKind.Notebook ? path : null;
-                if (nextPdf != null && File.Exists(path + ".inklane.json"))
+                if (nextPdf != null && hasLayer)
                 {
                     savePath = path + ".inklane.json";
                     candidate = DocumentStore.LoadJson(savePath,out hash);
@@ -255,9 +256,28 @@ public sealed partial class MainWindow : Window
             }
             else if (extension == ".inklane")
             {
-                try { candidate = PortableNotebook.Read(path); }
-                catch (NotSupportedException) { throw new InvalidDataException(L.T("PortableKind")); }
-                savePath = hash = null; // Import into an editable notebook. Save prompts for its PDF destination.
+                var bundle = PortableWorkspace.Read(path);
+                candidate = bundle.Document;
+                savePath = hash = null;
+                if (candidate.Kind != DocumentKind.Notebook)
+                {
+                    if (candidate.Kind == DocumentKind.Image)
+                        image = DecodePortableImage(bundle);
+                    else
+                    {
+                        nextPdf = PdfBackdrop.Open(this,bundle.SourceName,asSource:true,snapshot:bundle.SourceBytes).Backdrop!;
+                        nextPdf.Verify(candidate);
+                        image = nextPdf.Render(this,0);
+                    }
+
+                    var picker = new OpenFolderDialog { Title = L.F("PortableDestination",bundle.SourceName), Multiselect = false };
+                    if (_interaction.ChooseWorkingFolder(this,picker) is not { } parent) return;
+                    var copy = bundle.CreateWorkingCopy(parent);
+                    if (candidate.Kind == DocumentKind.Image) candidate.SourceImagePath = copy.Original;
+                    else nextPdf!.AttachWorkingCopy(copy.Original);
+                    savePath = path = copy.Layer;
+                    hash = copy.LayerHash;
+                }
             }
             else if (extension == ".json") { candidate = DocumentStore.LoadJson(path,out hash); savePath = candidate.Kind != DocumentKind.Notebook ? path : null; if (savePath == null) hash = null; }
             else if (extension is ".png" or ".jpg" or ".jpeg")
@@ -282,7 +302,7 @@ public sealed partial class MainWindow : Window
                         if (_interaction.ChooseSourcePdf(this,pick) is not { } chosen) return;
                         source = chosen;
                     }
-                    nextPdf = PdfBackdrop.Open(this,source).Backdrop ?? throw new InvalidDataException(L.T("PdfChanged"));
+                    nextPdf = PdfBackdrop.Open(this,source,asSource:true).Backdrop ?? throw new InvalidDataException(L.T("PdfChanged"));
                 }
                 nextPdf.Verify(candidate);
                 candidate.SourcePdfName = Path.GetFileName(nextPdf.Path);
@@ -304,6 +324,7 @@ public sealed partial class MainWindow : Window
         }
         catch (InvalidDataException ex) when (path.EndsWith(".feedback.json",StringComparison.OrdinalIgnoreCase)) { Error(L.T("ReviewExportOnly"),ex); }
         catch (Exception ex) when (IsExpected(ex) && L.IsOpenProblem(ex.Message)) { Error(ex.Message,ex); }
+        catch (NotSupportedException ex) when (path.EndsWith(".inklane",StringComparison.OrdinalIgnoreCase)) { Error(L.T("UnsupportedPortable"),ex); }
         catch (NotSupportedException) { Error(L.T("UnsupportedPdf")); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); }
         finally { nextPdf?.Dispose(); }
@@ -343,6 +364,29 @@ public sealed partial class MainWindow : Window
     {
         var info = new FileInfo(path); if (info.Length > 256 * 1024 * 1024) throw new InvalidDataException("Image exceeds 256 MB.");
         using var input = File.OpenRead(path);
+        return LoadImage(input);
+    }
+
+    private static BitmapSource DecodePortableImage(PortableWorkspace bundle)
+    {
+        using var input = new MemoryStream(bundle.SourceBytes,writable:false);
+        var decoder = BitmapDecoder.Create(input,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnDemand);
+        bool png = Path.GetExtension(bundle.SourceName).Equals(".png",StringComparison.OrdinalIgnoreCase);
+        if (png ? decoder is not PngBitmapDecoder : decoder is not JpegBitmapDecoder)
+            throw new InvalidDataException(L.T("PortableImageMismatch"));
+        var frame = decoder.Frames[0];
+        if (Math.Max(frame.PixelWidth,frame.PixelHeight)>32768 || (long)frame.PixelWidth*frame.PixelHeight>32_000_000)
+            throw new InvalidDataException(L.T("PortableImageMismatch"));
+        input.Position = 0;
+        var image = LoadImage(input);
+        var page = bundle.Document.Pages[0];
+        if (image.PixelWidth != page.Width || image.PixelHeight != page.Height)
+            throw new InvalidDataException(L.T("PortableImageMismatch"));
+        return image;
+    }
+
+    private static BitmapSource LoadImage(Stream input)
+    {
         var frame = BitmapFrame.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         if ((long)frame.PixelWidth * frame.PixelHeight > 100_000_000) throw new InvalidDataException("Image exceeds 100 megapixels.");
         BitmapSource source = frame;
@@ -439,20 +483,21 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); return false; }
         finally { _saving = false; UpdateState(); }
     }
-    private void ExportPortableNotebook()
+    private void ExportPortableWorkspace()
     {
-        if (_document.Kind != DocumentKind.Notebook || _saving) return;
+        if (_saving) return;
         FinishRenameNotebook(true);
         _surface.CommitEdits();
         if (!CaptureHistory()) return;
-        var picker = new SaveFileDialog { Title = L.T("ExportPortable"), Filter = L.T("PortableFilter"),
+        var picker = new SaveFileDialog { Title = L.T(_document.Kind == DocumentKind.Notebook ? "ExportPortable" : "ExportPortableReview"), Filter = L.T("PortableFilter"),
             DefaultExt = ".inklane", AddExtension = true, FileName = ExportStem + ".inklane", OverwritePrompt = false };
         try
         {
             if (_interaction.ChooseSavePath(this,picker) is not { } path || !DestinationAllowed(path,".inklane",true)) return;
             if (File.Exists(path)) { Error(L.T("PortableCollision")); return; }
-            AtomicWrite(path, stream => PortableNotebook.Write(stream,_document,ExportStem), allowReplace:false);
+            AtomicWrite(path, stream => PortableWorkspace.Write(stream,_document,ExportStem,SourcePath), allowReplace:false);
         }
+        catch (PortableCapacityException ex) { Error(L.T("PortableCapacity"),ex); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"),ex); }
     }
 
@@ -608,7 +653,7 @@ public sealed partial class MainWindow : Window
                     if (state.Document.Kind == DocumentKind.Pdf)
                     {
                         if (state.SourcePdfPath == null) throw new InvalidDataException(L.T("PdfChanged"));
-                        source = PdfBackdrop.Open(this,state.SourcePdfPath).Backdrop ?? throw new InvalidDataException(L.T("PdfChanged"));
+                        source = PdfBackdrop.Open(this,state.SourcePdfPath,asSource:true).Backdrop ?? throw new InvalidDataException(L.T("PdfChanged"));
                         try { source.Verify(state.Document); image = source.Render(this,page); }
                         catch { source.Dispose(); throw; }
                     }

@@ -26,9 +26,9 @@ internal static partial class Program
         AddText(window, "Reviewed on Windows");
         var copy = state.Path("Windows.inklane");
         state.Interaction.SavePaths.Enqueue(copy);
-        Call(window,"ExportPortableNotebook");
+        Call(window,"ExportPortableWorkspace");
         Assert(File.Exists(copy),"The Windows portable copy was not written.");
-        var reopened = PortableNotebook.Read(copy);
+        var reopened = PortableWorkspace.Read(copy).Document;
         Equal(DocumentStore.Serialize(doc),DocumentStore.Serialize(reopened));
         Equal(initial, DocumentStore.GetFileHash(imported));
         Assert(Dirty(window),"Exporting a copy marked the open notebook saved.");
@@ -40,7 +40,7 @@ internal static partial class Program
         Equal(initial,DocumentStore.GetFileHash(imported));
         // A portable copy is always a new file, even when a picker returns an occupied path.
         var unrelated = state.Path("Occupied.inklane");File.WriteAllText(unrelated,"Keep my file.");
-        state.Interaction.SavePaths.Enqueue(unrelated);Call(window,"ExportPortableNotebook");
+        state.Interaction.SavePaths.Enqueue(unrelated);Call(window,"ExportPortableWorkspace");
         Equal("Keep my file.",File.ReadAllText(unrelated));
         var previous=State(window);
         var invalid=state.Path("Invalid.inklane");File.Copy(imported,invalid);
