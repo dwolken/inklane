@@ -1,5 +1,7 @@
 # Inklane
 
+[Product website](https://dwolken.github.io/inklane/) · [Windows downloads](https://github.com/dwolken/inklane/releases)
+
 Inklane is a local Windows 11 workspace for marking up images and writing in printable PDF notebooks. Draw directly on a detail, add editable text, or pin a longer observation to a numbered point. The notes panel lets you search those observations and jump back to the drawing, even on a different page.
 
 ![An Inklane notebook showing a courtyard section and its cross-page notes index](docs/screenshots/notebook.png)
