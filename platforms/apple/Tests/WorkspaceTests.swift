@@ -120,6 +120,25 @@ final class WorkspaceTests: XCTestCase {
         #endif
 
         host.start()
+        NSLog("Apple workspace 1. Recover the renderer and restart its export bridge.")
+        try await restartBridge(host)
+        NSLog("Apple workspace 2. Render two PDF pages and create two notebook pages.")
+        try await readPDF(host)
+        try await createNotebook(host)
+        NSLog("Apple workspace 3. Edit the example remark and cancel its native export.")
+        try await editExample(host)
+        let portable = try await cancelExport(host)
+        NSLog("Apple workspace 4. Reopen the on-device draft and portable file.")
+        try await recoverDraft(host)
+        try await readPortable(portable,in: host)
+        #if os(macOS)
+        NSLog("Apple workspace 5. Confirm a native file save and compare its contents.")
+        try await savePortable(portable,in: host)
+        #endif
+        NSLog("Apple workspace 6. Completed document journeys.")
+    }
+
+    private func restartBridge(_ host: WorkspaceHost) async throws {
         try await wait(host, "typeof document.querySelector('#sample-link')?.onclick === 'function'")
         try await wait(host, "window.isSecureContext && !!crypto.subtle && typeof window.inklaneSaveCopy === 'function'")
         let partial = """
@@ -140,6 +159,9 @@ final class WorkspaceTests: XCTestCase {
         """
         _ = try await host.webView.callAsyncJavaScript(restart, arguments: [:], in: nil, contentWorld: .page)
         XCTAssertNil(host.exporter.pendingFile)
+    }
+
+    private func readPDF(_ host: WorkspaceHost) async throws {
         // Exercise the bundled PDF worker and observe the pixels of two distinct source pages.
         let pdf = NSMutableData()
         let consumer = try XCTUnwrap(CGDataConsumer(data: pdf as CFMutableData))
@@ -159,6 +181,9 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "\(pixel)[2] > 220 && \(pixel)[0] < 30")
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden")
+    }
+
+    private func createNotebook(_ host: WorkspaceHost) async throws {
         // Exercise both the new-document dialog and real multipage navigation.
         try await perform(host, "document.querySelector('#new-notebook').click(); document.querySelector('#paper-size').value='A5'; document.querySelector('#paper-form').requestSubmit()")
         try await wait(host, "!document.querySelector('#pages').hidden && !document.querySelector('#save').disabled")
@@ -166,7 +191,9 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "document.querySelector('#page-count').textContent.includes('2')")
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden && !!document.querySelector('#draft-list button')")
+    }
 
+    private func editExample(_ host: WorkspaceHost) async throws {
         try await perform(host, "document.querySelector('#sample-link').click()")
         try await wait(host, "document.querySelectorAll('.marker').length === 2")
         // Use the public notes index to open the same edit card at either screen width.
@@ -183,6 +210,9 @@ final class WorkspaceTests: XCTestCase {
             document.querySelector('#close-card').click()
             """)
         try await wait(host, "!!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
+    }
+
+    private func cancelExport(_ host: WorkspaceHost) async throws -> Data {
         try await perform(host, "document.querySelector('#portable').click()")
         for _ in 0..<120 {
             if host.exporter.picker != nil { break }
@@ -199,12 +229,15 @@ final class WorkspaceTests: XCTestCase {
         host.exporter.documentPickerWasCancelled(picker)
         picker.dismiss(animated: false)
         #else
-        picker.cancel(nil)
+        DispatchQueue.main.async { picker.cancel(nil) }
         #endif
         try await wait(host, "!document.querySelector('#save').disabled")
         XCTAssertNil(host.exporter.pendingFile)
         XCTAssertFalse(FileManager.default.fileExists(atPath: stagedURL.path))
+        return portable
+    }
 
+    private func recoverDraft(_ host: WorkspaceHost) async throws {
         // Reload the real WKWebView and restore the on-device IndexedDB draft.
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden && document.querySelectorAll('#draft-list button').length >= 4")
@@ -216,13 +249,18 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "!!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden")
+    }
 
+    private func readPortable(_ portable: Data, in host: WorkspaceHost) async throws {
         // Feed the exact staged portable bytes through the normal file input and check both attached marks.
         try await openFile(portable, "Review.inklane", in: host)
         try await wait(host, "document.querySelectorAll('.marker').length === 2 && !!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
         try await perform(host, "document.querySelector('#index').click(); document.querySelector('#results button').click()")
         try await wait(host, "document.querySelector('#note-body').value === 'Keep the scale bar at this position.'")
-        #if os(macOS)
+    }
+
+    #if os(macOS)
+    private func savePortable(_ portable: Data, in host: WorkspaceHost) async throws {
         // Let AppKit approve an actual destination and verify what the application wrote there.
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
@@ -240,8 +278,18 @@ final class WorkspaceTests: XCTestCase {
         }
         let save = try XCTUnwrap(host.exporter.picker)
         XCTAssertTrue(save.isVisible)
+        let targetDirectory = try XCTUnwrap(save.directoryURL).resolvingSymlinksInPath().standardizedFileURL
+        guard targetDirectory.path == folder.resolvingSymlinksInPath().standardizedFileURL.path else {
+            DispatchQueue.main.async { save.cancel(nil) }
+            XCTFail("The native sheet did not select the temporary export directory.")
+            return
+        }
         let suggestedName = try XCTUnwrap(host.exporter.pendingFile).lastPathComponent
-        save.ok(nil)
+        DispatchQueue.main.async {
+            NSLog("Apple workspace 5a. Send the Save action to the attached sheet.")
+            NSApp.sendAction(#selector(NSSavePanel.ok(_:)), to: save, from: nil)
+            NSLog("Apple workspace 5b. AppKit returned from the Save action.")
+        }
         let destination = folder.appendingPathComponent(suggestedName)
         for _ in 0..<120 {
             if FileManager.default.fileExists(atPath: destination.path) { break }
@@ -249,6 +297,6 @@ final class WorkspaceTests: XCTestCase {
         }
         let saved = try Data(contentsOf: destination)
         XCTAssertEqual(saved, portable)
-        #endif
     }
+    #endif
 }

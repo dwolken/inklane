@@ -11,13 +11,12 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: apple-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   workspace:
     name: ${{ matrix.platform }} workspace
+    concurrency:
+      group: apple-${{ matrix.platform }}-${{ github.ref }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -66,6 +65,9 @@ jobs:
             -destination "${APPLE_DEST:-platform=macOS}" -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
             -resultBundlePath "$RUNNER_TEMP/workspace.xcresult" CODE_SIGN_IDENTITY=- test
+      - name: Inspect the crashing thread if the hosted test failed
+        if: failure() && steps.exercise.outcome == 'failure'
+        run: python3 platforms/apple/diagnose.py "$RUNNER_TEMP/workspace.xcresult" "$RUNNER_TEMP/inklane-apple"
       - name: Collect the bundled field guide capture
         id: capture
         if: "!cancelled() && steps.exercise.outcome != 'skipped'"
