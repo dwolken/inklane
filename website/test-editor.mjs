@@ -432,7 +432,21 @@ try {
       const marker = screen.locator(".marker").first();
       await marker.waitFor();
       const before = await marker.boundingBox();
-      await marker.click();
+      if (width === 390 && language === "en") {
+        // A touch target can lose its implicit capture to the sheet. That
+        // notification bubbles and must not cancel the sheet's active gesture.
+        await screen.locator("#sheet").evaluate(el => el.addEventListener("pointerdown",
+          e => { el.dataset.testPointer = String(e.pointerId); }, {once:true, capture:true}));
+        await screen.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+        await screen.mouse.down();
+        await screen.locator("#sheet").evaluate(el => {
+          const pointerId = Number(el.dataset.testPointer);
+          if (!el.hasPointerCapture(pointerId)) throw new Error("The sheet must own the active pointer.");
+          el.querySelector(".marker").dispatchEvent(new PointerEvent("lostpointercapture", {pointerId, bubbles:true}));
+          if (!el.hasPointerCapture(pointerId)) throw new Error("A child capture notification cancelled the sheet gesture.");
+        });
+        await screen.mouse.up();
+      } else await marker.click();
       const card = screen.locator("#card");
       await card.waitFor();
       const geometry = () => screen.evaluate(() => {

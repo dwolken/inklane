@@ -863,6 +863,9 @@ function startGesture(e) {
     return;
   }
   if (mode === "object") {
+    // Claim the pointer on the stable sheet before rendering replaces the
+    // original marker, which touch screens can implicitly capture on contact.
+    if (id) sheet.setPointerCapture(e.pointerId);
     if (id !== openNote && openNote) setNoteOpen(null);
     if (id && tool === "pen") tool = "select";
     selected = id ?? null;
@@ -891,7 +894,7 @@ function startGesture(e) {
     marks.append(g.preview);
   }
   gesture = g;
-  sheet.setPointerCapture(e.pointerId);
+  if (!sheet.hasPointerCapture(e.pointerId)) sheet.setPointerCapture(e.pointerId);
 }
 function moveGesture(e) {
   const g = gesture;
@@ -960,7 +963,8 @@ sheet.onpointermove = moveGesture;
 sheet.onpointerup = endGesture;
 sheet.onpointercancel = cancelGesture;
 sheet.onlostpointercapture = (e) => {
-  if (e.pointerId === gesture?.pointer) cancelGesture();
+  if (e.target === sheet && e.pointerId === gesture?.pointer && !sheet.hasPointerCapture(e.pointerId))
+    cancelGesture();
 };
 sheet.ondblclick = (e) => {
   if (e.target.matches(".placed") && !busy) {

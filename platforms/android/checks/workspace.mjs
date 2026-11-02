@@ -137,14 +137,29 @@ try {
   const marker = await waitFor(()=>js(`(() => {
     const m = document.querySelector('.marker');
     if (!document.hasFocus() || !m || document.querySelector('#viewport').inert) return false;
-    const r = m.getBoundingClientRect(), x = r.left+r.width/2, y = r.top+r.height/2;
-    return document.elementFromPoint(x,y) === m && {x,y,expanded:m.getAttribute('aria-expanded')==='true'};
+    const r = m.getBoundingClientRect(), x = r.left+r.width/2, y = r.top+r.height/2, v = visualViewport;
+    return document.elementFromPoint(x,y) === m && {
+      u:(x-v.offsetLeft)/v.width, v:(y-v.offsetTop)/v.height, expanded:m.getAttribute('aria-expanded')==='true'
+    };
   })()`),'interactive reopened marker');
   assert.equal(marker.expanded,note.isExpanded,'Saved note presentation survived reopening');
-  if (!marker.expanded) {
-    await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:marker.x,y:marker.y}]});
-    await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  }
+  // Android InputDispatcher uses physical screen pixels. WebView DevTools
+  // touch points can retain the scale from before DocumentsUI covered the app.
+  const targetBounds = await waitFor(async()=>{
+    const appNodes = nodes().filter(n=>n.package===app && n.enabled==='true');
+    const named = appNodes.find(n=>[n.text,n['content-desc']].some(label=>label?.includes(note.title)));
+    const host = appNodes.find(n=>n.class === 'android.webkit.WebView');
+    if (!named && !host) return false;
+    const [x1,y1,x2,y2]=(named || host).bounds.match(/\d+/g).map(Number);
+    return {
+      x:Math.round(x1 + (x2-x1)*(named ? 0.5 : marker.u)),
+      y:Math.round(y1 + (y2-y1)*(named ? 0.5 : marker.v))
+    };
+  },'Android accessibility bounds for the review surface');
+  await js(`window.__deviceTap = []; for(const type of ['pointerdown','pointerup','pointercancel','gotpointercapture','lostpointercapture','click']) {
+    document.addEventListener(type,e=>{ if(window.__deviceTap.length<16) window.__deviceTap.push([e.type,e.target.id||e.target.className||e.target.tagName,e.clientX,e.clientY]); },{capture:true});
+  }`);
+  adb('shell','input','tap',String(targetBounds.x),String(targetBounds.y));
   await waitFor(()=>visible('#close-card'),'visible expanded note');
   assert.equal(await js(find('#note-body')+'.value'),'Leave room for the handle.');
   await tap('#close-card');
@@ -206,7 +221,7 @@ try {
   assert.equal(report.pages[1].annotations[0].text,'Change the units.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
-  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),focus:document.activeElement?.id,cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
+  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),focus:document.activeElement?.id,deviceTap:window.__deviceTap,cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
   throw error;
 } finally {
   socket.close();
