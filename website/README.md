@@ -29,3 +29,9 @@ GitHub Actions builds the Pages site from `main`. The site build selects a publi
 ## Local files and offline access
 
 PDF.js reads bytes selected on the device. Its code, font resources and image decoders are served from the app origin. The service worker stores only the published application files, never reviewed documents. A new worker waits for the previous app to close before changing the active cache. Document drafts are stored separately in IndexedDB; browser eviction, private browsing and clearing site data can remove them. Use a portable file for a durable backup.
+
+## Printing a review
+
+In the browser, open **More actions → Print review**. The print dialog can send the result to a printer or save a PDF. Source PDF pages keep their displayed dimensions and rotation. Images fit on portrait or landscape A4 paper. Pin numbers link to an appendix containing the full remarks for the pages printed. The print copy uses a raster rendering of the source and cannot reopen its marks for editing. Keep the original and editable layer or portable workspace.
+
+For multipage PDFs, choose all pages or the current page. Large PDF reviews print one page at a time to limit browser memory use.

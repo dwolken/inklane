@@ -43,6 +43,61 @@ async function scan(page) {
   assert.deepEqual(violations, []);
 }
 
+async function checkEmbeddedTouch(browser) {
+  const context = await browser.newContext({
+    isMobile: true, hasTouch: true, viewport: { width: 390, height: 844 }, locale: "en-US"
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto(local);
+    const frame = page.frameLocator("#review");
+    const marker = frame.locator(".marker").first();
+    await marker.waitFor();
+    const touch = await context.newCDPSession(page);
+    async function swipe(x, y, dx, dy) {
+      await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{x,y}] });
+      for (let i = 1; i <= 8; i++) {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchMove", touchPoints: [{ x:x+dx*i/8, y:y+dy*i/8 }]
+        });
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
+    await page.evaluate(() => scrollTo(0, document.querySelector("#workspace").offsetTop-160));
+    let sheet = await frame.locator("#sheet").boundingBox();
+    const initial = await page.evaluate(() => scrollY);
+    await swipe(sheet.x+sheet.width*.88, sheet.y+sheet.height*.78, 0, -130);
+    await page.waitForFunction(y => scrollY > y+35, initial);
+    await page.evaluate(() => new Promise(resolve => {
+      let previous = scrollY, stable = 0;
+      function settled() {
+        stable = scrollY === previous ? stable+1 : 0;
+        previous = scrollY;
+        if (stable >= 6) resolve();
+        else requestAnimationFrame(settled);
+      }
+      requestAnimationFrame(settled);
+    }));
+    // Mouse-style selection must still let a finger drag a mark while a swipe on blank paper scrolls the article.
+    await marker.scrollIntoViewIfNeeded();
+    const pin = await marker.boundingBox();
+    const oldX = await marker.evaluate(el => parseFloat(el.style.left));
+    await swipe(pin.x+pin.width/2, pin.y+pin.height/2, 55, 20);
+    assert.ok(await marker.evaluate(el => parseFloat(el.style.left)) > oldX+25);
+    await frame.locator("button[data-tool=pen]").click();
+    sheet = await frame.locator("#sheet").boundingBox();
+    const paths = frame.locator("#marks [data-id]");
+    const count = await paths.count();
+    const top = await page.evaluate(() => scrollY);
+    await swipe(sheet.x+sheet.width*.66, sheet.y+sheet.height*.27, 35, -26);
+    await paths.nth(count).waitFor({ state: "attached", timeout: 5000 });
+    assert.equal(await page.evaluate(() => scrollY), top);
+  } finally {
+    await context.close();
+  }
+}
+
 let browser;
 try {
   browser = await chromium.launch(browserOptions);
@@ -68,6 +123,7 @@ try {
     await page.keyboard.press("Tab");
     assert.equal(await page.locator(":focus").getAttribute("href"), "#main");
     await page.keyboard.press("Enter");
+    await page.waitForURL(url => url.hash === "#main");
     assert.equal(new URL(page.url()).hash, "#main");
     const frame = page.frameLocator("#review");
     await frame.locator(".marker").first().waitFor();
@@ -89,6 +145,7 @@ try {
     }
     await page.setViewportSize({ width: 1200, height: 850 });
     await page.locator("header a[href='#workspace']").click();
+    await page.waitForURL(url => url.hash === "#workspace");
     if (await frame.locator("#card").isVisible()) await frame.locator("#close-card").click();
     await frame.locator(".marker").first().click();
     await frame.locator("#note-title").fill("Revised plate");
@@ -164,6 +221,7 @@ try {
     assert.deepEqual(errors, []);
     await context.close();
   }
+  await checkEmbeddedTouch(browser);
   for (const storageBlocked of [false, true]) {
     const context = await browser.newContext({ locale: "de-AT" });
     if (storageBlocked) await context.addInitScript(() => {

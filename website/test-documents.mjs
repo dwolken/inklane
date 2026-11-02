@@ -1,3 +1,4 @@
+import { checkPdfReview, checkImageReview, checkPrintRange } from "./test-print-review.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -44,13 +45,20 @@ export async function verifyDocuments(browser, base, output) {
     await page.locator("#book-title").fill("Undo checkpoint");
     await page.locator("#paper-form button.primary").click();
     await click("add-page");
-    await page.waitForFunction(async () => (await (await import("./drafts.js")).listDrafts()).some(d => d.name === "Undo checkpoint"));
+    await page.waitForFunction(async () =>
+      (await (await import("./drafts.js")).listDrafts()).some((d) => d.name === "Undo checkpoint")
+    );
     await click("undo");
     await more("home");
     await visible("new-notebook");
     await page.reload();
     await visible("new-notebook");
-    assert.equal(await page.evaluate(async () => (await (await import("./drafts.js")).listDrafts()).some(d => d.name === "Undo checkpoint")), false);
+    assert.equal(
+      await page.evaluate(async () =>
+        (await (await import("./drafts.js")).listDrafts()).some((d) => d.name === "Undo checkpoint")
+      ),
+      false
+    );
     await click("new-notebook");
     await page.locator("#book-title").fill("Field corrections");
     await page.locator("#paper-size").selectOption("A5");
@@ -94,7 +102,9 @@ export async function verifyDocuments(browser, base, output) {
         const result = append.apply(this, nodes);
         for (const n of nodes)
           if (n instanceof HTMLIFrameElement && n.className === "print-frame")
-            n.contentWindow.print = () => {};
+            n.contentWindow.print = () => {
+              n.contentDocument.body.dataset.printRequested = "true";
+            };
         return result;
       };
     });
@@ -198,6 +208,17 @@ export async function verifyDocuments(browser, base, output) {
     await page.locator(".marker").click();
     assert.equal(await page.locator("#note-body").inputValue(), "Set this label to 1 cm.");
     await page.screenshot({ path: resolve(output, "workspace-pdf.png") });
+    await checkPdfReview({ page, context, base, output, layer });
+    await page.locator("#undo").click();
+    await checkImageReview({ page, context, base, output, open, writeNote });
+    await checkPrintRange({
+      page,
+      context,
+      base,
+      output,
+      open,
+      file: fileURLToPath(new URL("./fixtures/print-range.pdf", import.meta.url))
+    });
     await more("home");
     await visible("start");
     await page.screenshot({ path: resolve(output, "workspace-library.png") });

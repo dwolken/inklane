@@ -57,6 +57,8 @@ Tool shortcuts apply outside text entry. Appearance follows Windows by default. 
 
 ## Files and compatibility
 
+**Send a review to someone without Inklane.** In the browser, choose **More actions → Print review**, then save as PDF or print. The copy shows the original page with its marks, followed by each numbered remark in full. For an editable handoff, send a portable workspace instead.
+
 **Review a PDF or Office document in the development build.** Open a PDF on Home and mark its pages. Save keeps your work next to the original as `filename.pdf.inklane.json`. Share both files with another Inklane user to continue editing. Export a marked page as PNG or print it to share its visible marks. A general PDF keeps its original pages, forms and annotations in the source file.
 
 For DOCX or PPTX, open the Office file and choose its matching PDF export. With LibreOffice in a standard Windows installation folder, **Create PDF copy** can also render supported self-contained files locally. Use an export from Word or PowerPoint for layout-sensitive files or documents with links and fields. Pick a new PDF filename for each revision. Inklane remembers the file pair on this computer and checks both fingerprints when you reopen the Office file. Annotations stay with the reviewed page or slide.
