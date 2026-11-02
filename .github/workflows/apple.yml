@@ -1,0 +1,53 @@
+name: Apple workspaces
+
+on:
+  push:
+    branches: [main]
+    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+  pull_request:
+    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    name: ${{ matrix.platform }} workspace
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macOS, iOS]
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Bundle the locked local workspace
+        run: |
+          npm ci --prefix website --ignore-scripts --no-audit
+          python3 website/build.py --workspace-only --output platforms/apple/Workspace
+      - name: Select an available iPhone simulator
+        if: matrix.platform == 'iOS'
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          runtimes = json.loads(subprocess.check_output(["xcrun","simctl","list","devices","available","-j"]))["devices"]
+          versions = sorted((key for key in runtimes if ".iOS-" in key),
+                            key=lambda k: tuple(map(int,k.split(".iOS-")[1].split("-"))), reverse=True)
+          phones = (d for v in versions for d in runtimes[v] if d["name"].startswith("iPhone") and d.get("isAvailable"))
+          device = next(phones)
+          print("Testing on", device["name"], device["udid"], flush=True)
+          if device["state"] != "Booted":
+              subprocess.run(["xcrun","simctl","boot",device["udid"]],check=True)
+          subprocess.run(["xcrun","simctl","bootstatus",device["udid"],"-b"],check=True,timeout=240)
+          with open(os.environ["GITHUB_ENV"],"a") as env:
+              env.write("APPLE_DEST=platform=iOS Simulator,id=" + device["udid"] + "\n")
+          PY
+      - name: Run the bundled application and exercise its document workflow
+        run: |
+          xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme Inklane \
+            -destination "${APPLE_DEST:-platform=macOS}" -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/workspace.xcresult" CODE_SIGN_IDENTITY=- test

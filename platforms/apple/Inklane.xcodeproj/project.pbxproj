@@ -1,0 +1,317 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		BA0000000000000000000010 /* Sources/Workspace.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "Sources/Workspace.swift";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000011 /* Sources/WorkspaceServer.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "Sources/WorkspaceServer.swift";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000012 /* Sources/FileExport.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "Sources/FileExport.swift";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000013 /* Sources/NativeSave.js */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.javascript;
+			path = "Sources/NativeSave.js";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000014 /* Workspace */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = folder;
+			path = "Workspace";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000015 /* Tests/WorkspaceTests.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = "Tests/WorkspaceTests.swift";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000016 /* Resources/Info.plist */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = "Resources/Info.plist";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000017 /* Resources/macOS.entitlements */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.entitlements;
+			path = "Resources/macOS.entitlements";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000018 /* Resources/Assets.xcassets */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = folder.assetcatalog;
+			path = "Resources/Assets.xcassets";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000019 /* Resources/en.lproj/Localizable.strings */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.strings;
+			name = en;
+			path = "Resources/en.lproj/Localizable.strings";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000020 /* Resources/de.lproj/Localizable.strings */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.strings;
+			name = de;
+			path = "Resources/de.lproj/Localizable.strings";
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000021 /* Inklane.app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			path = Inklane.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		BA0000000000000000000022 /* InklaneTests.xctest */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.cfbundle;
+			path = InklaneTests.xctest;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		BA0000000000000000000110 /* Sources/Workspace.swift */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000010;
+		};
+		BA0000000000000000000111 /* Sources/WorkspaceServer.swift */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000011;
+		};
+		BA0000000000000000000112 /* Sources/FileExport.swift */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000012;
+		};
+		BA0000000000000000000113 /* Sources/NativeSave.js */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000013;
+		};
+		BA0000000000000000000114 /* Workspace */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000014;
+		};
+		BA0000000000000000000115 /* Tests/WorkspaceTests.swift */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000015;
+		};
+		BA0000000000000000000118 /* Resources/Assets.xcassets */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000018;
+		};
+		BA0000000000000000000151 /* Localization */ = {
+			isa = PBXBuildFile; fileRef = BA0000000000000000000051;
+		};
+		BA0000000000000000000051 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (BA0000000000000000000019, BA0000000000000000000020,);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000030 /* Main group */ = {
+			isa = PBXGroup;
+			children = (BA0000000000000000000010, BA0000000000000000000011, BA0000000000000000000012, BA0000000000000000000013, BA0000000000000000000014, BA0000000000000000000015, BA0000000000000000000016, BA0000000000000000000017, BA0000000000000000000018, BA0000000000000000000051, BA0000000000000000000031,);
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000031 /* Products */ = {
+			isa = PBXGroup;
+			children = (BA0000000000000000000021, BA0000000000000000000022,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BA0000000000000000000032 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (BA0000000000000000000110, BA0000000000000000000111, BA0000000000000000000112,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA0000000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (BA0000000000000000000113, BA0000000000000000000114, BA0000000000000000000118, BA0000000000000000000151,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA0000000000000000000034 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA0000000000000000000035 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (BA0000000000000000000115,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA0000000000000000000036 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA0000000000000000000037 /* Inklane */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA0000000000000000000043;
+			buildPhases = (BA0000000000000000000032, BA0000000000000000000034, BA0000000000000000000033,);
+			buildRules = (); dependencies = ();
+			name = Inklane; productName = Inklane;
+			productReference = BA0000000000000000000021;
+			productType = "com.apple.product-type.application";
+		};
+		BA0000000000000000000038 /* InklaneTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA0000000000000000000044;
+			buildPhases = (BA0000000000000000000035, BA0000000000000000000036,);
+			buildRules = (); dependencies = (BA0000000000000000000040,);
+			name = InklaneTests; productName = InklaneTests;
+			productReference = BA0000000000000000000022;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BA0000000000000000000039 /* Target proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BA0000000000000000000001;
+			proxyType = 1;
+			remoteGlobalIDString = BA0000000000000000000037;
+			remoteInfo = Inklane;
+		};
+		BA0000000000000000000040 /* Inklane dependency */ = {
+			isa = PBXTargetDependency;
+			target = BA0000000000000000000037;
+			targetProxy = BA0000000000000000000039;
+		};
+		BA0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = { LastUpgradeCheck = 1630; BuildIndependentTargetsInParallel = YES; TargetAttributes = { BA0000000000000000000038 = { TestTargetID = BA0000000000000000000037; }; }; };
+			buildConfigurationList = BA0000000000000000000042;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, de, Base);
+			mainGroup = BA0000000000000000000030;
+			productRefGroup = BA0000000000000000000031;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (BA0000000000000000000037, BA0000000000000000000038,);
+		};
+		BA0000000000000000000042 /* Configuration list */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (BA0000000000000000000060, BA0000000000000000000061,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BA0000000000000000000043 /* Configuration list */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (BA0000000000000000000062, BA0000000000000000000063,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BA0000000000000000000044 /* Configuration list */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (BA0000000000000000000064, BA0000000000000000000065,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BA0000000000000000000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"ALWAYS_SEARCH_USER_PATHS" = "NO";
+				"CLANG_ENABLE_MODULES" = "YES";
+				"CLANG_ENABLE_OBJC_ARC" = "YES";
+				"IPHONEOS_DEPLOYMENT_TARGET" = "17.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator macosx";
+				"SDKROOT" = "auto";
+				"SWIFT_VERSION" = "5.0";
+				"ENABLE_USER_SCRIPT_SANDBOXING" = "YES";
+				"TARGETED_DEVICE_FAMILY" = "1,2";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"ENABLE_TESTABILITY" = "YES";
+				"GCC_OPTIMIZATION_LEVEL" = "0";
+				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf";
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG";
+			};
+			name = Debug;
+		};
+		BA0000000000000000000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"ALWAYS_SEARCH_USER_PATHS" = "NO";
+				"CLANG_ENABLE_MODULES" = "YES";
+				"CLANG_ENABLE_OBJC_ARC" = "YES";
+				"IPHONEOS_DEPLOYMENT_TARGET" = "17.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SUPPORTED_PLATFORMS" = "iphoneos iphonesimulator macosx";
+				"SDKROOT" = "auto";
+				"SWIFT_VERSION" = "5.0";
+				"ENABLE_USER_SCRIPT_SANDBOXING" = "YES";
+				"TARGETED_DEVICE_FAMILY" = "1,2";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_COMPILATION_MODE" = "wholemodule";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf-with-dsym";
+			};
+			name = Release;
+		};
+		BA0000000000000000000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"PRODUCT_NAME" = "Inklane";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.dwolken.Inklane";
+				"INFOPLIST_FILE" = "Resources/Info.plist";
+				"CURRENT_PROJECT_VERSION" = "1";
+				"MARKETING_VERSION" = "0.1.0";
+				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Resources/macOS.entitlements";
+			};
+			name = Debug;
+		};
+		BA0000000000000000000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"PRODUCT_NAME" = "Inklane";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.dwolken.Inklane";
+				"INFOPLIST_FILE" = "Resources/Info.plist";
+				"CURRENT_PROJECT_VERSION" = "1";
+				"MARKETING_VERSION" = "0.1.0";
+				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Resources/macOS.entitlements";
+			};
+			name = Release;
+		};
+		BA0000000000000000000064 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"PRODUCT_NAME" = "InklaneTests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.dwolken.Inklane.Tests";
+				"GENERATE_INFOPLIST_FILE" = "YES";
+				"BUNDLE_LOADER" = "$(TEST_HOST)";
+				"TEST_HOST[sdk=iphone*]" = "$(BUILT_PRODUCTS_DIR)/Inklane.app/Inklane";
+				"TEST_HOST[sdk=macosx*]" = "$(BUILT_PRODUCTS_DIR)/Inklane.app/Contents/MacOS/Inklane";
+				"LD_RUNPATH_SEARCH_PATHS" = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+			};
+			name = Debug;
+		};
+		BA0000000000000000000065 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"PRODUCT_NAME" = "InklaneTests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.dwolken.Inklane.Tests";
+				"GENERATE_INFOPLIST_FILE" = "YES";
+				"BUNDLE_LOADER" = "$(TEST_HOST)";
+				"TEST_HOST[sdk=iphone*]" = "$(BUILT_PRODUCTS_DIR)/Inklane.app/Inklane";
+				"TEST_HOST[sdk=macosx*]" = "$(BUILT_PRODUCTS_DIR)/Inklane.app/Contents/MacOS/Inklane";
+				"LD_RUNPATH_SEARCH_PATHS" = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+			};
+			name = Release;
+		};
+	};
+	rootObject = BA0000000000000000000001;
+}
