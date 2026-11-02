@@ -996,7 +996,14 @@ header {
   box-shadow: none;
 }
 .embedded #viewport {
+  overscroll-behavior: auto;
   background: #efece5;
+}
+.embedded #sheet[data-tool="select"] {
+  touch-action: pan-y;
+}
+.embedded #sheet[data-tool="select"] [data-id] {
+  touch-action: none;
 }
 .embedded #hint {
   font-size: 12px;
@@ -1096,4 +1103,26 @@ body:has(dialog[open]) {
   border-radius: 7px;
   background: var(--paper);
   color: var(--fg);
+}
+#print-form {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+#print-form label {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--muted);
+}
+#print-range {
+  font: inherit;
+  padding: 8px;
+  background: var(--paper);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+#print-limit {
+  margin: 0;
+  max-width: 32ch;
 }
