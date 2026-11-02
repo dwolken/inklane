@@ -10,7 +10,7 @@ const dist = resolve(process.argv[2] ?? ".scratch/website/inklane"),
   output = resolve(process.argv[3] ?? ".scratch/browser-editor-qa/out");
 const require = createRequire(import.meta.url);
 const base = "/inklane/";
-const types = {
+const types = { ".mjs": "application/javascript", ".wasm": "application/wasm",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript",
   ".css": "text/css",
@@ -423,6 +423,7 @@ try {
     assert.equal(copy.doc.sourceImagePath, basename(source));
     await page.screenshot({ path: resolve(output, "native-" + basename(source) + ".png") });
   }
+  await (await import("./test-documents.mjs")).verifyDocuments(browser,origin + base,output);
   console.log(
     "Browser editor passed image/sidecar round trip, real file write and conflict protection, editing history, wrong-file refusal, mobile layout and accessibility checks."
   );

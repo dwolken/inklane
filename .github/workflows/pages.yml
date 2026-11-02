@@ -3,9 +3,9 @@ name: Product website
 on:
   push:
     branches: [main]
-    paths: ['website/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
+    paths: ['website/**', 'brand/motion/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
   pull_request:
-    paths: ['website/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
+    paths: ['website/**', 'brand/motion/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
   # A release published with GITHUB_TOKEN does not trigger another release event.
   # Completing a tagged Windows build refreshes the download from trusted main.
   workflow_run:
@@ -14,6 +14,12 @@ on:
   workflow_dispatch:
 
 permissions: {}
+
+# Superseded pull-request builds do not need a second browser runner. Main
+# deployments and release-triggered refreshes keep their own run and artifact.
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -32,6 +38,8 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - name: Install locked browser dependencies
+        run: npm ci --prefix website --ignore-scripts --no-audit
       - name: Build static site from the published installer
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -39,9 +47,9 @@ jobs:
       - name: Verify desktop and mobile journeys in Chrome
         id: verify
         run: |
-          npm ci --prefix website --ignore-scripts --no-audit
           node website/test.mjs .scratch/pages/inklane
           node website/test-editor.mjs .scratch/pages/inklane
+          INKLANE_INSTALL_CHECK=1 xvfb-run -a node website/test-platform.mjs .scratch/pages/inklane
           echo "digest=$(sha256sum .scratch/pages/inklane/index.html | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - name: Package the tested site
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -49,9 +57,31 @@ jobs:
         with:
           path: .scratch/pages/inklane
 
+  apple-browser:
+    needs: build
+    # Exercise Intel WebKit as well as the Apple Silicon native workspace jobs.
+    runs-on: macos-15-intel
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Build the standalone workspace
+        run: |
+          npm ci --prefix website --ignore-scripts --no-audit
+          python3 website/build.py --workspace-only --output .scratch/pages/inklane
+      - name: Exercise PDF import and offline reopening in WebKit
+        env:
+          INKLANE_ENGINE: webkit
+        run: |
+          website/node_modules/.bin/playwright-core install webkit
+          node website/test-platform.mjs .scratch/pages/inklane
+
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, apple-browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:

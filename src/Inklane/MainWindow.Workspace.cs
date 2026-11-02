@@ -225,6 +225,7 @@ public sealed partial class MainWindow
         }
         else Command(menu,_document.Kind == DocumentKind.Pdf ? "BrowsePages" : "BrowseFolder",BrowsePositions);
         menu.Items.Add(new Separator());
+        if (_document.Kind == DocumentKind.Notebook) Command(menu,"ExportPortable",ExportPortableNotebook);
         Command(menu,"ExportFeedback",ExportFeedback).ToolTip = L.T("FeedbackHint");
         Command(menu,"ExportImage",ExportImage); Command(menu,"ExportJson",ExportJson);
         Command(menu,"Print",Print,"Ctrl+P");

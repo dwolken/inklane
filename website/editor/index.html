@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; font-src 'self' blob: data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="color-scheme" content="light dark" />
-    <title>Inklane · Image workspace</title>
+    <title>Inklane · Workspace</title>
     <link rel="icon" href="../assets/inklane.svg" />
     <link rel="stylesheet" href="editor.css" />
     <script type="module" src="editor.js"></script>
@@ -33,10 +33,16 @@
             <svg viewBox="0 0 24 24"><path d="M4 12h1m6.5 0h1m6.5 0h1" /></svg>
           </summary>
           <div class="menu">
-            <button id="index" disabled data-i="index">Browse annotations</button
+            <button id="home" data-i="home">Documents</button
+            ><button id="new-sheet" data-i="create">New notebook</button>
+            <button id="rename-book" hidden data-i="rename"></button
+            ><button id="index" disabled data-i="index">Browse annotations</button
             ><button id="download" disabled data-i="download">Download annotation copy</button
             ><button id="feedback" disabled data-i="feedback">Export feedback…</button
-            ><button id="shortcuts" data-i="guide">How to use the workspace</button
+            ><button id="portable" disabled data-i="portable">Save portable copy…</button
+            ><button id="whole-page" disabled data-i="fitPage"></button
+            ><button id="print" disabled data-i="print">Print notebook…</button>
+            <button id="shortcuts" data-i="guide">How to use the workspace</button
             ><button id="language"></button>
           </div>
         </details>
@@ -44,15 +50,32 @@
     </header>
     <main id="work">
       <section id="welcome">
-        <img src="../assets/inklane.svg" width="48" height="48" alt="" />
-        <p class="eyebrow" data-i="workspace">Image workspace</p>
-        <h1 data-i="welcome">Mark up an image</h1>
-        <p data-i="intro">Draw, place text or pin a longer note to a detail.</p>
-        <button class="primary" id="start" data-i="choose">Choose an image</button>
-        <p class="muted" data-i="reopen">
-          To reopen saved work, choose the image and its .inklane.json file together.
-        </p>
-        <small data-i="local">Files stay on this device.</small>
+        <div class="welcome-lead">
+          <span class="library-mark" aria-hidden="true"
+            ><svg viewBox="0 0 48 48"><path d="M8 12h24v27H8zM15 6h24v27M14 21h11m-11 5h7" /></svg
+          ></span>
+          <h1 data-i="home">Documents</h1>
+          <p data-i="intro">Open a document to review, or start on fresh paper.</p>
+        </div>
+        <div class="launch-grid">
+          <button id="start" class="launch">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M3 18V5h7l3 3h8v3M3 18l3-8h16l-3 9H3z" /></svg
+            ><strong data-i="choose">Open document</strong
+            ><small data-i="supported">PDF, PNG, JPEG or Inklane</small>
+          </button>
+          <button id="new-notebook" class="launch">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M5 4h14v16H5zM8 4v16m3-9h5m-2.5-2.5v5" /></svg
+            ><strong data-i="create">New notebook</strong
+            ><small data-i="paperTypes">Blank, ruled or squared paper</small>
+          </button>
+        </div>
+        <section id="recent" hidden>
+          <h2 data-i="recent">On this device</h2>
+          <div id="draft-list"></div>
+        </section>
+        <button id="sample-link" class="sample-link" data-i="openSample">Open the field guide</button>
       </section>
       <div id="tools" class="tools" role="group" data-label="tools" hidden></div>
       <section id="viewport" tabindex="0" data-label="surface" hidden>
@@ -91,6 +114,12 @@
           <option value="5">5 px</option>
         </select>
       </div>
+      <div id="pages" hidden>
+        <button id="prev-page" class="icon" data-label="prev">‹</button
+        ><button id="page-count" data-label="goto">1 / 1</button
+        ><button id="next-page" class="icon" data-label="next">›</button
+        ><button id="add-page" class="icon" data-label="addPage">+</button>
+      </div>
       <span id="hint"></span>
       <div class="actions">
         <button id="edit" data-i="edit" hidden>Edit</button
@@ -99,13 +128,84 @@
         <button id="undo" class="icon" data-label="undo">↶</button
         ><button id="redo" class="icon" data-label="redo">↷</button>
       </div>
+      <button id="keep-sample" data-i="keep">Keep a copy</button>
       <div class="zoom">
         <button id="minus" class="icon" data-label="out">−</button
         ><button id="fit" data-label="fit">100%</button
         ><button id="plus" class="icon" data-label="in">+</button>
       </div>
     </footer>
-    <input id="files" type="file" accept=".png,.jpg,.jpeg,.json" multiple hidden />
+    <input id="files" type="file" accept=".png,.jpg,.jpeg,.pdf,.json,.inklane" multiple hidden />
+    <dialog id="new-document" aria-labelledby="new-heading">
+      <form id="paper-form">
+        <h2 id="new-heading" data-i="create"></h2>
+        <label
+          ><span data-i="notebookName"></span
+          ><input id="book-title" maxlength="160" required autocomplete="off"
+        /></label>
+        <div class="form-row">
+          <label
+            ><span data-i="sizeLabel"></span
+            ><select id="paper-size">
+              <option>A4</option>
+              <option>A5</option>
+            </select></label
+          >
+          <label
+            ><span data-i="orientation"></span
+            ><select id="orientation">
+              <option value="portrait" data-i="portrait"></option>
+              <option value="landscape" data-i="landscape"></option></select
+          ></label>
+        </div>
+        <label
+          ><span data-i="paper"></span
+          ><select id="pattern">
+            <option value="Blank" data-i="blank"></option>
+            <option value="Ruled" data-i="ruled"></option>
+            <option value="Squared" data-i="squared"></option></select
+        ></label>
+        <label id="spacing-row" hidden
+          ><span data-i="spacing"></span
+          ><select id="spacing">
+            <option value="5">5 mm</option>
+            <option value="10">10 mm</option>
+            <option value="custom" data-i="custom"></option></select
+        ></label>
+        <label id="custom-spacing-row" hidden
+          ><span data-i="customSpacing"></span
+          ><input id="custom-spacing" type="number" min="1" max="100" step="any" value="7"
+        /></label>
+        <div class="relink-actions">
+          <button type="button" id="cancel-new" data-i="cancel"></button
+          ><button class="primary" data-i="createBook"></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="page-list" aria-labelledby="pages-heading">
+      <div class="dialog-top">
+        <h2 id="pages-heading" data-i="pages"></h2>
+        <form method="dialog"><button class="icon" data-label="done">×</button></form>
+      </div>
+      <div id="page-choices"></div>
+      <div id="page-manage" hidden>
+        <button data-page-action="back" data-i="moveBack"></button
+        ><button data-page-action="forward" data-i="moveForward"></button
+        ><button data-page-action="copy" data-i="copyPage"></button
+        ><button data-page-action="remove" data-i="deletePage"></button>
+      </div>
+    </dialog>
+    <dialog id="rename" aria-labelledby="rename-heading">
+      <form id="rename-form">
+        <h2 id="rename-heading" data-i="rename"></h2>
+        <label for="rename-title" data-i="notebookName"></label
+        ><input id="rename-title" maxlength="160" required />
+        <div class="relink-actions">
+          <button type="button" id="cancel-rename" data-i="cancel"></button
+          ><button class="primary" data-i="done"></button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="picture-size">
       <form id="size-form">
         <h2 data-i="resize"></h2>
@@ -143,8 +243,6 @@
       <p data-i="helpSave"></p>
       <form method="dialog"><button class="primary" data-i="done">Done</button></form>
     </dialog>
-    <noscript
-      >This local image editor requires JavaScript. Der lokale Bildeditor benötigt JavaScript.</noscript
-    >
+    <noscript>Inklane requires JavaScript. Inklane benötigt JavaScript.</noscript>
   </body>
 </html>

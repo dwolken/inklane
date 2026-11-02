@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#faf9f6">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1b22" media="(prefers-color-scheme: dark)">
   <title>$page_title</title>
   <meta name="description" content="$description">
   <link rel="canonical" href="$canonical">
@@ -30,97 +32,76 @@
 </head>
 <body>
   <a class="skip" href="#main">$skip</a>
-  <header class="masthead wrap">
-    <a href="#main" class="brand" aria-label="$home_label"><img src="${base}assets/inklane.svg" width="34" height="34" alt="">Inklane</a>
+  <header class="topbar wrap">
+    <a class="brand" href="#main" aria-label="$home_label"><img src="${base}assets/inklane.svg" width="33" height="33" alt="">Inklane</a>
     <nav aria-label="$navigation">
       <a href="#workspace">$workspace</a>
-      <a href="#download">$install</a>
-      <a class="language" href="$other_url" hreflang="$other_lang" lang="$other_lang" data-language-link>$other_label</a>
+      <a class="desktop-link" href="#download">Windows</a>
+      <a class="lang-link" href="$other_url" hreflang="$other_lang" lang="$other_lang" data-language-link>$other_label</a>
     </nav>
   </header>
   <main id="main">
-    <section class="hero wrap" aria-labelledby="intro">
-      <div class="hero-copy">
-        <p class="kicker"><span class="rule"></span>$hero_label</p>
-        <h1 id="intro">$headline <em>$headline_accent</em></h1>
-        <p class="lead">$hero_text</p>
-        <div class="actions"><a class="button" href="$installer">$download_icon $download</a><a class="link" href="${base}editor/?lang=$lang">$open_editor $arrow_icon</a></div>
-        <p class="release-line">$windows <span>·</span> $status $version</p>
+    <section class="intro wrap" aria-labelledby="headline">
+      <h1 id="headline">$headline <span>$headline_accent</span></h1>
+      <div class="intro-body">
+        <p>$hero_text</p>
+        <div class="actions">
+          <a class="button solid" href="${base}editor/?lang=$lang">$open_editor $arrow_icon</a>
+          <a class="button quiet" href="#download">$get_windows</a>
+        </div>
       </div>
-      <figure class="hero-figure">
-        <a class="plate" href="${base}assets/notebook.png" aria-label="$notebook_zoom">
-          <img class="shot" src="${base}assets/notebook.png" width="1484" height="952" fetchpriority="high" alt="$notebook_alt">
-        </a>
-        <figcaption><span class="fig-no">01</span><span>$notebook_caption</span><a href="${base}assets/notebook.png" aria-label="$notebook_zoom">$expand_icon</a></figcaption>
-      </figure>
     </section>
-
-    <section class="workspace wrap" id="workspace" aria-labelledby="workspace-heading">
-      <div class="section-title"><p class="kicker"><span class="rule"></span>$workspace</p><h2 id="workspace-heading">$workspace_heading</h2></div>
-      <div class="spread">
-        <figure>
-          <a class="image-wrap" href="${base}assets/image.png" aria-label="$image_zoom"><img class="shot" src="${base}assets/image.png" width="1484" height="952" loading="lazy" alt="$image_alt"></a>
-          <figcaption><span class="fig-no">02</span><span>$image_caption</span><a href="${base}assets/image.png" aria-label="$image_zoom">$expand_icon</a></figcaption>
-        </figure>
-        <div class="marginalia">
-          <h3>$image_heading</h3><p>$image_body</p>
+    <section class="studio wrap" id="workspace" aria-label="$sample_heading">
+      <div class="stage" id="stage">
+        <div class="stage-bar">
+          <h2><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h4"/></svg>$sample_name</h2>
+          <button class="expand" id="expand" type="button" hidden data-enter="$expand" data-exit="$reduce" aria-pressed="false" aria-controls="stage">$expand_icon <span>$expand</span></button>
         </div>
+        <template id="workspace-template">
+          <iframe id="review" src="${base}editor/?sample=review&amp;embed=1&amp;lang=$lang" title="$sample_heading" allowfullscreen></iframe>
+        </template>
+        <noscript><a class="fallback" href="${base}assets/field-guide-$lang.png"><img src="${base}assets/field-guide-$lang.png" width="1160" height="680" alt="$sample_alt"></a>
+          <p>$script_notice</p></noscript>
       </div>
-      <div class="note-study" id="notes">
-        <div class="study-copy">
-          <p class="kicker"><span class="rule"></span>$demo_label</p>
-          <h2>$note_heading</h2><p>$demo_intro</p>
-          <p class="study-foot">$demo_ephemeral</p>
-          <a class="link" href="${base}editor/?lang=$lang">$own_image $arrow_icon</a>
+      <div class="workspace-foot">
+        <p>$local_note</p>
+        <a href="${repo}#files-and-compatibility">$file_guide $arrow_icon</a>
+      </div>
+    </section>
+    <section id="download" class="desktop" aria-labelledby="download-heading">
+      <div class="desktop-inner wrap">
+        <div class="desktop-copy">
+          <h2 id="download-heading">$desktop_heading</h2>
+          <p>$desktop_text</p>
+          <a class="button download" href="$installer">$download_icon $download</a>
+          <p class="version"><span>Windows 11 x64</span><span>$status $version</span></p>
+          <p class="publisher">$signing <a href="$release_url">$release_details</a></p>
         </div>
-        <figure>
-          <div class="sample-board">
-            <img class="plan" src="${base}assets/courtyard.svg" width="600" height="300" alt="$demo_alt">
-            <details class="sample-detail first" name="courtyard-note">
-              <summary class="sample-pin"><b aria-hidden="true">1</b><span class="visually-hidden">$demo_one</span></summary>
-              <div class="sample-card"><label for="note-one"><span>01</span> $demo_one</label><textarea id="note-one" rows="3" maxlength="1600">$demo_one_body</textarea></div>
-            </details>
-            <details class="sample-detail second" name="courtyard-note">
-              <summary class="sample-pin"><b aria-hidden="true">2</b><span class="visually-hidden">$demo_two</span></summary>
-              <div class="sample-card"><label for="note-two"><span>02</span> $demo_two</label><textarea id="note-two" rows="3" maxlength="1600">$demo_two_body</textarea></div>
-            </details>
+        <div class="desktop-preview">
+          <div class="desktop-switch" role="group" aria-label="$views">
+            <a class="view-choice" data-view="notebook" href="${base}assets/notebook.png" data-image-alt="$notebook_alt">$notebook</a>
+            <a class="view-choice" data-view="image" href="${base}assets/image.png" data-image-alt="$image_alt">$images</a>
           </div>
-          <figcaption><span class="fig-no">↳</span>$demo_caption</figcaption>
-        </figure>
-      </div>
-      <div class="paper">
-        <div class="paper-copy">
-          <p class="kicker"><span class="rule"></span>$paper_label</p>
-          <h2>$paper_heading</h2><p>$paper_body</p>
-          <p>$paper_export</p>
-          <a class="link" href="$repo#two-ways-to-work">$read_guide $arrow_icon</a>
+          <a class="screenshot" href="${base}assets/notebook.png" aria-label="$view_full">
+            <img id="desktop-shot" src="${base}assets/notebook.png" width="1484" height="952" loading="lazy" alt="$notebook_alt">
+            <span aria-hidden="true">$expand_icon</span>
+          </a>
         </div>
-        <figure class="paper-figure">
-          <a class="paper-frame" href="${base}assets/paper.png" aria-label="$paper_zoom"><img class="shot" src="${base}assets/paper.png" width="747" height="552" loading="lazy" alt="$paper_alt"></a>
-          <figcaption><span class="fig-no">03</span><span>$paper_caption</span><a href="${base}assets/paper.png" aria-label="$paper_zoom">$expand_icon</a></figcaption>
-        </figure>
       </div>
     </section>
-
-    <section class="download" id="download" aria-labelledby="download-heading"><div class="download-inner wrap">
-      <div class="release-copy"><p class="kicker"><span class="rule"></span>$download_label</p>
-        <h2 id="download-heading">$download_heading</h2>
-        <p>$install_text</p>
-        <a class="button" href="$installer">$download_icon $download</a>
-        <a class="release-link" href="$release_url">$release_details $arrow_icon</a>
-      </div>
-      <div class="specs">
-        <dl>
-          <div><dt>$version_label</dt><dd>$version <span class="badge">$status</span></dd></div>
-          <div><dt>$system_label</dt><dd>Windows 11 · x64</dd></div>
-          <div><dt>$language_label</dt><dd>$app_languages</dd></div>
-        </dl>
-        <p>$signing</p>
-      </div>
-    </div></section>
   </main>
-  <footer class="wrap"><a class="brand" href="#main"><img src="${base}assets/inklane.svg" width="28" height="28" alt="">Inklane</a>
-    <nav aria-label="$footer_nav"><a href="$repo">$source</a><a href="${repo}/releases">$releases</a><a href="${repo}#readme">$guide</a></nav>
+  <footer class="wrap">
+    <a class="brand" href="#main"><img src="${base}assets/inklane.svg" width="27" height="27" alt="">Inklane</a>
+    <nav aria-label="$footer_nav">
+      <a id="motion-link" href="${base}assets/inklane-sting.mp4"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4.5 2.5 13 8l-8.5 5.5z"/></svg>$motion</a>
+      <a href="$repo">GitHub</a><a href="${repo}/releases">$releases</a><a href="${repo}#readme">$guide</a>
+    </nav>
   </footer>
+  <dialog id="motion" aria-labelledby="motion-title">
+    <div class="movie-bar"><h2 id="motion-title">$motion</h2>
+      <button id="motion-close" type="button" aria-label="$close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </div>
+    <video playsinline controls preload="none" aria-labelledby="motion-title"></video>
+  </dialog>
 </body>
 </html>

@@ -13,9 +13,13 @@ public static class L
     internal static bool IsOpenProblem(string message) =>
         new[] { "PdfChanged", "PdfGeometry", "PdfTooLarge", "ImageChanged", "OfficeSizeLimit", "OfficeInvalid",
             "OfficeNeedsPdf", "OfficeOldCopy", "OfficeConvertUnsupported", "OfficeNewPdfOnly", "OfficeConvertTimeout",
-            "OfficeConvertFailed", "ReviewExportOnly", "UnsupportedPdf" }.Any(key => T(key) == message);
+            "OfficeConvertFailed", "ReviewExportOnly", "UnsupportedPdf", "PortableKind" }.Any(key => T(key) == message);
     private static readonly Dictionary<string, (string En, string De)> Strings = new()
     {
+        ["ExportPortable"] = ("Export portable notebook…", "Portables Notizbuch exportieren …"),
+        ["PortableFilter"] = ("Inklane workspace|*.inklane", "Inklane-Arbeitsmappe|*.inklane"),
+        ["PortableCollision"] = ("Choose an unused filename for this copy.", "Wählen Sie einen noch freien Dateinamen für diese Kopie."),
+        ["PortableKind"] = ("Open this image or PDF workspace in the browser. On Windows, open the original together with its annotation JSON.", "Öffnen Sie diese Bild- oder PDF-Arbeitsmappe im Browser. Unter Windows öffnen Sie das Original mit der zugehörigen JSON-Datei."),
         ["EditTextObject"] = ("Edit text", "Text bearbeiten"),
         ["OfficeReview"] = ("Review a fixed PDF copy", "Eine feste PDF-Kopie kommentieren"),
         ["CreateReviewPdf"] = ("Create PDF copy…", "PDF-Kopie erstellen…"),
@@ -98,7 +102,7 @@ public static class L
         ["UnexpectedError"] = ("Inklane encountered an unexpected error and needs to close. The latest recovery copy is kept; restart Inklane to restore it.", "Ein unerwarteter Fehler ist aufgetreten. Inklane muss geschlossen werden. Die letzte Wiederherstellungskopie bleibt erhalten; starten Sie Inklane erneut."),
         ["LanguageRestart"] = ("The language will change the next time Inklane starts.", "Die Sprache wird beim nächsten Start von Inklane geändert."),
         ["CollapseNote"] = ("Collapse note", "Notiz einklappen"), ["ExpandNote"] = ("Expand note", "Notiz ausklappen"), ["MoveItem"] = ("Move", "Verschieben"), ["DeleteItem"] = ("Delete", "Löschen"), ["PageCanvas"] = ("Document canvas", "Dokumentfläche"),
-        ["OpenFilter"] = ("Supported documents|*.pdf;*.docx;*.pptx;*.png;*.jpg;*.jpeg;*.json|PDF documents|*.pdf|Office documents (with PDF copy)|*.docx;*.pptx|Images|*.png;*.jpg;*.jpeg|Annotation data|*.json", "Unterstützte Dokumente|*.pdf;*.docx;*.pptx;*.png;*.jpg;*.jpeg;*.json|PDF-Dokumente|*.pdf|Office-Dateien (mit PDF-Kopie)|*.docx;*.pptx|Bilder|*.png;*.jpg;*.jpeg|Anmerkungsdaten|*.json"),
+        ["OpenFilter"] = ("Supported documents|*.pdf;*.docx;*.pptx;*.png;*.jpg;*.jpeg;*.json;*.inklane|Inklane workspace|*.inklane|PDF documents|*.pdf|Office documents (with PDF copy)|*.docx;*.pptx|Images|*.png;*.jpg;*.jpeg|Annotation data|*.json", "Unterstützte Dokumente|*.pdf;*.docx;*.pptx;*.png;*.jpg;*.jpeg;*.json;*.inklane|Inklane-Arbeitsmappe|*.inklane|PDF-Dokumente|*.pdf|Office-Dateien (mit PDF-Kopie)|*.docx;*.pptx|Bilder|*.png;*.jpg;*.jpeg|Anmerkungsdaten|*.json"),
         ["PdfFilter"] = ("PDF notebook|*.pdf", "PDF-Notizbuch|*.pdf"), ["JsonFilter"] = ("Inklane annotation data|*.json", "Inklane-Anmerkungsdaten|*.json"), ["PngFilter"] = ("PNG image|*.png", "PNG-Bild|*.png"),
         ["PenHint"] = ("Draw with your pen or mouse · Ctrl+wheel to zoom", "Mit Stift oder Maus zeichnen · Strg+Mausrad zum Zoomen"),
         ["SelectHint"] = ("Drag around ink to select · Drag a text or note handle to move", "Tinte durch Ziehen auswählen · Text und Notizen am Griff verschieben"),

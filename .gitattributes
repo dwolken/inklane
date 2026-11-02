@@ -1,0 +1,6 @@
+# Preserve checksummed document bytes and byte offsets on every host.
+*.pdf binary
+*.inklane binary
+*.mp4 binary
+*.png binary
+*.sh text eol=lf
