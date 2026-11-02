@@ -8,4 +8,4 @@
 - Keep temporary agent work in the git-ignored `.scratch/` directory; it is not authoritative project documentation.
 - Prefer maintainable, minimal solutions over unnecessary complexity.
 - Use meaningful Conventional Commits.
-- Keep the repository private.
+- The repository and GitHub Pages site are public. Keep user documents and local QA data out of commits.

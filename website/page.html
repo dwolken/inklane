@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="$lang">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#faf9f6">
+  <title>$page_title</title>
+  <meta name="description" content="$description">
+  <link rel="canonical" href="$canonical">
+  <link rel="alternate" hreflang="en" href="$site">
+  <link rel="alternate" hreflang="de" href="${site}de/">
+  <link rel="alternate" hreflang="x-default" href="$site">
+  <link rel="icon" type="image/svg+xml" href="${base}assets/inklane.svg">
+  <link rel="icon" sizes="32x32" href="${base}assets/inklane.ico">
+  <link rel="stylesheet" href="${base}assets/site.css">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Inklane">
+  <meta property="og:locale" content="$locale">
+  <meta property="og:title" content="$page_title">
+  <meta property="og:description" content="$description">
+  <meta property="og:url" content="$canonical">
+  <meta property="og:image" content="${site}assets/notebook.png">
+  <meta property="og:image:width" content="1484">
+  <meta property="og:image:height" content="952">
+  <meta property="og:image:alt" content="$notebook_alt">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">$structured_data</script>
+  <script src="${base}assets/language.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">$skip</a>
+  <header class="masthead wrap">
+    <a href="#main" class="brand" aria-label="$home_label"><img src="${base}assets/inklane.svg" width="34" height="34" alt="">Inklane</a>
+    <nav aria-label="$navigation">
+      <a href="#workspace">$workspace</a>
+      <a href="#download">$install</a>
+      <a class="language" href="$other_url" hreflang="$other_lang" lang="$other_lang" data-language-link>$other_label</a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="intro">
+      <div class="hero-copy">
+        <p class="kicker"><span class="rule"></span>$hero_label</p>
+        <h1 id="intro">$headline <em>$headline_accent</em></h1>
+        <p class="lead">$hero_text</p>
+        <div class="actions"><a class="button" href="$installer">$download_icon $download</a><a class="link" href="$repo">GitHub $arrow_icon</a></div>
+        <p class="release-line">$windows <span>·</span> $status $version</p>
+      </div>
+      <figure class="hero-figure">
+        <a class="plate" href="${base}assets/notebook.png" aria-label="$notebook_zoom">
+          <img class="shot" src="${base}assets/notebook.png" width="1484" height="952" fetchpriority="high" alt="$notebook_alt">
+        </a>
+        <figcaption><span class="fig-no">01</span><span>$notebook_caption</span><a href="${base}assets/notebook.png" aria-label="$notebook_zoom">$expand_icon</a></figcaption>
+      </figure>
+    </section>
+
+    <section class="workspace wrap" id="workspace" aria-labelledby="workspace-heading">
+      <div class="section-title"><p class="kicker"><span class="rule"></span>$workspace</p><h2 id="workspace-heading">$workspace_heading</h2></div>
+      <div class="spread">
+        <figure>
+          <a class="image-wrap" href="${base}assets/image.png" aria-label="$image_zoom"><img class="shot" src="${base}assets/image.png" width="1484" height="952" loading="lazy" alt="$image_alt"></a>
+          <figcaption><span class="fig-no">02</span><span>$image_caption</span><a href="${base}assets/image.png" aria-label="$image_zoom">$expand_icon</a></figcaption>
+        </figure>
+        <div class="marginalia">
+          <h3>$image_heading</h3><p>$image_body</p>
+          <div class="note-rule"><span class="note-mark" aria-hidden="true">1</span></div>
+          <h3>$note_heading</h3><p>$note_body</p>
+        </div>
+      </div>
+      <div class="paper">
+        <div class="paper-copy">
+          <p class="kicker"><span class="rule"></span>$paper_label</p>
+          <h2>$paper_heading</h2><p>$paper_body</p>
+          <p>$paper_export</p>
+          <a class="link" href="$repo#two-ways-to-work">$read_guide $arrow_icon</a>
+        </div>
+        <figure class="paper-figure">
+          <a class="paper-frame" href="${base}assets/paper.png" aria-label="$paper_zoom"><img class="shot" src="${base}assets/paper.png" width="747" height="552" loading="lazy" alt="$paper_alt"></a>
+          <figcaption><span class="fig-no">03</span><span>$paper_caption</span><a href="${base}assets/paper.png" aria-label="$paper_zoom">$expand_icon</a></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="download" id="download" aria-labelledby="download-heading"><div class="download-inner wrap">
+      <div class="release-copy"><p class="kicker"><span class="rule"></span>$download_label</p>
+        <h2 id="download-heading">$download_heading</h2>
+        <p>$install_text</p>
+        <a class="button" href="$installer">$download_icon $download</a>
+        <a class="release-link" href="$release_url">$release_details $arrow_icon</a>
+      </div>
+      <div class="specs">
+        <dl>
+          <div><dt>$version_label</dt><dd>$version <span class="badge">$status</span></dd></div>
+          <div><dt>$system_label</dt><dd>Windows 11 · x64</dd></div>
+          <div><dt>$language_label</dt><dd>$app_languages</dd></div>
+        </dl>
+        <p>$signing</p>
+      </div>
+    </div></section>
+  </main>
+  <footer class="wrap"><a class="brand" href="#main"><img src="${base}assets/inklane.svg" width="28" height="28" alt="">Inklane</a>
+    <nav aria-label="$footer_nav"><a href="$repo">$source</a><a href="${repo}/releases">$releases</a><a href="${repo}#readme">$guide</a></nav>
+  </footer>
+</body>
+</html>
