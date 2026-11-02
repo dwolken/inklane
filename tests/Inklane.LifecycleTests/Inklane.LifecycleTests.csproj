@@ -8,5 +8,9 @@
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../src/Inklane/Inklane.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Inklane/Inklane.csproj" />
+    <Compile Include="../TestResources.cs" />
+    <None Include="../../src/Inklane/App.xaml" Link="AppResources.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

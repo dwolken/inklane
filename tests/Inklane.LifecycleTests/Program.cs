@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,7 +12,7 @@ using Microsoft.Win32;
 namespace Inklane.LifecycleTests;
 
 /// <summary>Exercise the real window's lifecycle and filesystem, substituting only user decisions.</summary>
-internal static class Program
+internal static partial class Program
 {
     private static string output = "";
     private static int checks, failures;
@@ -25,8 +26,8 @@ internal static class Program
         var dataOverride = typeof(App).GetProperty("DataDirectoryOverride", BindingFlags.Static | BindingFlags.NonPublic);
         if (dataOverride is null) throw new InvalidOperationException("A data-directory seam is required to isolate lifecycle tests from user data.");
         dataOverride.SetValue(null, Path.Combine(output, "app-data"));
-        var app = new App();
-        app.InitializeComponent();
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown, ThemeMode = ThemeMode.System };
+        TestResources.Load(app);
         L.Initialize("en");
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
@@ -37,6 +38,7 @@ internal static class Program
         Run("New image sidecar collision preserves external data", SidecarCollision);
         Run("Canceling unsaved changes or save path prevents switching", CancelUnsaved);
         Run("Failed recovery replacement retains the previous recovery file", RecoveryFailure);
+        Run("Extended recovery preserves titles, PNGs and independent rejection of damaged snapshots", ExtendedRecovery);
         Run("Undo to saved state clears stale recovery snapshot", UndoClearsRecovery);
         Run("Invalid open leaves the active document and path intact", InvalidOpen);
         Run("Save As rejects the wrong extension without changing existing data", WrongSaveExtension);
@@ -45,6 +47,9 @@ internal static class Program
         Run("JSON export cannot replace its active JSON source", ExportJsonOverSidecar);
         Run("Changed source image blocks Save while JSON export preserves work", ChangedSourceImage);
         Run("Crossing a document limit rolls back safely without ending the session", DocumentLimitRollback);
+        Run("Notebook title edits survive reopening without changing the file location", NotebookTitle);
+        Run("Page duplication and reordering preserve independent objects and undo targets", ManagePages);
+        Run("Folder browsing follows Explorer order, detects changes and protects pending edits", LiveImageFolder);
         Console.WriteLine($"{checks - failures}/{checks} checks passed. Artifacts: {output}");
         app.Shutdown();
         System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
@@ -194,6 +199,50 @@ internal static class Program
         Assert(File.Exists(originalPath), "Failed recovery replacement deleted the only previous snapshot.");
         Equal(previousHash, DocumentStore.GetFileHash(originalPath));
         Equal(1, restored.Interaction.ChoiceCalls);
+    }
+
+    private static void ExtendedRecovery()
+    {
+        using var original = new WindowCase("recovery-extensions");
+        var window = original.Window;
+        var png = original.Path("screenshot.png"); WriteImage(png);
+        var bytes = File.ReadAllBytes(png);
+        var document = Document(window);
+        document.Title = "Draft notebook";
+        document.Pages[0].Items.Add(new TextItem { IsNote = true, IsExpanded = false, Title = "Türen", Text = "Observe the threshold." });
+        document.Pages[0].Images.Add(new ImageItem { X = 48, Y = 96, Width = 128, Height = 128, PngData = bytes });
+        Call(window,"ShowPage",false); Call(window,"DocumentChanged");
+        Assert(Call<bool>(window,"WriteRecovery"),"Could not checkpoint a dirty extended document.");
+        var path = Field<string>(window,"_recoveryPath");
+        var raw = File.ReadAllBytes(path);
+        var wrapper = JsonNode.Parse(raw)!;
+        Equal(2,wrapper["Document"]!["SchemaVersion"]!.GetValue<int>());
+
+        // One unreadable snapshot must neither overwrite the open document nor hide another valid recovery.
+        var directory = Path.GetDirectoryName(path)!;
+        var badText = (byte[])raw.Clone();
+        badText[badText.AsSpan().IndexOf("Observe the threshold."u8)] = 0xff;
+        var badTextPath = Path.Combine(directory,"invalid-utf8.json"); File.WriteAllBytes(badTextPath,badText);
+        var future = wrapper.DeepClone();
+        future["Document"]!["SchemaVersion"] = 92;
+        var futurePath = Path.Combine(directory,"future.json"); File.WriteAllText(futurePath,future.ToJsonString());
+        var broken = wrapper.DeepClone();
+        broken["Document"]!["Pages"]![0]!["Images"]![0]!["PngData"] = Convert.ToBase64String(bytes[..33].Concat(bytes[^12..]).ToArray());
+        var brokenPath = Path.Combine(directory,"invalid-png.json"); File.WriteAllText(brokenPath,broken.ToJsonString());
+        var invalidPaths = new[] { badTextPath,futurePath,brokenPath };
+        var invalidHashes = invalidPaths.Select(DocumentStore.GetFileHash).ToArray();
+        File.SetLastWriteTimeUtc(path,DateTime.UtcNow.AddMinutes(-5));
+
+        using var recovered = new WindowCase("recovery-extensions-restored");
+        var next = Path.Combine(directory,"restored.json");
+        SetField(recovered.Window,"_recoveryPath",next);
+        recovered.Interaction.Choices.Enqueue(0);
+        recovered.Window.OfferRecovery();
+        Equal(3,recovered.Interaction.Messages.Count(m => m.Icon == MessageBoxImage.Error));
+        Equal(1,recovered.Interaction.ChoiceCalls);
+        Equal(DocumentStore.Serialize(document),State(recovered.Window));
+        Assert(Dirty(recovered.Window) && File.Exists(next) && !File.Exists(path),"Recovered edits were not safely checkpointed.");
+        Assert(invalidHashes.SequenceEqual(invalidPaths.Select(DocumentStore.GetFileHash)),"A rejected recovery was modified.");
     }
 
     private static void UndoClearsRecovery()

@@ -2,7 +2,6 @@ using System.IO;
 using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -10,7 +9,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Ink;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Markup;
 using System.Windows.Threading;
 using Inklane;
 using Inklane.Controls;
@@ -32,6 +30,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--clipboard-peer") return ClipboardChecks.Peer(args);
         _output = Path.GetFullPath(args.FirstOrDefault() ?? ".scratch/surface-test-output");
         Directory.CreateDirectory(_output);
         var run = Path.Combine(_output, "runs", Guid.NewGuid().ToString("N"));
@@ -41,10 +40,11 @@ internal static class Program
         // A plain Application avoids invoking product startup/settings/recovery
         // when a real modal dialog enters its nested dispatcher below.
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown, ThemeMode = ThemeMode.System };
-        LoadApplicationResources(app);
+        TestResources.Load(app);
         L.Initialize("en");
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
+        Run("Windows clipboard between independent editor processes", () => ClipboardChecks.Run(run));
         Run("A4 raster dimensions and white page boundaries", PageRaster);
         Run("Original image pixels survive rendering without annotations", ImageRaster);
         Run("View, tool and clean export operations do not mutate document", ViewPurity);
@@ -53,6 +53,8 @@ internal static class Program
         Run("Note marker and editor retain readable size at different zooms", NoteReadability);
         Run("Numbered note reveal scrolls to the anchor and preserves identity", NoteReveal);
         Run("Searching the index reveals a note on another page and restores the first view", NoteIndexNavigation);
+        Run("Inline note titles synchronize with markers, search, PDF and undo", NoteTitleWorkflow);
+        Run("Note-index duplicate and delete act on the chosen page and are reversible", NoteRowCommands);
         Run("Expanded lower-page notes stay inside the visible viewport during fit, resize and pan", NoteViewportPlacement);
         Run("Object drag uses page coordinates and canceled drag rolls back", ObjectMovement);
         Run("Selected ink deletion updates editable model", InkDeletion);
@@ -687,7 +689,7 @@ internal static class Program
         Assert(new Rect(surface.RenderSize).Contains(bounds), "Note index jumped to a page with an offscreen anchor.");
         Assert((bool)Call(window, "CanLeave")!, "Reading a saved note prevents leaving.");
         Equal(0, interaction.Prompts);
-        Equal(1, ((List<string>)Field(window, "_history")!).Count);
+        Equal(1, ((System.Collections.ICollection)Field(window, "_history")!).Count);
         var editor = Editor(surface, "Note");
         editor.Text += "\nConfirmed.";
         Assert((bool)Property(window, "IsDirty")!, "Editing note content is not dirty.");
@@ -698,6 +700,78 @@ internal static class Program
         Equal(editor.Text, saved.Text); Assert(saved.IsExpanded, "Save did not retain the current note presentation.");
         Named<Button>(content, "PreviousPage").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Near(previous.Zoom, surface.Zoom); Near(previous.VerticalOffset, scroll.VerticalOffset);
+        StopTimers(window);
+    }
+
+    private static void NoteTitleWorkflow()
+    {
+        var window = OpenNotebook(withSample: true);
+        var content = (FrameworkElement)window.Content;
+        var surface = (DocumentSurface)Field(window, "_surface")!;
+        var note = Document(window).Pages[0].Items.Single(item => item.IsNote);
+        Named<Button>(content, "NoteIndex").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Layout(content);
+        var rowId = "NoteRow:" + note.Id;
+        Button Row() => Descendants(content).OfType<Button>().Single(b => AutomationProperties.GetAutomationId(b) == rowId);
+        var row = Row();
+        row.ContextMenu!.PlacementTarget = row;
+        var rename = row.ContextMenu.Items.OfType<MenuItem>().Single(m => Equals(m.Header,L.T("RenameNote")));
+        Equal(L.T("RenameNote"),rename.Header);
+        rename.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Equal(note.Id,surface.SelectedNoteId);
+        var title = Descendants(surface).OfType<TextBox>().Single(t => AutomationProperties.GetAutomationId(t) == "NoteTitle:" + note.Id);
+        title.Text = "Threshold detail";
+        Equal("Threshold detail",note.Title);
+        Equal(note.Title,AutomationProperties.GetName(NoteMarker(surface)));
+        if (((Border)Field(window,"_notesPanel")!).Visibility != Visibility.Visible)
+            Named<Button>(content,"NoteIndex").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var search = Named<TextBox>(content,"NoteSearch");
+        search.Text = "THRESHOLD"; Layout(content);
+        Assert(AutomationProperties.GetName(Row()).Contains(note.Title),"Title query did not match the renamed note.");
+        search.Text = "Grüße"; Layout(content);
+        Assert(AutomationProperties.GetName(Row()).Contains(note.Title),"Body query did not match the named note.");
+        search.Text = "";
+        Layout(content);
+        RenderContent(content, Brushes.White, "named-note-workspace.png");
+        Call(window,"Undo"); Layout(content);
+        Equal("",Document(window).Pages[0].Items.Single(i => i.IsNote).Title);
+        Call(window,"Redo"); Layout(content);
+        Equal("Threshold detail",Document(window).Pages[0].Items.Single(i => i.IsNote).Title);
+        Assert((bool)Call(window,"Save",false)!,"Renamed note was not saved.");
+        string file = (string)Field(window,"_filePath")!;
+        window.OpenFile(file); Layout(content);
+        Equal("Threshold detail",AutomationProperties.GetName(NoteMarker(surface)));
+        StopTimers(window);
+    }
+
+    private static void NoteRowCommands()
+    {
+        var path = Path.Combine(_fixtures,"Shelf details.pdf");
+        var first = Sample();
+        var target = new TextItem { IsNote = true, IsExpanded = false, Title = "Shelf pin", Text = "Drill 25 mm deep.", X = 90, Y = 400 };
+        DocumentStore.SavePdf(new DocumentData { Pages = [first,new PageData { Items = [target] }] },path);
+        var window = new MainWindow(new PromptProbe());
+        window.OpenFile(path);
+        var content = (FrameworkElement)window.Content;
+        void ActionOn(string id,string command)
+        {
+            if (((Border)Field(window,"_notesPanel")!).Visibility != Visibility.Visible)
+                Named<Button>(content,"NoteIndex").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Layout(content);
+            var row = Descendants(content).OfType<Button>().Single(b => AutomationProperties.GetAutomationId(b) == "NoteRow:" + id);
+            row.ContextMenu!.PlacementTarget = row;
+            row.ContextMenu.Items.OfType<MenuItem>().Single(m => Equals(m.Header,L.T(command)))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        }
+        ActionOn(target.Id,"DuplicateObjects");
+        Equal(1,(int)Field(window,"_pageIndex")!);
+        var copy = Document(window).Pages[1].Items.Single(i => i.Id != target.Id);
+        Equal(target.Title,copy.Title); Equal(target.Text,copy.Text);
+        ActionOn(target.Id,"Delete");
+        Equal(copy.Id,Document(window).Pages[1].Items.Single().Id);
+        Call(window,"Undo");
+        Assert(Document(window).Pages[1].Items.Any(i => i.Id == target.Id),"Undo lost the original note.");
+        Equal(first.Items.Count,Document(window).Pages[0].Items.Count);
         StopTimers(window);
     }
 
@@ -782,18 +856,6 @@ internal static class Program
     private static void Equal<T>(T expected, T actual) => Assert(EqualityComparer<T>.Default.Equals(expected, actual), $"Expected {expected}; actual {actual}.");
     private static void Near(double expected, double actual) => Assert(Math.Abs(expected - actual) < .01, $"Expected {expected}; actual {actual}.");
     private static void Assert(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
-
-    private static void LoadApplicationResources(Application app)
-    {
-        // Copy the actual App.xaml resource declarations, not a second set of
-        // test styles. This keeps theme regression coverage tied to production.
-        XNamespace ns = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
-        var source = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "AppResources.xaml"));
-        var resource = new XElement(source.Root!.Element(ns + "Application.Resources")!.Element(ns + "ResourceDictionary")!);
-        resource.SetAttributeValue(XNamespace.Xmlns + "x", "http://schemas.microsoft.com/winfx/2006/xaml");
-        var context = new ParserContext { BaseUri = new Uri("pack://application:,,,/Inklane;component/App.xaml") };
-        app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(resource.ToString(), context));
-    }
 
     private sealed class PromptProbe : IDocumentInteraction
     {

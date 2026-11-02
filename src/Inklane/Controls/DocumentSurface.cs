@@ -24,8 +24,9 @@ public readonly record struct PageViewport(PageViewMode Mode, double Zoom, doubl
 /// The editable page has one coordinate system: 96 units per inch. Zoom only
 /// transforms the view; persisted points and note anchors never depend on DPI.
 /// </summary>
-public sealed class DocumentSurface : UserControl
+public sealed partial class DocumentSurface : UserControl
 {
+    private static readonly Brush NoteEdge = new SolidColorBrush(Color.FromRgb(167,127,54));
     private static readonly Guid StrokeId = new("70bbced0-ed7a-43af-8c61-391b4b265df2");
     private readonly ScrollViewer _scroll;
     private readonly Grid _pageHost;
@@ -68,8 +69,7 @@ public sealed class DocumentSurface : UserControl
             CommitEdits();
             _tool = value;
             if (HasTextFocus) Keyboard.ClearFocus();
-            _ink.Select(new StrokeCollection());
-            _selectedItem = null;
+            ClearObjectSelection();
             _editingText = null;
             ApplyTool();
         }
@@ -112,6 +112,7 @@ public sealed class DocumentSurface : UserControl
             ClipToBounds = false
         };
         _pageHost.Children.Add(_paper);
+        _pageHost.Children.Add(_imageLayer);
         _pageHost.Children.Add(_ink);
         _pageHost.Children.Add(_objects);
         _scroll = new ScrollViewer
@@ -129,14 +130,7 @@ public sealed class DocumentSurface : UserControl
         _ink.StrokeErased += (_, _) => SyncInkAndNotify();
         _ink.SelectionMoved += (_, _) => SyncInkAndNotify();
         _ink.SelectionResized += (_, _) => SyncInkAndNotify();
-        _ink.SelectionChanged += (_, _) =>
-        {
-            if (_ink.GetSelectedStrokes().Count > 0)
-            {
-                _selectedItem = null;
-                UpdateItemStates();
-            }
-        };
+        InitializeSelection();
         _ink.PreviewMouseLeftButtonDown += CanvasPressed;
         PreviewMouseDown += BeginPan;
         PreviewMouseMove += ContinuePan;
@@ -170,6 +164,7 @@ public sealed class DocumentSurface : UserControl
         {
             _page = page;
             _image = image;
+            _otherObjects.Clear();
             _selectedItem = null;
             _editingText = null;
             _pageHost.Width = page.Width;
@@ -180,6 +175,7 @@ public sealed class DocumentSurface : UserControl
             _ink.Strokes = new StrokeCollection(page.Ink.Select(ToStroke));
             _objects.Children.Clear();
             _items.Clear();
+            LoadPictures();
             foreach (var item in page.Items) AddItemVisual(item);
             NumberNotes();
             _ink.Select(new StrokeCollection());
@@ -293,7 +289,7 @@ public sealed class DocumentSurface : UserControl
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && _editingText != null)
+        if (e.Key == Key.Escape && HasTextFocus)
         {
             _editingText = null;
             UpdateItemStates();
@@ -321,9 +317,7 @@ public sealed class DocumentSurface : UserControl
         }
         if (e.Key == Key.Escape)
         {
-            _ink.Select(new StrokeCollection());
-            _selectedItem = null;
-            UpdateItemStates();
+            ClearObjectSelection();
         }
     }
 
@@ -389,10 +383,28 @@ public sealed class DocumentSurface : UserControl
         if (_page is null || _spacePan) return;
         if (_tool is not (EditorTool.Text or EditorTool.Note))
         {
-            _selectedItem = null;
-            UpdateItemStates();
+            if (_tool == EditorTool.Select && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                var hit = _ink.Strokes.HitTest(e.GetPosition(_ink), Math.Clamp(8 / _zoom, 1, 100)).LastOrDefault();
+                if (hit != null)
+                {
+                    var selected = _ink.GetSelectedStrokes();
+                    if (selected.Contains(hit)) selected.Remove(hit); else selected.Add(hit);
+                    SelectStrokes(selected);
+                    Focus();
+                    e.Handled = true;
+                }
+                return;
+            }
+            if (_ink.HitTestSelection(e.GetPosition(_ink)) == InkCanvasSelectionHitResult.None)
+            {
+                _otherObjects.Clear();
+                _selectedItem = null;
+                UpdateItemStates();
+            }
             return;
         }
+        ClearObjectSelection();
         var point = e.GetPosition(_pageHost);
         var isNote = _tool == EditorTool.Note;
         var width = isNote ? 280 : Math.Min(260, Math.Max(1, _page.Width));
@@ -428,13 +440,7 @@ public sealed class DocumentSurface : UserControl
     public void DeleteSelection()
     {
         if (_page is null || HasTextFocus) return;
-        var selected = _ink.GetSelectedStrokes();
-        if (selected.Count > 0)
-        {
-            _ink.Strokes.Remove(selected);
-            SyncInkAndNotify();
-        }
-        if (_selectedItem is { } id && _items.TryGetValue(id, out var visual)) RemoveItem(visual.Item);
+        DeleteSelectedObjects();
     }
 
     private void RemoveItem(TextItem item)
@@ -443,6 +449,7 @@ public sealed class DocumentSurface : UserControl
         _page.Items.Remove(item);
         _objects.Children.Remove(visual.Root);
         if (visual.Marker is not null) _objects.Children.Remove(visual.Marker);
+        _otherObjects.Remove(item.Id);
         _selectedItem = null;
         _editingText = null;
         if (item.IsNote) NumberNotes();
@@ -453,7 +460,7 @@ public sealed class DocumentSurface : UserControl
 
     private void AddItemVisual(TextItem item)
     {
-        var dragOrigin = new Point(item.X, item.Y);
+        var moved = new Vector();
         var editor = new TextBox
         {
             Text = item.Text,
@@ -508,6 +515,7 @@ public sealed class DocumentSurface : UserControl
         var grip = new Thumb
         {
             Cursor = Cursors.SizeAll,
+            HorizontalAlignment = item.IsNote ? HorizontalAlignment.Right : HorizontalAlignment.Stretch,
             Focusable = true,
             ToolTip = Translate("MoveItem"),
             Template = GripTemplate(item.IsNote),
@@ -539,11 +547,13 @@ public sealed class DocumentSurface : UserControl
         panel.Children.Add(header);
         panel.Children.Add(editor);
         root.Child = panel;
+        root.Tag = item.Id;
         _objects.Children.Add(root);
         var visual = new ItemVisual(item, root, editor, header, grip);
         _items.Add(item.Id, visual);
         if (item.IsNote)
         {
+            CreateNoteTitle(visual);
             var marker = CreateMarker(item);
             visual.Marker = marker;
             _objects.Children.Add(marker);
@@ -582,9 +592,7 @@ public sealed class DocumentSurface : UserControl
         };
         editor.GotKeyboardFocus += (_, _) =>
         {
-            _selectedItem = item.Id;
-            _ink.Select(new StrokeCollection());
-            UpdateItemStates();
+            SelectObject(item.Id);
         };
         root.PreviewMouseLeftButtonDown += (_, e) =>
         {
@@ -594,9 +602,14 @@ public sealed class DocumentSurface : UserControl
                 e.Handled = true;
                 return;
             }
-            if (_selectedItem != item.Id) _editingText = null;
-            _selectedItem = item.Id;
-            UpdateItemStates();
+            if (_tool == EditorTool.Select && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                ToggleObject(item.Id);
+                Focus();
+                e.Handled = true;
+                return;
+            }
+            if (!IncludesObject(item.Id)) SelectObject(item.Id);
         };
         AttachMoveHandle(grip);
 
@@ -605,23 +618,19 @@ public sealed class DocumentSurface : UserControl
             handle.DragStarted += (_, _) =>
             {
                 CommitEdits();
-                dragOrigin = new Point(item.X, item.Y);
-                _selectedItem = item.Id;
-                _ink.Select(new StrokeCollection());
-                UpdateItemStates();
+                moved = default;
+                if (!IncludesObject(item.Id)) SelectObject(item.Id);
             };
-            handle.DragDelta += (_, e) => MoveItem(visual,
+            handle.DragDelta += (_, e) => moved += MoveSelection(
                 e.HorizontalChange / (item.IsNote ? _zoom : 1),
                 e.VerticalChange / (item.IsNote ? _zoom : 1));
             handle.DragCompleted += (_, e) =>
             {
                 if (e.Canceled)
                 {
-                    item.X = dragOrigin.X;
-                    item.Y = dragOrigin.Y;
-                    PositionItem(visual);
+                    MoveSelection(-moved.X, -moved.Y);
                 }
-                else if (item.X != dragOrigin.X || item.Y != dragOrigin.Y) NotifyChanged();
+                else if (moved.LengthSquared > 0) SyncInkAndNotify();
             };
             handle.KeyDown += (_, e) => MoveWithKeyboard(visual, e);
         }
@@ -629,7 +638,8 @@ public sealed class DocumentSurface : UserControl
 
     private void BeginTextEdit(ItemVisual visual)
     {
-        _selectedItem = _editingText = visual.Item.Id;
+        SelectObject(visual.Item.Id);
+        _editingText = visual.Item.Id;
         UpdateItemStates();
         visual.Editor.Focus();
     }
@@ -644,8 +654,7 @@ public sealed class DocumentSurface : UserControl
         border.SetValue(Border.BackgroundProperty, note ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(236, 235, 250)));
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(3));
         var text = new FrameworkElementFactory(typeof(TextBlock));
-        if (note) text.SetValue(TextBlock.TextProperty, new TemplateBindingExtension(TagProperty));
-        else text.SetValue(TextBlock.TextProperty, "⠿");
+        if (!note) text.SetValue(TextBlock.TextProperty, "⠿");
         text.SetValue(TextBlock.FontSizeProperty, note ? 12d : 14d);
         text.SetValue(TextBlock.FontWeightProperty, FontWeights.SemiBold);
         text.SetValue(TextBlock.ForegroundProperty, new SolidColorBrush(note ? Color.FromRgb(110, 74, 22) : Color.FromRgb(74, 67, 124)));
@@ -714,6 +723,11 @@ public sealed class DocumentSurface : UserControl
         AutomationProperties.SetName(marker, Translate("Note"));
         marker.PreviewMouseLeftButtonDown += (_, e) =>
         {
+            if (_tool == EditorTool.Select && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                ToggleObject(item.Id); Focus(); e.Handled = true; return;
+            }
+            if (!IncludesObject(item.Id)) SelectObject(item.Id);
             dragStart = e.GetPosition(_pageHost);
             anchorStart = new Point(item.X, item.Y);
             dragging = false;
@@ -724,8 +738,7 @@ public sealed class DocumentSurface : UserControl
             var delta = e.GetPosition(_pageHost) - dragStart;
             if (!dragging && Math.Abs(delta.X) + Math.Abs(delta.Y) < 4 / _zoom) return;
             dragging = true;
-            var visual = _items[item.Id];
-            MoveItem(visual, anchorStart.X + delta.X - item.X, anchorStart.Y + delta.Y - item.Y);
+            MoveSelection(anchorStart.X + delta.X - item.X, anchorStart.Y + delta.Y - item.Y);
             e.Handled = true;
         };
         marker.PreviewMouseLeftButtonUp += (_, e) =>
@@ -733,35 +746,26 @@ public sealed class DocumentSurface : UserControl
             if (!dragging) return;
             dragging = false;
             marker.ReleaseMouseCapture();
-            _selectedItem = item.Id;
             UpdateItemStates();
-            NotifyChanged();
+            SyncInkAndNotify();
             e.Handled = true;
         };
         marker.LostMouseCapture += (_, _) =>
         {
             if (!dragging) return;
             dragging = false;
-            NotifyChanged();
+            SyncInkAndNotify();
         };
         marker.Click += (_, _) =>
         {
             if (_tool == EditorTool.Eraser) { RemoveItem(item); return; }
-            _selectedItem = item.Id;
+            SelectObject(item.Id);
             SetNoteExpanded(item, !item.IsExpanded);
             if (item.IsExpanded) _items[item.Id].Editor.Focus();
         };
         marker.KeyDown += (_, e) => MoveWithKeyboard(_items[item.Id], e);
+        marker.Tag = item.Id;
         return marker;
-    }
-
-    private void MoveItem(ItemVisual visual, double dx, double dy)
-    {
-        if (_page is null) return;
-        var item = visual.Item;
-        item.X = Math.Clamp(item.X + dx, 0, Math.Max(0, _page.Width - (item.IsNote ? 28 / _zoom : item.Width)));
-        item.Y = Math.Clamp(item.Y + dy, 0, Math.Max(0, _page.Height - (item.IsNote ? 28 / _zoom : item.Height)));
-        PositionItem(visual);
     }
 
     private void MoveWithKeyboard(ItemVisual visual, KeyEventArgs e)
@@ -773,8 +777,9 @@ public sealed class DocumentSurface : UserControl
             Key.Up => new Vector(0, -amount), Key.Down => new Vector(0, amount), _ => default
         };
         if (delta.LengthSquared == 0) return;
-        MoveItem(visual, delta.X, delta.Y);
-        NotifyChanged();
+        if (!IncludesObject(visual.Item.Id)) SelectObject(visual.Item.Id);
+        MoveSelection(delta.X, delta.Y);
+        SyncInkAndNotify();
         e.Handled = true;
     }
 
@@ -790,9 +795,8 @@ public sealed class DocumentSurface : UserControl
     public bool RevealNote(string id)
     {
         if (!_items.TryGetValue(id, out var visual) || !visual.Item.IsNote) return false;
-        _selectedItem = id;
+        SelectObject(id);
         _editingText = null;
-        _ink.Select(new StrokeCollection());
         var anchor = _pageHost.TranslatePoint(new Point(visual.Item.X, visual.Item.Y), _scroll);
         var viewport = new Rect(0, 0, _scroll.ViewportWidth, _scroll.ViewportHeight);
         if (!viewport.Contains(new Rect(anchor, new Size(28, 28))))
@@ -814,12 +818,10 @@ public sealed class DocumentSurface : UserControl
             var value = (++number).ToString(CultureInfo.CurrentCulture);
             var format = Translate("NoteNumber");
             var label = format == "NoteNumber" ? $"{Translate("Note")} {value}" : string.Format(CultureInfo.CurrentCulture, format, value);
-            visual.Grip.Tag = label;
+            visual.TitleHint!.Text = label;
             visual.Marker!.Content = value;
             visual.Marker.FontSize = number >= 1000 ? 9 : number >= 100 ? 11 : 13;
-            AutomationProperties.SetName(visual.Marker, label);
-            AutomationProperties.SetName(visual.Editor, label);
-            AutomationProperties.SetHelpText(visual.Grip, label);
+            UpdateNoteTitle(visual);
         }
     }
 
@@ -884,7 +886,7 @@ public sealed class DocumentSurface : UserControl
         foreach (var visual in _items.Values)
         {
             var item = visual.Item;
-            var selected = _selectedItem == item.Id;
+            var selected = IncludesObject(item.Id);
             if (!item.IsNote)
             {
                 visual.Root.IsHitTestVisible = _tool is EditorTool.Select or EditorTool.Text or EditorTool.Eraser;
@@ -900,11 +902,15 @@ public sealed class DocumentSurface : UserControl
             else
             {
                 visual.Root.IsHitTestVisible = _tool != EditorTool.Pan && !_spacePan;
-                visual.Marker!.IsHitTestVisible = _tool != EditorTool.Pan && !_spacePan;
+                visual.Marker!.BorderThickness = new Thickness(selected ? 2 : 1);
+                visual.Marker.BorderBrush = selected ? Brushes.SlateBlue : NoteEdge;
+                visual.Marker.IsHitTestVisible = _tool != EditorTool.Pan && !_spacePan;
                 visual.Editor.IsReadOnly = _tool == EditorTool.Eraser;
-                visual.Marker.ToolTip = Translate(item.IsExpanded ? "CollapseNote" : "ExpandNote");
+                visual.TitleEditor!.IsReadOnly = _tool == EditorTool.Eraser;
+                UpdateNoteTitle(visual);
             }
         }
+        UpdatePictureStates();
         var noteId = SelectedNoteId;
         if (_lastSelectedNote == noteId) return;
         _lastSelectedNote = noteId;
@@ -923,6 +929,8 @@ public sealed class DocumentSurface : UserControl
         using (var dc = drawing.RenderOpen())
         {
             PaperLayer.Draw(dc, _page, _image);
+            foreach (var picture in _page.Images)
+                dc.DrawImage(_pictures[picture.Id].Source, new Rect(picture.X, picture.Y, picture.Width, picture.Height));
             _ink.Strokes.Draw(dc);
             var noteNumber = 0;
             foreach (var item in _page.Items)
@@ -983,7 +991,7 @@ public sealed class DocumentSurface : UserControl
         if (!stroke.ContainsPropertyData(StrokeId)) stroke.AddPropertyData(StrokeId, Guid.NewGuid().ToString("N"));
         return new InkData
         {
-            Id = (string)stroke.GetPropertyData(StrokeId),
+            Id = stroke.GetPropertyData(StrokeId) as string ?? Guid.NewGuid().ToString("N"),
             Color = $"#{stroke.DrawingAttributes.Color.R:X2}{stroke.DrawingAttributes.Color.G:X2}{stroke.DrawingAttributes.Color.B:X2}",
             Width = stroke.DrawingAttributes.Width,
             Points = stroke.StylusPoints.Select(p => new InkPoint { X = p.X, Y = p.Y, Pressure = p.PressureFactor }).ToList()
@@ -1005,6 +1013,8 @@ public sealed class DocumentSurface : UserControl
         public Thumb Grip { get; } = grip;
         public Button? Marker { get; set; }
         public Thumb? BodyHandle { get; set; }
+        public TextBox? TitleEditor { get; set; }
+        public TextBlock? TitleHint { get; set; }
     }
 
     private sealed class PaperLayer : FrameworkElement

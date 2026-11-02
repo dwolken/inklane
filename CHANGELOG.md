@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0-rc.2 · 2026-11-02
+
+- Copy, cut, paste and duplicate editable groups across pages, documents and Inklane windows. Text editing retains its own Windows shortcuts.
+- Paste pictures and screenshots into either workspace, move or resize them and keep the editable result in the PDF or sidecar. A separate command copies the flattened page or annotated image.
+- Name a note from its card, marker or index. Search titles and body text across pages. Note titles also travel with copied objects and standard PDF annotations.
+- Rename a notebook independently of its filename, jump to pages, duplicate pages and move them earlier or later with undo.
+- Browse a changing image folder using arrow keys or the filename list. Numeric filenames follow Explorer ordering.
+- The public English and German site shares the desktop brand, original screenshots and verified Windows release downloads.
+
 ## 1.0.0-rc.1 · 2026-11-01
 
 - Home gives image annotation and notebook creation equally visible entry points, with local recent documents and a return-to-document action.
@@ -11,7 +20,7 @@
 - Typing avoids full-document serialization on every edit. Substantial PDF saves run on a separate STA thread with visible progress.
 - A per-user Windows x64 installer bundles the runtime and adds Start and Installed apps entries. The update path protects user-created files. Portable distribution remains available.
 
-This is the candidate for product acceptance. Physical device qualification, signing and the PDF maintenance decision remain open.
+This candidate introduced the document workspace. Physical device qualification, signing and the PDF maintenance decision remain open.
 
 ## 0.1.0-alpha.1 · 2026-11-01
 
