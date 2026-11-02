@@ -15,7 +15,7 @@ internal sealed class PdfBackdrop : IDisposable
     private readonly IRandomAccessStream _stream;
     private readonly PdfDocument _pdf;
     private readonly Queue<(int Index, BitmapSource Image)> _cache = new();
-    public string Path { get; }
+    public string Path { get; private set; }
     private readonly Size[] _sizes;
     private readonly string _hash;
 
@@ -36,20 +36,22 @@ internal sealed class PdfBackdrop : IDisposable
         }
     }
 
-    public static (DocumentData Model, PdfBackdrop? Backdrop, string Hash) Open(Window owner, string path)
+    public static (DocumentData Model, PdfBackdrop? Backdrop, string Hash) Open(Window owner, string path, bool asSource = false, byte[]? snapshot = null)
     {
         return ReadWithProgress(owner,path,async () =>
         {
             byte[] bytes;
-            using (var file = File.OpenRead(path))
+            if (snapshot == null)
             {
+                using var file = File.OpenRead(path);
                 if (file.Length > DocumentStore.MaxPdfBytes) throw new InvalidDataException(L.T("PdfTooLarge"));
                 bytes = new byte[(int)file.Length];
                 file.ReadExactly(bytes);
             }
+            else bytes = snapshot;
             string hash = Convert.ToHexString(SHA256.HashData(bytes));
             using var check = new MemoryStream(bytes,false);
-            var notebook = DocumentStore.ReadNotebook(check);
+            var notebook = asSource ? null : DocumentStore.ReadNotebook(check);
             if (notebook != null) return (notebook, (PdfBackdrop?)null, hash);
 
             var stream = new MemoryStream(bytes,false).AsRandomAccessStream();
@@ -65,6 +67,13 @@ internal sealed class PdfBackdrop : IDisposable
             }
             catch { stream.Dispose(); throw; }
         });
+    }
+
+    public void AttachWorkingCopy(string path)
+    {
+        if (System.IO.Path.IsPathFullyQualified(Path) || !System.IO.Path.IsPathFullyQualified(path))
+            throw new InvalidOperationException("A PDF source already has a location.");
+        Path = path;
     }
 
     public void Verify(DocumentData model)
