@@ -15,16 +15,18 @@ jobs:
   workspace:
     name: ${{ matrix.platform }} workspace
     concurrency:
-      group: apple-${{ matrix.platform }}-${{ github.ref }}
+      group: apple-${{ matrix.queue }}-${{ github.ref }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macOS
-            runner: macos-26
+            runner: macos-15-intel
+            queue: macOS-intel
           - platform: iOS
             runner: macos-26
+            queue: iOS
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
