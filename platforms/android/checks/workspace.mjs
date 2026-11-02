@@ -54,8 +54,8 @@ const visible = s => js('!!'+find(s)+'?.getClientRects().length');
 async function tap(sel, fx=.5, fy=.5) {
   await waitFor(()=>visible(sel),sel);
   const {x,y}=await js('(()=>{const e='+find(sel)+';e.scrollIntoView({block:"nearest"});const r=e.getBoundingClientRect();return {x:r.left+r.width*'+fx+',y:r.top+r.height*'+fy+'}})()');
-  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x,y});
-  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x,y});
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
 }
 async function type(sel,value) {
   await js(find(sel)+'.focus();'+find(sel)+'.select()');
@@ -103,6 +103,7 @@ try {
   await type('#note-title','Door clearance');
   await type('#note-body','Leave room for the handle.');
   await tap('#close-card');
+  await waitFor(()=>js('document.querySelector(".marker")?.getAttribute("aria-expanded")==="false" && document.querySelector("#card").hidden'),'initial card collapsed');
   await tap('#save');
   await waitFor(async()=>nodes().some(saveButton),'system create picker');
   adb('shell','input','keyevent','BACK');
@@ -121,13 +122,27 @@ try {
   assert.equal(note.title,'Door clearance');
   assert.equal(note.text,'Leave room for the handle.');
   assert.ok(note.x>0 && note.y>0,'anchor coordinates persisted');
+  assert.equal(note.isExpanded,false,'The original card was collapsed before saving');
   await tap('#more summary');
   await tap('#home');
   await waitFor(()=>visible('#new-notebook'),'document home before reopening');
   await tap('#start');
   await systemTap(n=>n.text===title+'.inklane','saved document in system picker');
   await waitFor(()=>js('document.querySelector("#name").textContent === "'+title+'" && document.querySelectorAll(".marker").length>0'), 'reopened annotation');
-  await tap('.marker');
+  // The picker can still be dismissing when the reopened model first paints.
+  // Wait for an interactive, unobstructed marker, then perform a touchscreen tap.
+  const marker = await waitFor(()=>js(`(() => {
+    const m = document.querySelector('.marker');
+    if (!document.hasFocus() || !m || document.querySelector('#viewport').inert) return false;
+    const r = m.getBoundingClientRect(), x = r.left+r.width/2, y = r.top+r.height/2;
+    return document.elementFromPoint(x,y) === m && {x,y,expanded:m.getAttribute('aria-expanded')==='true'};
+  })()`),'interactive reopened marker');
+  assert.equal(marker.expanded,note.isExpanded,'Saved note presentation survived reopening');
+  if (!marker.expanded) {
+    await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:marker.x,y:marker.y}]});
+    await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }
+  await waitFor(()=>visible('#close-card'),'visible expanded note');
   assert.equal(await js(find('#note-body')+'.value'),'Leave room for the handle.');
   await tap('#close-card');
   await loadFixture('website/assets/field-guide-en.png', 'image/png');
@@ -159,7 +174,7 @@ try {
   assert.equal(report.pages[1].annotations[0].text,'Change the units.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
-  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id})').catch(()=>'unavailable'));
+  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
   throw error;
 } finally {
   socket.close();
