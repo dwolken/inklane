@@ -13,13 +13,23 @@ private typealias WorkspaceImage = NSImage
 
 @MainActor
 final class WorkspaceTests: XCTestCase {
+    private func javascript(_ host: WorkspaceHost, _ script: String,
+                            arguments: [String: Any]? = nil) async throws -> Any? {
+        try await withCheckedThrowingContinuation { continuation in
+            InklaneTestJavaScript(host.webView, script, arguments) { value, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: value) }
+            }
+        }
+    }
+
     private func wait(_ host: WorkspaceHost, _ script: String,
                       file: StaticString = #filePath, line: UInt = #line) async throws {
         for _ in 0..<180 {
-            if let value = try? await host.webView.evaluateJavaScript(script), value as? Bool == true { return }
+            if let value = try? await javascript(host, script), value as? Bool == true { return }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        let state = try? await host.webView.evaluateJavaScript("""
+        let state = try? await javascript(host, """
           [document.readyState, document.querySelector('#state')?.textContent,
            document.querySelector('#message')?.textContent, document.querySelectorAll('.marker').length,
            document.querySelectorAll('#draft-list button strong').length].join(' | ')
@@ -31,7 +41,7 @@ final class WorkspaceTests: XCTestCase {
         // WebKit can paint the new page while its outstanding draft transaction still owns the editor.
         // Wait for the same enabled document controls that a person can actually use.
         try await wait(host, "document.querySelector('#open')?.disabled === false")
-        _ = try await host.webView.evaluateJavaScript(script + "; true")
+        _ = try await javascript(host, script + "; true")
     }
     private func openFile(_ bytes: Data, _ name: String, in host: WorkspaceHost) async throws {
         try await wait(host, "document.querySelector('#open')?.disabled === false")
@@ -41,8 +51,7 @@ final class WorkspaceTests: XCTestCase {
         const input = document.querySelector('#files'); input.files = transfer.files;
         input.dispatchEvent(new Event('change',{bubbles:true})); return true;
         """
-        _ = try await host.webView.callAsyncJavaScript(input,
-            arguments: ["payload": bytes.base64EncodedString(), "filename": name], in: nil, contentWorld: .page)
+        _ = try await javascript(host, input, arguments: ["payload": bytes.base64EncodedString(), "filename": name])
     }
 
     private func captureExample(_ host: WorkspaceHost) async throws {
@@ -143,7 +152,7 @@ final class WorkspaceTests: XCTestCase {
         const token = await bridge.postMessage({op:'begin',filename:'Partial.inklane',size:2});
         await bridge.postMessage({op:'append',token,bytes:'YQ=='}); return token;
         """
-        _ = try await host.webView.callAsyncJavaScript(partial, arguments: [:], in: nil, contentWorld: .page)
+        _ = try await javascript(host, partial, arguments: [:])
         let interrupted = try XCTUnwrap(host.exporter.pendingFile)
         host.webViewWebContentProcessDidTerminate(host.webView)
         XCTAssertFalse(FileManager.default.fileExists(atPath: interrupted.path))
@@ -153,7 +162,7 @@ final class WorkspaceTests: XCTestCase {
         const token = await bridge.postMessage({op:'begin',filename:'New transfer.inklane',size:0});
         return await bridge.postMessage({op:'discard',token});
         """
-        _ = try await host.webView.callAsyncJavaScript(restart, arguments: [:], in: nil, contentWorld: .page)
+        _ = try await javascript(host, restart, arguments: [:])
         XCTAssertNil(host.exporter.pendingFile)
     }
 

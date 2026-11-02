@@ -347,6 +347,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				"PRODUCT_NAME" = "InklaneTests";
+				"SWIFT_OBJC_BRIDGING_HEADER" = "Tests/WebKitJavaScript.h";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.dwolken.Inklane.Tests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
 				"BUNDLE_LOADER" = "$(TEST_HOST)";
@@ -360,6 +361,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				"PRODUCT_NAME" = "InklaneTests";
+				"SWIFT_OBJC_BRIDGING_HEADER" = "Tests/WebKitJavaScript.h";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.dwolken.Inklane.Tests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
 				"BUNDLE_LOADER" = "$(TEST_HOST)";
