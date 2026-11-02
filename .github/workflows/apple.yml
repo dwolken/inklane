@@ -1,0 +1,116 @@
+name: Apple workspaces
+
+on:
+  push:
+    branches: [main]
+    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+  pull_request:
+    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    name: ${{ matrix.label }} workspace
+    concurrency:
+      group: apple-${{ matrix.queue }}-${{ github.ref }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            label: macOS
+            runner: macos-15-intel
+            queue: macOS-intel
+          - platform: iOS
+            label: iOS 18
+            runner: macos-15-intel
+            queue: iOS-intel
+          - platform: iOS
+            label: iOS Apple silicon
+            runner: macos-26
+            queue: iOS
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Bundle the locked local workspace
+        run: |
+          npm ci --prefix website --ignore-scripts --no-audit
+          python3 website/build.py --workspace-only --output platforms/apple/Workspace
+      - name: Select an available iPhone simulator
+        if: matrix.platform == 'iOS'
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          runtimes = json.loads(subprocess.check_output(["xcrun","simctl","list","devices","available","-j"]))["devices"]
+          sdk = tuple(map(int,subprocess.check_output(["xcrun","--sdk","iphonesimulator","--show-sdk-version"],text=True).strip().split(".")[:2]))
+          def version(runtime):
+              return tuple(map(int,runtime.split(".iOS-")[1].split("-")[:2]))
+          versions = sorted((key for key in runtimes if ".iOS-" in key and (17,0) <= version(key) <= sdk),
+                            key=version, reverse=True)
+          phones = (d for v in versions for d in runtimes[v] if d["name"].startswith("iPhone") and d.get("isAvailable"))
+          device = next(phones, None)
+          if device is None:
+              raise SystemExit(f"No installed iPhone runtime compatible with simulator SDK {sdk}")
+          print("Testing on", device["name"], device["udid"], flush=True)
+          if device["state"] != "Booted":
+              subprocess.run(["xcrun","simctl","boot",device["udid"]],check=True)
+          subprocess.run(["xcrun","simctl","bootstatus",device["udid"],"-b"],check=True,timeout=240)
+          with open(os.environ["GITHUB_ENV"],"a") as env:
+              env.write("APPLE_DEST=platform=iOS Simulator,id=" + device["udid"] + "\n")
+              env.write("SIMULATOR_ID=" + device["udid"] + "\n")
+          PY
+      - name: Run the bundled application and exercise its document workflow
+        id: exercise
+        run: |
+          if [[ -n "${SIMULATOR_ID:-}" ]]; then
+            python3 platforms/apple/capture-simulator.py "$SIMULATOR_ID" "$RUNNER_TEMP/Inklane-iOS-field-guide-screen.png" &
+            capture_pid=$!
+            trap 'kill "$capture_pid" 2>/dev/null || true' EXIT
+          fi
+          xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme Inklane \
+            -destination "${APPLE_DEST:-platform=macOS}" -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/workspace.xcresult" CODE_SIGN_IDENTITY=- test
+      - name: Inspect the crashing thread if the hosted test failed
+        if: failure() && steps.exercise.outcome == 'failure'
+        run: python3 platforms/apple/diagnose.py "$RUNNER_TEMP/workspace.xcresult" "$RUNNER_TEMP/inklane-apple"
+      - name: Collect the bundled field guide capture
+        id: capture
+        if: "!cancelled() && steps.exercise.outcome != 'skipped'"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          file="Inklane-field-guide-review.png"
+          if [[ "$PLATFORM" == iOS ]]; then
+            container=$(xcrun simctl get_app_container "$SIMULATOR_ID" io.github.dwolken.Inklane data)
+            source="$container/Library/Caches/$file"
+            test -s "$RUNNER_TEMP/Inklane-iOS-field-guide-screen.png"
+          else
+            source="$HOME/Library/Containers/io.github.dwolken.Inklane/Data/Library/Caches/$file"
+            if [[ ! -f "$source" ]]; then source="$HOME/Library/Caches/$file"; fi
+          fi
+          test -s "$source"
+          cp "$source" "$RUNNER_TEMP/Inklane-$PLATFORM-field-guide.png"
+      - name: Retain the example workspace image
+        if: "!cancelled() && steps.capture.outcome == 'success'"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Inklane-${{ matrix.queue }}-field-guide
+          path: ${{ runner.temp }}/Inklane-${{ matrix.platform }}-field-guide*.png
+          retention-days: 2
+          if-no-files-found: error
+      - name: Save and reopen through the macOS system file panels
+        if: matrix.platform == 'macOS'
+        run: |
+          xcodebuild -project platforms/apple/Inklane.xcodeproj -scheme InklaneMacUI \
+            -destination "platform=macOS" -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/inklane-apple" -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/file-panels.xcresult" \
+            CODE_SIGN_IDENTITY=- test
