@@ -15,6 +15,7 @@ def package(output):
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="inklane-package-") as temp:
         stage = Path(temp)
+        stage.chmod(0o755)
         app = stage / "usr/share/inklane"
         app.mkdir(parents=True)
         subprocess.run([sys.executable, str(ROOT / "website/build.py"), "--workspace-only",

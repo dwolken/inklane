@@ -92,6 +92,7 @@ final class FileExport: NSObject, WKScriptMessageHandlerWithReply {
         }
         transfer = nil
         exporting = false
+        picker = nil
     }
 
     private func present(_ file: URL, completion: @escaping (Bool, Error?) -> Void) throws {

@@ -206,8 +206,12 @@ class Inklane(Gtk.Application):
         manager.connect("script-message-with-reply-received::exportFile",self.on_message)
         origin=f"http://127.0.0.1:{self.server.server_port}"
         bridge=(INSTALL/"NativeSave.js").read_text()
-        manager.add_script(WebKit2.UserScript.new(bridge,WebKit2.UserContentInjectedFrames.TOP_FRAME,
-            WebKit2.UserScriptInjectionTime.START,[origin+"/editor/*"],None))
+        # WebKit URL match patterns do not consistently handle explicit loopback ports.
+        # The script itself checks the exact bound origin before exposing the native adapter.
+        scoped = ("if(location.origin===" + json.dumps(origin) +
+                  " && ['/editor/','/editor/index.html'].includes(location.pathname)){" + bridge + "\n}")
+        manager.add_script(WebKit2.UserScript.new(scoped,WebKit2.UserContentInjectedFrames.TOP_FRAME,
+            WebKit2.UserScriptInjectionTime.START,None,None))
         storage=Path(GLib.get_user_data_dir())/"inklane"/"web"
         cache=Path(GLib.get_user_cache_dir())/"inklane"/"web"
         stores=WebKit2.WebsiteDataManager(base_data_directory=str(storage),base_cache_directory=str(cache))

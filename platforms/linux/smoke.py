@@ -54,6 +54,7 @@ class Check(Inklane):
 
     def do_activate(self):
         super().do_activate()
+        self.view.get_settings().set_enable_write_console_messages_to_stdout(True)
         GLib.idle_add(self.exercise)
 
     def exercise(self):
@@ -91,6 +92,7 @@ class Check(Inklane):
         except BaseException:
             self.failed=True
             traceback.print_exc()
+            print("Startup state:", evaluate(self.view, "JSON.stringify({path:location.pathname,state:document.readyState,bridge:typeof window.inklaneSaveCopy,start:typeof document.querySelector('#start')?.onclick,status:document.querySelector('#state')?.textContent,secure:isSecureContext})"),flush=True)
         finally:
             self.quit()
         return False
