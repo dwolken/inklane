@@ -253,6 +253,12 @@ public sealed partial class MainWindow : Window
                 }
                 if (savePath == null) hash = null;
             }
+            else if (extension == ".inklane")
+            {
+                try { candidate = PortableNotebook.Read(path); }
+                catch (NotSupportedException) { throw new InvalidDataException(L.T("PortableKind")); }
+                savePath = hash = null; // Import into an editable notebook. Save prompts for its PDF destination.
+            }
             else if (extension == ".json") { candidate = DocumentStore.LoadJson(path,out hash); savePath = candidate.Kind != DocumentKind.Notebook ? path : null; if (savePath == null) hash = null; }
             else if (extension is ".png" or ".jpg" or ".jpeg")
             {
@@ -433,6 +439,23 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); return false; }
         finally { _saving = false; UpdateState(); }
     }
+    private void ExportPortableNotebook()
+    {
+        if (_document.Kind != DocumentKind.Notebook || _saving) return;
+        FinishRenameNotebook(true);
+        _surface.CommitEdits();
+        if (!CaptureHistory()) return;
+        var picker = new SaveFileDialog { Title = L.T("ExportPortable"), Filter = L.T("PortableFilter"),
+            DefaultExt = ".inklane", AddExtension = true, FileName = ExportStem + ".inklane", OverwritePrompt = false };
+        try
+        {
+            if (_interaction.ChooseSavePath(this,picker) is not { } path || !DestinationAllowed(path,".inklane",true)) return;
+            if (File.Exists(path)) { Error(L.T("PortableCollision")); return; }
+            AtomicWrite(path, stream => PortableNotebook.Write(stream,_document,ExportStem), allowReplace:false);
+        }
+        catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"),ex); }
+    }
+
     private void ExportJson()
     {
         _surface.CommitEdits(); var dialog = new SaveFileDialog { Filter = L.T("JsonFilter"), DefaultExt = ".json", FileName = ExportStem + ".annotations.json" };

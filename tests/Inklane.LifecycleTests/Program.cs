@@ -31,6 +31,7 @@ internal static partial class Program
         L.Initialize("en");
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
+        Run("Browser portable notebooks open, export, and save as protected editable PDF copies", PortableNotebookJourney);
         Run("Fresh notebook leaves without asking to save", UnchangedDocument);
         Run("Failed save preserves dirty document and original file", SaveFailure);
         Run("Same-file reopen honors cancel and then saves current edits", SameFileReopen);
