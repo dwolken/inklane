@@ -78,7 +78,11 @@ public static class DocumentStore
     {
         if (data.Kind == DocumentKind.Pdf && !Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("PDF markup must be saved to a JSON annotation file.");
-        var bytes = Encoding.UTF8.GetBytes(Serialize(data));
+        var stored = data;
+        if (data.Kind == DocumentKind.Image && data.SourceImagePath is { } source && Path.IsPathFullyQualified(source) &&
+            string.Equals(Path.GetDirectoryName(Path.GetFullPath(source)),Path.GetDirectoryName(Path.GetFullPath(path)),StringComparison.OrdinalIgnoreCase))
+            stored = data.WithSourceName(Path.GetFileName(source));
+        var bytes = Encoding.UTF8.GetBytes(Serialize(stored));
         ProtectSourceImage(data, path);
         AtomicWrite(path, temporary => File.WriteAllBytes(temporary, bytes));
     }

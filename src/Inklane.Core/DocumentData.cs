@@ -29,6 +29,14 @@ public sealed class DocumentData
     public string? SourcePdfName { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourcePdfSha256 { get; set; }
+
+    // Changing a stored reference does not change the session or copy its potentially large page content.
+    internal DocumentData WithSourceName(string name) => new()
+    {
+        SchemaVersion = SchemaVersion, Kind = Kind, Title = Title, Pages = Pages,
+        SourceImagePath = Kind == DocumentKind.Image ? name : SourceImagePath, SourceImageSha256 = SourceImageSha256,
+        SourcePdfName = Kind == DocumentKind.Pdf ? name : SourcePdfName, SourcePdfSha256 = SourcePdfSha256
+    };
 }
 
 public sealed class PageData

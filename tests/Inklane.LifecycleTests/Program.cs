@@ -31,6 +31,10 @@ internal static partial class Program
         L.Initialize("en");
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
+        Run("Portable image and PDF working copies preserve source, anchors and safe editable saves", PortableReviewJourney);
+        Run("A review of a native notebook PDF keeps the source notebook distinct from external feedback", ReviewOfNotebookPages);
+        Run("Portable copies enforce shared decoded-image limits while native notebook data remains valid", PortableExportCapacity);
+        Run("Unsafe portable names, altered sources and mismatched page geometry create no working copy", RejectPortableReviews);
         Run("Browser portable notebooks open, export, and save as protected editable PDF copies", PortableNotebookJourney);
         Run("Fresh notebook leaves without asking to save", UnchangedDocument);
         Run("Failed save preserves dirty document and original file", SaveFailure);
@@ -372,7 +376,12 @@ internal static partial class Program
         var export = state.Path("preserved.annotations.json");
         state.Interaction.SavePaths.Enqueue(export);
         Call(state.Window, "ExportJson");
-        Equal(before, DocumentStore.Serialize(DocumentStore.LoadJson(export)));
+        var portable = DocumentStore.LoadJson(export);
+        Equal(Path.GetFileName(source), portable.SourceImagePath);
+        // The saved reference is relative to this sibling JSON. All editable state must still match.
+        portable.SourceImagePath = Path.Combine(Path.GetDirectoryName(export)!,portable.SourceImagePath!);
+        Equal(before,DocumentStore.Serialize(portable));
+        Equal(before,State(state.Window));
         Assert(Dirty(state.Window), "Preservation export marked the invalid source relationship saved.");
         Assert(state.Interaction.Messages.Any(m => m.Icon == MessageBoxImage.Error), "Source change was not explained.");
     }
@@ -440,6 +449,13 @@ internal static partial class Program
         public readonly Queue<int> Choices = new();
         public readonly Queue<string?> SavePaths = new();
         public readonly Queue<string?> ReviewPdfs = new();
+        public readonly Queue<string?> WorkingFolders = new();
+        public string? ChooseWorkingFolder(Window owner, OpenFolderDialog picker)
+        {
+            if (WorkingFolders.TryDequeue(out var folder)) return folder;
+            UnexpectedCalls.Add("Unexpected working folder picker: " + picker.Title);
+            return null;
+        }
         public readonly List<(string Text, MessageBoxImage Icon)> Messages = [];
         public readonly List<string> SaveFilters = [];
         public readonly List<string> UnexpectedCalls = [];

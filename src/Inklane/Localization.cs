@@ -13,13 +13,17 @@ public static class L
     internal static bool IsOpenProblem(string message) =>
         new[] { "PdfChanged", "PdfGeometry", "PdfTooLarge", "ImageChanged", "OfficeSizeLimit", "OfficeInvalid",
             "OfficeNeedsPdf", "OfficeOldCopy", "OfficeConvertUnsupported", "OfficeNewPdfOnly", "OfficeConvertTimeout",
-            "OfficeConvertFailed", "ReviewExportOnly", "UnsupportedPdf", "PortableKind" }.Any(key => T(key) == message);
+            "OfficeConvertFailed", "ReviewExportOnly", "UnsupportedPdf", "PortableImageMismatch" }.Any(key => T(key) == message);
     private static readonly Dictionary<string, (string En, string De)> Strings = new()
     {
         ["ExportPortable"] = ("Export portable notebook…", "Portables Notizbuch exportieren …"),
         ["PortableFilter"] = ("Inklane workspace|*.inklane", "Inklane-Arbeitsmappe|*.inklane"),
         ["PortableCollision"] = ("Choose an unused filename for this copy.", "Wählen Sie einen noch freien Dateinamen für diese Kopie."),
-        ["PortableKind"] = ("Open this image or PDF workspace in the browser. On Windows, open the original together with its annotation JSON.", "Öffnen Sie diese Bild- oder PDF-Arbeitsmappe im Browser. Unter Windows öffnen Sie das Original mit der zugehörigen JSON-Datei."),
+        ["UnsupportedPortable"] = ("This workspace contains an unsupported document or file version.", "Diese Arbeitsmappe enthält ein nicht unterstütztes Dokument oder Dateiformat."),
+        ["PortableCapacity"] = ("This review is too large for a portable workspace. Reduce the source size, placed pictures or strokes, or keep your editable PDF or annotation layer.", "Diese Anmerkungen sind zu umfangreich für eine portable Arbeitsmappe. Verkleinern Sie die Quelle, eingefügte Bilder oder Zeichnungen, oder behalten Sie Ihre bearbeitbare PDF- oder Anmerkungsdatei."),
+        ["PortableDestination"] = ("Choose a folder for a new working copy of {0}", "Ordner für eine neue Arbeitskopie von {0} auswählen"),
+        ["ExportPortableReview"] = ("Export portable review…", "Portable Anmerkungen exportieren …"),
+        ["PortableImageMismatch"] = ("The enclosed image does not match the review’s format or dimensions.", "Format oder Größe des enthaltenen Bildes stimmen nicht mit den Anmerkungen überein."),
         ["EditTextObject"] = ("Edit text", "Text bearbeiten"),
         ["OfficeReview"] = ("Review a fixed PDF copy", "Eine feste PDF-Kopie kommentieren"),
         ["CreateReviewPdf"] = ("Create PDF copy…", "PDF-Kopie erstellen…"),
