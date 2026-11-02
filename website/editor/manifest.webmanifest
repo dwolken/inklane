@@ -1,5 +1,5 @@
 {
-  "id": "./", "start_url": "./", "scope": "./", "name": "Inklane", "short_name": "Inklane",
+  "start_url": "./", "scope": "./", "name": "Inklane", "short_name": "Inklane",
   "description": "Review documents and keep annotations beside the mark they explain.",
   "display": "standalone", "background_color": "#f6f5f1", "theme_color": "#29253e",
   "icons": [
