@@ -21,8 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macOS, iOS]
-    runs-on: macos-15
+        include:
+          - platform: macOS
+            runner: macos-15
+          - platform: iOS
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -38,10 +42,15 @@ jobs:
           python3 - <<'PY'
           import json, os, subprocess
           runtimes = json.loads(subprocess.check_output(["xcrun","simctl","list","devices","available","-j"]))["devices"]
-          versions = sorted((key for key in runtimes if ".iOS-" in key),
-                            key=lambda k: tuple(map(int,k.split(".iOS-")[1].split("-"))), reverse=True)
+          sdk = tuple(map(int,subprocess.check_output(["xcrun","--sdk","iphonesimulator","--show-sdk-version"],text=True).strip().split(".")[:2]))
+          def version(runtime):
+              return tuple(map(int,runtime.split(".iOS-")[1].split("-")[:2]))
+          versions = sorted((key for key in runtimes if ".iOS-" in key and (17,0) <= version(key) <= sdk),
+                            key=version, reverse=True)
           phones = (d for v in versions for d in runtimes[v] if d["name"].startswith("iPhone") and d.get("isAvailable"))
-          device = next(phones)
+          device = next(phones, None)
+          if device is None:
+              raise SystemExit(f"No installed iPhone runtime compatible with simulator SDK {sdk}")
           print("Testing on", device["name"], device["udid"], flush=True)
           if device["state"] != "Booted":
               subprocess.run(["xcrun","simctl","boot",device["udid"]],check=True)

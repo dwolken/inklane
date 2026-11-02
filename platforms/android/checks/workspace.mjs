@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 30000 }).trim();
@@ -70,6 +71,23 @@ async function systemTap(match, label) {
   const [x1,y1,x2,y2]=node.bounds.match(/\d+/g).map(Number);
   adb('shell','input','tap',String((x1+x2)>>1),String((y1+y2)>>1));
 }
+
+// The OS picker was exercised above. Send deterministic fixtures to the same
+// file-input handler to check WebView's image codec and the APK's PDF worker.
+async function loadFixture(path, type) {
+  const bytes = readFileSync(path);
+  const name = basename(path);
+  await js(`(() => {
+    const input = document.querySelector('#files'), transfer = new DataTransfer();
+    const binary = atob(${JSON.stringify(bytes.toString('base64'))});
+    transfer.items.add(new File([Uint8Array.from(binary, c => c.charCodeAt(0))], ${JSON.stringify(name)}, {type:${JSON.stringify(type)}}));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', {bubbles:true}));
+  })()`);
+  await waitFor(()=>js('document.querySelector("#name").textContent === '+JSON.stringify(name)),'open '+name);
+  return bytes;
+}
+
 const saveButton = n => /^save$/i.test(n.text) && n.enabled==='true';
 const fresh = mkdtempSync(join(tmpdir(),'inklane-android-'));
 const title = 'AndroidReview';
@@ -111,7 +129,35 @@ try {
   await waitFor(()=>js('document.querySelector("#name").textContent === "'+title+'" && document.querySelectorAll(".marker").length>0'), 'reopened annotation');
   await tap('.marker');
   assert.equal(await js(find('#note-body')+'.value'),'Leave room for the handle.');
-  console.log('Android offline notebook, anchored remark, cancelled save, SAF file write and reopen passed.');
+  await tap('#close-card');
+  await loadFixture('website/assets/field-guide-en.png', 'image/png');
+  assert.ok(await js('document.querySelector("#source").width') > 500);
+  const pdf = await loadFixture('website/fixtures/review-pages.pdf', 'application/pdf');
+  assert.equal(await js(find('#page-count')+'.textContent'),'1 / 2');
+  const green = await js(`(() => {
+    const c = document.querySelector('#source'), data = c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    let count = 0;
+    for (let i=0; i<data.length; i+=4) if (data[i+1]>data[i]*1.5 && data[i]<170) count++;
+    return count;
+  })()`);
+  assert.ok(green > 500,'The APK worker painted the known green PDF page content.');
+  await tap('#next-page');
+  await waitFor(()=>js('document.querySelector("#page-count").textContent === "2 / 2"'), 'second PDF page');
+  await tap('[data-tool="note"]');
+  await tap('#sheet',.46,.31);
+  await type('#note-title','Scale bar');
+  await type('#note-body','Change the units.');
+  await tap('#close-card');
+  await tap('#more summary');
+  await tap('#feedback');
+  await systemTap(saveButton,'system feedback Save');
+  const feedbackPath = await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name','review-pages.pdf.feedback.json'),'written feedback report');
+  adb('pull',feedbackPath,join(fresh,'feedback.json'));
+  const report = JSON.parse(readFileSync(join(fresh,'feedback.json'),'utf8'));
+  assert.equal(report.source.sha256,createHash('sha256').update(pdf).digest('hex'));
+  assert.equal(report.pages[1].annotations[0].title,'Scale bar');
+  assert.equal(report.pages[1].annotations[0].text,'Change the units.');
+  console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
   console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id})').catch(()=>'unavailable'));
   throw error;
