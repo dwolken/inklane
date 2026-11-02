@@ -91,7 +91,10 @@ try {
   await waitFor(async()=>await js('document.hasFocus() && !document.querySelector("#save").disabled'),'workspace after cancelled save');
   await tap('#save');
   await systemTap(saveButton,'system Save');
-  const deviceFile=await waitFor(async()=>adb('shell','find','/sdcard/Download','-name',title+'.inklane'), 'saved notebook');
+  // DocumentsUI creates an empty entry before our activity receives its URI.
+  // Wait for the editor to confirm the native write before inspecting that entry.
+  await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled && document.querySelector("#state").textContent.toLowerCase().includes("saved")'), 'editor confirmation of native write');
+  const deviceFile=await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name',title+'.inklane'), 'committed notebook');
   adb('pull',deviceFile,join(fresh,'saved.inklane'));
   const bytes=readFileSync(join(fresh,'saved.inklane'));
   const meta=JSON.parse(bytes.subarray(12,12+bytes.readUInt32BE(8)).toString('utf8'));
@@ -109,6 +112,9 @@ try {
   await tap('.marker');
   assert.equal(await js(find('#note-body')+'.value'),'Leave room for the handle.');
   console.log('Android offline notebook, anchored remark, cancelled save, SAF file write and reopen passed.');
+} catch (error) {
+  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id})').catch(()=>'unavailable'));
+  throw error;
 } finally {
   socket.close();
   adb('forward','--remove','tcp:'+port);

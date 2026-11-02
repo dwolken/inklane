@@ -22,6 +22,35 @@ final class WorkspaceTests: XCTestCase {
         _ = try await host.webView.evaluateJavaScript(script + "; true")
     }
 
+    func testBundleReusesItsLoopbackOriginAndRejectsOtherPaths() async throws {
+        let suite = "inklane-origin-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = try XCTUnwrap(Bundle.main.url(forResource: "Workspace", withExtension: nil))
+        var expected: URL?
+        for _ in 0..<2 {
+            let server = WorkspaceServer(root: root, defaults: defaults)
+            var result: Result<URL,Error>?
+            try server.start { result = $0 }
+            for _ in 0..<100 {
+                if result != nil { break }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            let origin = try XCTUnwrap(result).get()
+            defer { server.stop() }
+            XCTAssertEqual(origin.host, "127.0.0.1")
+            if let expected { XCTAssertEqual(origin, expected) }
+            expected = origin
+            let publicAsset = try await URLSession.shared.data(from: origin)
+            XCTAssertEqual((publicAsset.1 as? HTTPURLResponse)?.statusCode, 200)
+            let outside = try XCTUnwrap(URL(string: "/Documents/example.txt", relativeTo: origin)?.absoluteURL)
+            let rejected = try await URLSession.shared.data(from: outside)
+            XCTAssertEqual((rejected.1 as? HTTPURLResponse)?.statusCode, 404)
+            server.stop()
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+    }
+
     func testEditExportCancelAndReopenBundledWorkspace() async throws {
         let suite = "inklane-test-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -115,5 +144,27 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "document.querySelectorAll('.marker').length === 2 && !!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
         try await perform(host, "document.querySelector('#index').click(); document.querySelector('#results button').click()")
         try await wait(host, "document.querySelector('#note-body').value === 'Keep the scale bar at this position.'")
+        #if os(macOS)
+        // Let AppKit approve an actual destination and verify what the application wrote there.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await perform(host, "document.querySelector('#close-card').click(); document.querySelector('#save').click()")
+        for _ in 0..<120 {
+            if host.exporter.picker != nil { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let save = try XCTUnwrap(host.exporter.picker)
+        save.directoryURL = folder
+        save.nameFieldStringValue = "Review.inklane"
+        save.ok(nil)
+        let destination = folder.appendingPathComponent("Review.inklane")
+        for _ in 0..<120 {
+            if FileManager.default.fileExists(atPath: destination.path) { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let saved = try Data(contentsOf: destination)
+        XCTAssertEqual(saved, portable)
+        #endif
     }
 }
