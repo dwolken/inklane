@@ -28,9 +28,13 @@ final class WorkspaceTests: XCTestCase {
         throw CocoaError(.fileReadUnknown)
     }
     private func perform(_ host: WorkspaceHost, _ script: String) async throws {
+        // WebKit can paint the new page while its outstanding draft transaction still owns the editor.
+        // Wait for the same enabled document controls that a person can actually use.
+        try await wait(host, "document.querySelector('#open')?.disabled === false")
         _ = try await host.webView.evaluateJavaScript(script + "; true")
     }
     private func openFile(_ bytes: Data, _ name: String, in host: WorkspaceHost) async throws {
+        try await wait(host, "document.querySelector('#open')?.disabled === false")
         let input = """
         const bytes = Uint8Array.from(atob(payload), x => x.charCodeAt(0));
         const transfer = new DataTransfer(); transfer.items.add(new File([bytes], filename));
