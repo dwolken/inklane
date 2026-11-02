@@ -20,6 +20,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.view.WindowInsets;
 import android.widget.Toast;
+import android.widget.FrameLayout;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -41,13 +42,15 @@ public final class WorkspaceActivity extends Activity {
         super.onCreate(state);
         getWindow().setDecorFitsSystemWindows(false);
         web = new WebView(this);
-        setContentView(web);
-        web.setOnApplyWindowInsetsListener((view, insets) -> {
+        FrameLayout host = new FrameLayout(this);
+        host.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(host);
+        host.setOnApplyWindowInsetsListener((view, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.ime() | WindowInsets.Type.displayCutout());
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             return WindowInsets.CONSUMED;
         });
-        web.requestApplyInsets();
+        host.requestApplyInsets();
         exporter = new NativeExport(this);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         web.getSettings().setJavaScriptEnabled(true);
