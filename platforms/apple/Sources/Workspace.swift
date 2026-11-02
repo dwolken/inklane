@@ -60,14 +60,13 @@ final class WorkspaceHost: NSObject, ObservableObject, WKNavigationDelegate, WKU
     private(set) var origin: URL?
     @Published var failed = false
 
-    init(bundle: Bundle = .main, defaults: UserDefaults = .standard,
-         store: WKWebsiteDataStore = .default()) {
+    init(bundle: Bundle = .main, defaults: UserDefaults = .standard) {
         self.root = bundle.url(forResource: "Workspace", withExtension: nil)
         self.defaults = defaults
         let exporter = FileExport()
         self.exporter = exporter
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = store
+        config.websiteDataStore = .default()
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         let controller = WKUserContentController()
         controller.addScriptMessageHandler(exporter, contentWorld: .page, name: "exportFile")

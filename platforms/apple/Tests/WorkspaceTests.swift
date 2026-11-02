@@ -131,7 +131,7 @@ final class WorkspaceTests: XCTestCase {
         NSLog("Apple workspace 4. Reopen the on-device draft and portable file.")
         try await recoverDraft(host)
         try await readPortable(portable,in: host)
-        NSLog("Completed hosted document journeys. AppKit’s affirmative file-panel journey runs in the separate Mac UI scheme.")
+        NSLog("Completed hosted document journeys. The Mac UI scheme checks affirmative file selection separately.")
     }
 
     private func restartBridge(_ host: WorkspaceHost) async throws {
