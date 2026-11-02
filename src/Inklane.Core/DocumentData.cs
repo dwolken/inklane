@@ -8,6 +8,7 @@ public sealed class DocumentData
 {
     public int SchemaVersion { get; set; } = 1;
     public DocumentKind Kind { get; set; }
+    public string Title { get; set; } = "";
     public List<PageData> Pages { get; set; } = [];
     public string? SourceImagePath { get; set; }
     public string? SourceImageSha256 { get; set; }
@@ -22,6 +23,18 @@ public sealed class PageData
     public double MarginMm { get; set; } = 15;
     public List<InkData> Ink { get; set; } = [];
     public List<TextItem> Items { get; set; } = [];
+    public List<ImageItem> Images { get; set; } = [];
+}
+
+/// <summary>A portable PNG placed in page coordinates, below ink and text.</summary>
+public sealed class ImageItem
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public byte[] PngData { get; set; } = [];
 }
 
 public sealed class InkData
@@ -42,6 +55,7 @@ public sealed class InkPoint
 public sealed class TextItem
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Title { get; set; } = "";
     public string Text { get; set; } = "";
     public double X { get; set; }
     public double Y { get; set; }

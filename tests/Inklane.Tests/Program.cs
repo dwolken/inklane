@@ -27,6 +27,9 @@ internal static class Program
         Run("PDF round trip retains two editable pages and full Unicode text", PdfRoundTrip);
         Run("A4 and A5 media boxes match physical dimensions", PageGeometry);
         Run("PDF standard Ink, FreeText and Text annotations have appearances", StandardAnnotations);
+        Run("Named notes and placed PNGs retain metadata, geometry and standard PDF content", TitledNotebook);
+        Run("Legacy files remain readable and extended data uses a guarded schema", SchemaCompatibility);
+        Run("Oversized, corrupt and duplicate embedded image data is rejected", InvalidImages);
         Run("Atomic overwrite replaces complete document", AtomicOverwrite);
         Run("Failed locked-file save preserves original bytes", FailedSave);
         Run("Read-only save fails without modifying original", ReadOnlySave);
@@ -214,7 +217,7 @@ internal static class Program
     {
         Throws<InvalidDataException>(() => DocumentStore.Deserialize("{}"));
         Throws<InvalidDataException>(() => DocumentStore.Deserialize("{oops"));
-        Throws<NotSupportedException>(() => DocumentStore.Deserialize("{\"schemaVersion\":2}"));
+        Throws<NotSupportedException>(() => DocumentStore.Deserialize("{\"schemaVersion\":3}"));
         var data = Sample();
         data.Pages[0].SpacingMm = 0;
         Throws<InvalidDataException>(() => DocumentStore.Serialize(data));
@@ -227,6 +230,66 @@ internal static class Program
         var json = JsonNode.Parse(DocumentStore.Serialize(Sample()))!;
         json["pages"]![0]!["ink"] = null;
         Throws<InvalidDataException>(() => DocumentStore.Deserialize(json.ToJsonString()));
+    }
+
+    private static void TitledNotebook()
+    {
+        var notebook = Sample();
+        notebook.Title = "Field book · Süd";
+        var page = notebook.Pages[0];
+        var note = page.Items.Single(item => item.IsNote);
+        note.Title = "Maueranschluss — α";
+        var placed = new ImageItem { X = 142.5, Y = 315, Width = 320, Height = 240,
+            PngData = File.ReadAllBytes(ImageSample().SourceImagePath!) };
+        page.Images.Add(placed);
+        var path = Path.Combine(output, "placed-photo.pdf");
+        DocumentStore.SavePdf(notebook,path);
+        var reopened = DocumentStore.LoadPdf(path);
+        Equal(DocumentStore.Serialize(notebook), DocumentStore.Serialize(reopened));
+        using var pdf = PdfReader.Open(path,PdfDocumentOpenMode.Import);
+        Equal(notebook.Title, pdf.Info.Title);
+        var comment = pdf.Pages[0].Elements.GetArray("/Annots")!.Elements.GetDictionary(2)!;
+        Equal(note.Title,comment.Elements.GetString("/Subj"));
+        Equal(note.Text,comment.Elements.GetString("/Contents"));
+        var objects = pdf.Pages[0].Resources.Elements.GetDictionary("/XObject")!;
+        var image = objects.Elements.GetDictionary(objects.Elements.Keys.Single())!;
+        Equal("/Image",image.Elements.GetName("/Subtype"));
+        Equal(640,image.Elements.GetInteger("/Width"));
+        Equal(480,image.Elements.GetInteger("/Height"));
+        var content = Encoding.ASCII.GetString(pdf.Pages[0].Contents.Elements.GetDictionary(0)!.Stream.UnfilteredValue);
+        Assert(Regex.IsMatch(content,@"240 0 0 180 106\.875 [\d.]+ cm\s*/\w+ Do"),"Placed PNG lacks the expected PDF drawing transform.");
+        var png = EmbeddedPng.Decode(reopened.Pages[0].Images.Single().PngData);
+        Equal(640,png.PixelWidth); Equal(480,png.PixelHeight);
+    }
+
+    private static void SchemaCompatibility()
+    {
+        const string legacy = """{"schemaVersion":1,"kind":"Notebook","pages":[{"items":[{"id":"existing","isNote":true,"text":"Legacy note"}]}]}""";
+        var data = DocumentStore.Deserialize(legacy);
+        Equal("",data.Title); Equal("",data.Pages[0].Items.Single().Title); Equal(0,data.Pages[0].Images.Count);
+        Equal(1,JsonNode.Parse(DocumentStore.Serialize(data))!["schemaVersion"]!.GetValue<int>());
+        data.Pages[0].Items[0].Title = "Named";
+        Equal(2,JsonNode.Parse(DocumentStore.Serialize(data))!["schemaVersion"]!.GetValue<int>());
+        Equal("Named",DocumentStore.Deserialize(DocumentStore.Serialize(data)).Pages[0].Items[0].Title);
+        data.Title = "Invalid\nmultiline title";
+        Throws<InvalidDataException>(() => DocumentStore.Serialize(data));
+    }
+
+    private static void InvalidImages()
+    {
+        var data = Sample();
+        var good = File.ReadAllBytes(ImageSample().SourceImagePath!);
+        var image = new ImageItem { Width = 20, Height = 20, PngData = (byte[])good.Clone() };
+        data.Pages[0].Images.Add(image);
+        Array.Fill(image.PngData, (byte)255, 16, 8);
+        Throws<InvalidDataException>(() => DocumentStore.Serialize(data));
+        image.PngData = good;
+        var json = JsonNode.Parse(DocumentStore.Serialize(data))!;
+        var invalid = good[..33].Concat(good[^12..]).ToArray(); // Valid dimensions but no IDAT.
+        json["pages"]![0]!["images"]![0]!["pngData"] = Convert.ToBase64String(invalid);
+        Throws<InvalidDataException>(() => DocumentStore.Deserialize(json.ToJsonString()));
+        image.Id = data.Pages[0].Ink[0].Id;
+        Throws<InvalidDataException>(() => DocumentStore.Validate(data));
     }
 
     private static void ForeignPdf()
@@ -339,7 +402,7 @@ internal static class Program
         throw new Exception($"Expected {typeof(T).Name}.");
     }
     private static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
-    private static void Equal(string expected, string actual) => Assert(expected == actual, "Values differ.");
+    private static void Equal<T>(T expected, T actual) => Assert(EqualityComparer<T>.Default.Equals(expected, actual), $"Expected {expected}, actual {actual}.");
     private static void Near(double expected, double actual, double tolerance)
         => Assert(Math.Abs(expected - actual) <= tolerance, $"Expected {expected}, actual {actual}.");
 }
