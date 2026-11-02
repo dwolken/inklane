@@ -385,6 +385,17 @@ h1 {
   align-items: center;
   gap: 6px;
 }
+#card[data-desk]::before {
+  content: "";
+  position: absolute;
+  left: var(--leader-x);
+  width: 1px;
+  height: var(--leader-length);
+  background: var(--amber);
+  pointer-events: none;
+}
+#card[data-desk="above"]::before { top: 100%; }
+#card[data-desk="below"]::before { bottom: 100%; }
 #badge {
   color: #77521a;
   font-size: 11px;

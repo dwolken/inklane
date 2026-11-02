@@ -424,6 +424,42 @@ try {
     await page.screenshot({ path: resolve(output, "native-" + basename(source) + ".png") });
   }
   await (await import("./test-documents.mjs")).verifyDocuments(browser,origin + base,output);
+  for (const language of ["en","de"]) {
+    const phone = await browser.newContext({ viewport: { width:390, height:844 }, isMobile:true, hasTouch:true, locale:language });
+    try {
+      const screen = await phone.newPage();
+      await screen.goto(origin + base + "editor/?sample=review&lang=" + language);
+      const marker = screen.locator(".marker").first();
+      await marker.waitFor();
+      const before = await marker.boundingBox();
+      await marker.click();
+      const card = screen.locator("#card");
+      await card.waitFor();
+      const geometry = () => screen.evaluate(() => {
+        const box = id => document.querySelector(id).getBoundingClientRect().toJSON();
+        return {sheet:box("#sheet"),card:box("#card"),desk:box("#viewport")};
+      });
+      const offPage = await geometry();
+      const gap = Math.max(offPage.sheet.top - offPage.card.bottom, offPage.card.top - offPage.sheet.bottom);
+      assert.ok(gap >= 3 && gap <= 10, "The remark should sit just outside the landscape document.");
+      assert.ok(offPage.card.top >= offPage.desk.top && offPage.card.bottom <= offPage.desk.bottom);
+      assert.deepEqual(await marker.boundingBox(), before, "Opening the remark must leave the source in place.");
+      await screen.screenshot({path:resolve(output,"phone-remark-" + language + ".png")});
+      await screen.locator("#close-card").click();
+      await screen.locator("#more summary").click();
+      await screen.locator("#new-sheet").click();
+      await screen.locator("#paper-form button.primary").click();
+      await screen.locator("button[data-tool=note]").click();
+      const sheet = await screen.locator("#sheet").boundingBox();
+      await screen.mouse.click(sheet.x+sheet.width*.45,sheet.y+sheet.height*.4);
+      await card.waitFor();
+      const onPage = await geometry();
+      assert.ok(Math.min(onPage.sheet.bottom,onPage.card.bottom) > Math.max(onPage.sheet.top,onPage.card.top));
+      assert.equal(await card.getAttribute("data-desk"), null, "A tall sheet should keep the remark at its anchor.");
+    } finally {
+      await phone.close();
+    }
+  }
   console.log(
     "Browser editor passed image/sidecar round trip, real file write and conflict protection, editing history, wrong-file refusal, mobile layout and accessibility checks."
   );
