@@ -152,15 +152,18 @@ try {
   await tap('#home');
   await tap('#sample-link');
   await waitFor(()=>js('document.querySelector("#name").textContent === "Field guide.png" && !document.querySelector("#viewport").inert && document.querySelectorAll(".marker").length === 2'),'bundled field guide');
-  const sampleMarker = await js('(() => {const e=document.querySelector(".marker");const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
-  if (!await visible('#close-card')) {
-    await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[sampleMarker]});
-    await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  }
-  await waitFor(()=>visible('#close-card'),'visible sample card');
-  await js('document.fonts.ready.then(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))))');
+  // Browse to a named remark through the regular cross-document index. Capture
+  // only the bundled example on this disposable emulator, after the picker closes.
   mkdirSync('.scratch',{recursive:true});
-  writeFileSync('.scratch/android-review.png',execFileSync('adb',['exec-out','screencap','-p'],{maxBuffer:8*1024*1024}));
+  const screen = () => writeFileSync('.scratch/android-review.png',execFileSync('adb',['exec-out','screencap','-p'],{maxBuffer:8*1024*1024}));
+  screen();
+  await tap('#more summary');
+  await tap('#index');
+  await waitFor(()=>visible('#browse[open] #results button'),'sample index result');
+  await js('document.querySelector("#browse #results button").click()');
+  await waitFor(()=>js('!document.querySelector("#browse").open && !document.querySelector("#card").hidden && document.querySelector("#note-title").value === "Petal colour"'),'indexed sample note');
+  await js('document.fonts.ready.then(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))))');
+  screen();
   await tap('#close-card');
   await loadFixture('website/assets/field-guide-en.png', 'image/png');
   assert.ok(await js('document.querySelector("#source").width') > 500);
