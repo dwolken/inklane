@@ -18,26 +18,25 @@ public static class DocumentStore
 {
     public const int MaxJsonBytes = 32 * 1024 * 1024;
     public const int MaxPdfBytes = 128 * 1024 * 1024;
+    public const int MaxTitleLength = 200;
     private const string Format = "Inklane-1";
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-        MaxDepth = 32,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true);
+    private static readonly JsonSerializerOptions JsonOptions = CreateOptions(history: false);
+    private static readonly JsonSerializerOptions HistoryOptions = CreateOptions(history: true);
 
-    private static readonly JsonSerializerOptions HistoryOptions = CreateHistoryOptions();
-
-    private static JsonSerializerOptions CreateHistoryOptions()
+    private static JsonSerializerOptions CreateOptions(bool history)
     {
         var resolver = new DefaultJsonTypeInfoResolver();
         resolver.Modifiers.Add(type =>
         {
-            if (type.Type == typeof(TextItem))
+            if (history && type.Type == typeof(TextItem))
                 type.Properties.Single(p => p.Name == "isExpanded").ShouldSerialize = (item, _) => !((TextItem)item).IsNote;
         });
-        return new JsonSerializerOptions(JsonOptions) { TypeInfoResolver = resolver };
+        return new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true, MaxDepth = 32,
+            TypeInfoResolver = resolver, Converters = { new JsonStringEnumConverter() }
+        };
     }
 
     public static string Serialize(DocumentData data) => Serialize(data, JsonOptions);
@@ -62,7 +61,7 @@ public static class DocumentStore
         {
             var data = JsonSerializer.Deserialize<DocumentData>(json, JsonOptions)
                 ?? throw new InvalidDataException("The annotation data is empty.");
-            Validate(data);
+            Validate(data, decodeImages: true);
             return data;
         }
         catch (JsonException ex) { throw new InvalidDataException("The annotation data is invalid.", ex); }
@@ -85,7 +84,8 @@ public static class DocumentStore
     public static DocumentData LoadJson(string path)
     {
         CheckSize(path, MaxJsonBytes);
-        return Deserialize(File.ReadAllText(path, Encoding.UTF8));
+        try { return Deserialize(File.ReadAllText(path, StrictUtf8)); }
+        catch (DecoderFallbackException ex) { throw new InvalidDataException("The annotation file contains invalid text encoding.", ex); }
     }
 
     public static void SavePdf(DocumentData data, string path)
@@ -93,7 +93,7 @@ public static class DocumentStore
         var json = Encoding.UTF8.GetBytes(Serialize(data));
         ProtectSourceImage(data, path);
         using var pdf = new PdfDocument();
-        pdf.Info.Title = Path.GetFileNameWithoutExtension(path);
+        pdf.Info.Title = string.IsNullOrWhiteSpace(data.Title) ? Path.GetFileNameWithoutExtension(path) : data.Title;
         pdf.Info.Creator = "Inklane";
         pdf.Info.Subject = "Editable Inklane notebook";
         pdf.Version = 17;
@@ -127,6 +127,13 @@ public static class DocumentStore
                     if (sourceImage is not null)
                         graphics.DrawImage(sourceImage, 0, 0, page.Width.Point, page.Height.Point);
                     else DrawPaper(graphics, model);
+                    foreach (var item in model.Images)
+                    {
+                        using var stream = new MemoryStream(item.PngData, 0, item.PngData.Length, writable: false, publiclyVisible: true);
+                        using var image = XImage.FromStream(stream);
+                        graphics.DrawImage(image, Units.DipToPoint(item.X), Units.DipToPoint(item.Y),
+                            Units.DipToPoint(item.Width), Units.DipToPoint(item.Height));
+                    }
                 }
                 foreach (var stroke in model.Ink) AddInk(pdf, page, stroke);
                 foreach (var item in model.Items) AddText(pdf, page, item);
@@ -178,7 +185,11 @@ public static class DocumentStore
             throw new NotSupportedException("The editable data has been transformed by another PDF application.");
         var bytes = metadata.Stream.Value;
         if (bytes.Length > MaxJsonBytes) throw new InvalidDataException("The editable data exceeds the size limit.");
-        var data = Deserialize(Encoding.UTF8.GetString(bytes));
+        DocumentData data;
+        try { data = Deserialize(StrictUtf8.GetString(bytes)); }
+        catch (DecoderFallbackException ex) { throw new InvalidDataException("The embedded annotation text is not valid UTF-8.", ex); }
+        if (!string.IsNullOrWhiteSpace(data.Title) && pdf.Info.Title != data.Title)
+            throw new NotSupportedException("The PDF title was changed outside Inklane.");
         if (data.Pages.Count != pdf.PageCount)
             throw new InvalidDataException("The PDF pages no longer match the editable Inklane data.");
         for (var i = 0; i < data.Pages.Count; i++)
@@ -281,6 +292,7 @@ public static class DocumentStore
         annotation.Elements["/C"] = ColorArray(pdf, item.IsNote ? "#E7AA32" : item.Color);
         if (item.IsNote)
         {
+            if (item.Title.Length > 0) annotation.Elements.SetString("/Subj", item.Title);
             annotation.Elements.SetName("/Name", "/Note");
             annotation.Elements.SetBoolean("/Open", false);
         }
@@ -357,14 +369,16 @@ public static class DocumentStore
 
     public static void CheckPageCapacity(PageData page)
     {
-        if (page.Ink is null || page.Items is null || page.Ink.Count > 100000 || page.Items.Count > 10000)
+        if (page.Ink is null || page.Items is null || page.Images is null || page.Images.Count > 1000 ||
+            page.Ink.Count > 100000 || page.Items.Count > 10000)
             throw new InvalidDataException("The page contains too many annotations or missing collections.");
     }
 
-    public static void Validate(DocumentData data)
+    public static void Validate(DocumentData data, bool decodeImages = false)
     {
         ArgumentNullException.ThrowIfNull(data);
-        if (data.SchemaVersion != 1) throw new NotSupportedException("This Inklane document version is not supported.");
+        if (data.SchemaVersion is not (1 or 2)) throw new NotSupportedException("This Inklane document version is not supported.");
+        CheckTitle(data.Title);
         if (!Enum.IsDefined(data.Kind)) throw new InvalidDataException("The document kind is invalid.");
         if (data.Pages is null || data.Pages.Count is < 1 or > 1000)
             throw new InvalidDataException("A document must have between 1 and 1,000 pages.");
@@ -374,6 +388,8 @@ public static class DocumentStore
             (hash.Length != 64 || !hash.All(Uri.IsHexDigit)))
             throw new InvalidDataException("The original image identity is invalid.");
         long pointCount = 0;
+        long pixels = 0;
+        long imageBytes = 0;
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var page in data.Pages)
         {
@@ -384,6 +400,19 @@ public static class DocumentStore
             Range(page.SpacingMm, 1, 100, "Grid spacing");
             Range(page.MarginMm, 0, data.Kind == DocumentKind.Image ? 1000 : Units.DipToMm(Math.Min(page.Width, page.Height)) / 2, "Margin");
             CheckPageCapacity(page);
+            foreach (var image in page.Images)
+            {
+                if (image is null) throw new InvalidDataException("An embedded image is missing.");
+                Id(image.Id, ids);
+                Range(image.X, -100000, 200000, "Image X");
+                Range(image.Y, -100000, 200000, "Image Y");
+                Range(image.Width, 1, 100000, "Image width");
+                Range(image.Height, 1, 100000, "Image height");
+                pixels += EmbeddedPng.CheckHeader(image.PngData);
+                imageBytes += image.PngData.Length;
+                if (pixels > 64_000_000 || imageBytes > MaxJsonBytes * 3L / 4)
+                    throw new InvalidDataException("The embedded images exceed the document size limit.");
+            }
             foreach (var ink in page.Ink)
             {
                 if (ink is null || ink.Points is null) throw new InvalidDataException("An ink stroke is invalid.");
@@ -405,6 +434,7 @@ public static class DocumentStore
                 if (item is null || item.Text is null || item.Text.Length > 1000000)
                     throw new InvalidDataException("A text annotation is invalid or too long.");
                 Id(item.Id, ids);
+                CheckTitle(item.Title);
                 Color(item.Color);
                 Range(item.X, -100000, 200000, "Text X");
                 Range(item.Y, -100000, 200000, "Text Y");
@@ -413,6 +443,15 @@ public static class DocumentStore
                 Range(item.FontSize, 1, 1000, "Font size");
             }
         }
+        // Establish aggregate bounds for every page before allocating any decoded images.
+        if (decodeImages)
+            foreach (var image in data.Pages.SelectMany(page => page.Images))
+                EmbeddedPng.Decode(image.PngData);
+    }
+    private static void CheckTitle(string title)
+    {
+        if (title is null || title.Length > MaxTitleLength || title.Any(char.IsControl))
+            throw new InvalidDataException("A title must be a single line of up to 200 characters.");
     }
     private static void Range(double value, double min, double max, string name)
     {

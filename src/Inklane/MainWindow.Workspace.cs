@@ -47,7 +47,7 @@ public sealed partial class MainWindow
         actions.Children.Add(_notesButton);
         actions.Children.Add(MenuButton("More", "More", EditorMenu));
         var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(5,0,8,0) };
-        title.Children.Add(_documentTitle); title.Children.Add(_status); header.Children.Add(title);
+        title.Children.Add(BuildTitleEditor()); title.Children.Add(_status); header.Children.Add(title);
         _editor.Children.Add(Edges(header, new Thickness(0,0,0,1)));
 
         var body = new DockPanel();
@@ -130,7 +130,17 @@ public sealed partial class MainWindow
         DockPanel.SetDock(nav, Dock.Left); bar.Children.Add(nav);
         _previous = Studio.Action("Previous", "Previous", () => Navigate(-1));
         _next = Studio.Action("Next", "Next", () => Navigate(1));
-        nav.Children.Add(_previous); nav.Children.Add(_pageLabel); nav.Children.Add(_next);
+        _browseButton = Studio.Action("BrowsePages","Down",BrowsePositions);
+        _browseButton.Content = Studio.Line(_pageLabel, Studio.Icon("Down",11));
+        _browseButton.Padding = new Thickness(4,0,4,0);
+        _browseButton.ContextMenu = new ContextMenu();
+        _browseButton.ContextMenuOpening += (_, e) =>
+        {
+            var menu = _browseButton.ContextMenu; menu.Items.Clear();
+            if (_document.Kind == DocumentKind.Notebook) PageCommands(menu);
+            else Command(menu,"BrowseFolder",BrowsePositions);
+        };
+        nav.Children.Add(_previous); nav.Children.Add(_browseButton); nav.Children.Add(_next);
         _addPage = Studio.Action("AddPage", "Plus", AddPage); nav.Children.Add(_addPage);
         _paper = Studio.Action("Paper", "Paper", EditPaper); nav.Children.Add(_paper);
         nav.Children.Add(Studio.Rule(true));
@@ -207,14 +217,16 @@ public sealed partial class MainWindow
         Command(menu, "NewNotebook", NewNotebook, "Ctrl+N");
         Command(menu, "SaveAs", () => Save(true), "Ctrl+Shift+S");
         menu.Items.Add(new Separator());
-        Command(menu,"ExportImage",ExportImage); Command(menu,"ExportJson",ExportJson);
-        Command(menu,"Print",Print,"Ctrl+P");
+        AddClipboardMenu(menu);
         if (_document.Kind == DocumentKind.Notebook)
         {
-            menu.Items.Add(new Separator());
-            Command(menu,"Paper",EditPaper);
-            Command(menu,"RemovePage",RemovePage).IsEnabled = _document.Pages.Count > 1;
+            Command(menu,"RenameNotebook",BeginRenameNotebook);
+            var pages = new MenuItem { Header = L.T("ManagePages") }; PageCommands(pages); menu.Items.Add(pages);
         }
+        else Command(menu,"BrowseFolder",BrowsePositions);
+        menu.Items.Add(new Separator());
+        Command(menu,"ExportImage",ExportImage); Command(menu,"ExportJson",ExportJson);
+        Command(menu,"Print",Print,"Ctrl+P");
         menu.Items.Add(new Separator());
         AddPreferences(menu);
         return menu;
@@ -295,6 +307,7 @@ public sealed partial class MainWindow
         var image = _document.Kind == DocumentKind.Image;
         AutomationProperties.SetName(_previous,L.T(image ? "PreviousImage" : "PreviousPage"));
         AutomationProperties.SetName(_next,L.T(image ? "NextImage" : "NextPage"));
-        _previous.ToolTip = AutomationProperties.GetName(_previous); _next.ToolTip = AutomationProperties.GetName(_next);
+        _previous.ToolTip = AutomationProperties.GetName(_previous) + (image ? " (←)" : " (Alt+←)");
+        _next.ToolTip = AutomationProperties.GetName(_next) + (image ? " (→)" : " (Alt+→)");
     }
 }

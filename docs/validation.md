@@ -2,7 +2,17 @@
 
 Inklane 1.0.0-rc.1 was exercised on Windows 11 at 125% display scaling. This record separates desktop observations, repeatable regression checks and device work that remains open.
 
-## Desktop journeys
+## Editing candidate · RC.2
+
+The local Release build passed 17 persistence checks, 27 WPF/clipboard checks and 19 lifecycle checks, with zero compiler warnings or errors.
+
+- Independent WPF editor processes on a noninteractive Windows window station exchanged selected objects through the operating-system clipboard after the source process exited. The checks compare stroke pressure and shape, positions, text and note titles, new object identities, native text selection, undo and redo. The user's interactive clipboard is separate.
+- Clipboard checks exercise standard text, PNG, bitmap and device-independent bitmap data, placement in a PDF notebook, copying a flattened image, editing a photo sidecar and retaining the original image hash. A Poppler render independently reproduced the inserted test image’s color samples at its saved coordinates.
+- The note index, marker and card expose the same edited title. Search by title and body, cross-page context commands, and reopen are exercised on real WPF controls. The German dark image screenshot is a native 1484 × 952 capture from the running RC.2 editor at 125% Windows scaling.
+- The lifecycle suite duplicates and moves pages, checks the target page across undo/redo and reopens the saved order. It renames a notebook while retaining its original filename. Real filesystem changes exercise numeric folder ordering, added screenshots, a removed current file, navigation boundaries and cancel/save decisions before switching.
+- Historical alpha and RC.1 files opened in the new reader. The released RC.1 reader refused the extended titled/image model, including an extended unsaved-work snapshot. A second window recovered the titles, picture data, positions and dirty state. Damaged recoveries stayed intact while the next valid recovery remained available. Device-specific pen and printer checks listed below still apply.
+
+## RC.1 desktop journeys
 
 | Journey | Observed result |
 | --- | --- |

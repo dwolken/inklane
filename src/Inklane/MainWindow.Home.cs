@@ -20,7 +20,12 @@ public sealed partial class MainWindow
         var brand = Studio.Line(BrandMark(31), Studio.Label("Inklane",18,strong:true));
         brand.Children[0].SetValue(MarginProperty, new Thickness(0,0,7,0));
         DockPanel.SetDock(brand,Dock.Left); header.Children.Add(brand);
-        var more = MenuButton("More","More",() => { var menu = new ContextMenu(); AddPreferences(menu); return menu; });
+        var more = MenuButton("More","More",() =>
+        {
+            var menu = new ContextMenu();
+            Command(menu,"PasteNewNotebook",() => StartNotebookFromClipboard(),"Ctrl+V");
+            menu.Items.Add(new Separator()); AddPreferences(menu); return menu;
+        });
         more.HorizontalAlignment = HorizontalAlignment.Right; header.Children.Add(more);
         _home.Children.Add(Edges(header,new Thickness(0,0,0,1)));
 

@@ -46,7 +46,7 @@
  </Style>
  <Style x:Key="AnchorMarker" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-     <Border x:Name="Chip" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="9,9,9,2">
+     <Border x:Name="Chip" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9,9,9,2">
        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
      </Border>
      <ControlTemplate.Triggers>

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Inklane.Controls;
 using Inklane.Core;
@@ -12,9 +13,22 @@ public sealed partial class MainWindow
     private Border _notesPanel = null!;
     private TextBox _noteSearch = null!;
     private readonly StackPanel _noteRows = new();
+    private ContextMenu _noteActions = null!;
+    private sealed record NoteTarget(int Page, string Id);
 
     private Border BuildNotePanel()
     {
+        var menu = new ContextMenu();
+        void Act(Key key)
+        {
+            if (menu.PlacementTarget is Button { Tag: NoteTarget target }) RunNoteCommand(target,key);
+        }
+        Command(menu,"RenameNote",() => Act(Key.F2),"F2");
+        Command(menu,"CopyObjects",() => Act(Key.C),"Ctrl+C");
+        Command(menu,"CutObjects",() => Act(Key.X),"Ctrl+X");
+        Command(menu,"DuplicateObjects",() => Act(Key.D),"Ctrl+D");
+        Command(menu,"Delete",() => Act(Key.Delete),"Del");
+        _noteActions = menu;
         var content = new DockPanel { Margin = new Thickness(14,14,14,10) };
         var top = new DockPanel { Margin = new Thickness(0,0,0,10) };
         var close = Studio.Action("CloseNotes","Close",ToggleNotes);
@@ -62,7 +76,9 @@ public sealed partial class MainWindow
         for (int page = 0; page < _document.Pages.Count; page++)
         {
             var notes = _document.Pages[page].Items.Where(item => item.IsNote).ToList();
-            var matches = notes.Select((note,index) => (note,index)).Where(x =>
+            var matches = notes.Select((note,index) => (note,index,title: string.IsNullOrWhiteSpace(note.Title)
+                    ? L.F("NoteNumber",index+1) : note.Title)).Where(x =>
+                x.title.Contains(query,StringComparison.CurrentCultureIgnoreCase) ||
                 x.note.Text.Contains(query,StringComparison.CurrentCultureIgnoreCase)).ToList();
             if (matches.Count == 0) continue;
             if (_document.Kind == DocumentKind.Notebook)
@@ -70,7 +86,7 @@ public sealed partial class MainWindow
                 var heading = Studio.Label(L.F("NotePage",page+1),11,"MutedBrush",true);
                 heading.Margin = new Thickness(3,8,0,3); _noteRows.Children.Add(heading);
             }
-            foreach (var (note,index) in matches)
+            foreach (var (note,index,title) in matches)
             {
                 var column = new DockPanel();
                 var num = new Border { Width = 23, Height = 23, Margin = new Thickness(0,0,8,0), CornerRadius = new CornerRadius(6),
@@ -78,18 +94,22 @@ public sealed partial class MainWindow
                     FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 },
                     Background = new SolidColorBrush(Color.FromRgb(246,212,141)) };
                 DockPanel.SetDock(num,Dock.Left); column.Children.Add(num);
-                var excerpt = note.Text.Trim().Replace("\r","").Split('\n',2);
+                var excerpt = note.Text.AsSpan().Trim();
+                var preview = excerpt[..Math.Min(140,excerpt.Length)].ToString().ReplaceLineEndings(" ");
                 var copy = new StackPanel();
-                copy.Children.Add(Studio.Label(excerpt[0].Length > 0 ? excerpt[0] : L.T("EmptyNote"),13,strong:true));
-                if (excerpt.Length > 1) copy.Children.Add(Studio.Label(excerpt[1].Replace('\n',' ').Trim(),12,"MutedBrush"));
+                copy.Children.Add(Studio.Label(title,13,strong:true));
+                if (preview.Length > 0) copy.Children.Add(Studio.Label(preview,12,"MutedBrush"));
                 column.Children.Add(copy);
                 var button = new Button { Content = column, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(4,7,4,7) };
                 button.SetResourceReference(StyleProperty,"QuietButton");
                 if (page == _pageIndex && note.Id == _surface.SelectedNoteId)
                     button.SetResourceReference(BackgroundProperty, "AccentSoftBrush");
-                AutomationProperties.SetName(button,L.F("NoteNumber",index+1) + " · " + (excerpt[0].Length == 0 ? L.T("EmptyNote") : excerpt[0]));
-                int targetPage = page;
-                button.Click += (_,_) => JumpToNote(targetPage,note.Id);
+                AutomationProperties.SetName(button,preview.Length == 0 ? title : title + " · " + preview);
+                AutomationProperties.SetAutomationId(button,"NoteRow:" + note.Id);
+                var target = new NoteTarget(page,note.Id);
+                button.Tag = target;
+                button.Click += (_,_) => JumpToNote(target.Page,target.Id);
+                button.ContextMenu = _noteActions;
                 _noteRows.Children.Add(button);
             }
         }
@@ -100,11 +120,28 @@ public sealed partial class MainWindow
         }
     }
 
-    private void JumpToNote(int page, string id)
+    private bool HandleNoteRowKey(Key key, ModifierKeys modifiers)
     {
-        _surface.CommitEdits(); CaptureHistory();
+        if (Keyboard.FocusedElement is not Button { Tag: NoteTarget target }) return false;
+        if (!(modifiers == ModifierKeys.None && key is Key.F2 or Key.Delete ||
+              modifiers == ModifierKeys.Control && key is Key.C or Key.X or Key.D or Key.A or Key.V)) return false;
+        RunNoteCommand(target,key);
+        return true;
+    }
+
+    private void RunNoteCommand(NoteTarget target, Key key)
+    {
+        if (!JumpToNote(target.Page,target.Id)) return;
+        if (key == Key.F2) _surface.RenameNote(target.Id);
+        else RunObjectCommand(key);
+    }
+
+    private bool JumpToNote(int page, string id)
+    {
+        _surface.CommitEdits();
+        if (!CaptureHistory() || page >= _document.Pages.Count) return false;
         if (ActualWidth < 920 && _notesPanel.Visibility == Visibility.Visible) ToggleNotes();
         if (page != _pageIndex) { _pageIndex = page; ShowPage(); }
-        _surface.UpdateLayout(); _surface.RevealNote(id);
+        _surface.UpdateLayout(); return _surface.RevealNote(id);
     }
 }
