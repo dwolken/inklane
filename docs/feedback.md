@@ -1,8 +1,8 @@
 # Reading a feedback report
 
-Use **More actions → Export feedback** in Windows or the browser image editor. Send the resulting report with the edition of the image or PDF that you reviewed. For a Word document or presentation, send the review PDF. A recipient can locate an error or requested change even after the note card has been collapsed.
+Use **More actions → Export feedback** in Windows or the web workspace. Send the report with the reviewed source. For a Word document or presentation, send the fixed review PDF. A recipient can locate a requested change even after the note card has been collapsed.
 
-The UTF-8 JSON object has `format: "inklane.feedback"` and `version: 1`. Check the SHA-256 of the supplied source bytes against `source.sha256` before interpreting any positions. The source record includes its filename and media type. A report for an Inklane notebook refers to a saved PDF revision.
+The UTF-8 JSON object has `format: "inklane.feedback"` and `version: 1`. Check the SHA-256 of the supplied source bytes against `source.sha256` before interpreting positions. A Windows notebook report identifies a saved PDF revision. A web notebook report identifies the portable `.inklane` file for that exact state; save a portable copy and export the report before editing again.
 
 | Field | Interpretation |
 | --- | --- |

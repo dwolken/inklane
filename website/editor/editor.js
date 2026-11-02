@@ -9,8 +9,21 @@ import {
   openImage,
   readEnvelope,
   readSidecar,
-  serialize
+  serialize,
+  validateDocument
 } from "./model.js";
+import {
+  attachCanvas,
+  backdropCanvas,
+  createLayer,
+  notebookDocument,
+  notebookSource,
+  openBackdrop,
+  paperPage,
+  portableFile,
+  readPortable
+} from "./documents.js";
+import { listDrafts, readDraft, removeDraft, writeDraft } from "./drafts.js";
 import { switchLanguage, t, translate } from "./language.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -62,7 +75,15 @@ let undoStack = [],
   sourceFingerprint = null,
   savedHandle = null,
   timer;
-const page = () => data.pages[0];
+let wholePage = false,
+  pageIndex = 0,
+  portableMode = false,
+  embedded = new URLSearchParams(location.search).get("embed") === "1";
+let recovery = null,
+  recoverTimer = null,
+  recoverQueue = Promise.resolve();
+document.documentElement.classList.toggle("embedded", embedded);
+const page = () => data.pages[pageIndex];
 const current = () => find(selected);
 const dirty = () => revision !== savedRevision || changedDraft();
 const collections = ["ink", "items", "images"];
@@ -92,8 +113,31 @@ function errorMessage(error, fallback) {
 function updateStatus() {
   const active = Boolean(data),
     selection = current();
+  const notebook = data?.kind === "Notebook";
+  $("#whole-page").disabled = !active || busy;
+  document.documentElement.classList.toggle("editing", active);
+  $("#open").hidden = $("#save").hidden = !active;
+  for (const item of $("#more .menu").children) {
+    if (["home", "new-sheet", "index", "feedback", "whole-page", "portable"].includes(item.id))
+      item.hidden = !active;
+  }
+  $("#pages").hidden = !active || data.kind === "Image";
+  $("#page-count").textContent = active ? pageIndex + 1 + " / " + data.pages.length : "";
+  $("#prev-page").disabled = !active || busy || pageIndex < 1;
+  $("#next-page").disabled = !active || busy || pageIndex >= data.pages.length - 1;
+  $("#add-page").hidden = !notebook;
+  $("#add-page").disabled = busy || (notebook && data.pages.length >= 1000);
+  $("#new-notebook").disabled = $("#new-sheet").disabled = $("#home").disabled = busy;
+  $("#rename-book").hidden = !notebook;
+  $("#rename-book").disabled = busy;
+  $("#print").hidden = !notebook || globalThis.inklaneNativePrinting === false;
+  $("#print").disabled = busy;
+  $("#download").hidden = !active || Boolean(notebook);
+  $("#portable").disabled = busy || !active;
+  $("#save .wide").textContent = t(notebook || portableMode ? "saveShort" : "save");
+  $("#save").setAttribute("aria-label", t(notebook ? "saveNotebook" : portableMode ? "saveShort" : "save"));
   $("#name").textContent = active ? image.name : t("workspace");
-  $("#state").textContent = t(!active ? "browser" : busy ? "saving" : dirty() ? "changed" : state);
+  $("#state").textContent = t(!active ? "newHint" : busy ? "saving" : dirty() ? "changed" : state);
   $("#feedback").disabled =
     $("#index").disabled =
     $("#save").disabled =
@@ -139,37 +183,50 @@ function change(group, index, before, after) {
     message("size", true);
     return false;
   }
-  const next = ++serial;
   const op = {
     group,
+    pageIndex,
     index,
     before,
     after,
-    previous: revision,
-    next,
     weight: weight(before) + weight(after)
   };
   items.splice(index, before ? 1 : 0, ...(after ? [after] : []));
-  revision = next;
+  record(op);
+  return true;
+}
+function record(op) {
+  op.previous = revision;
+  op.next = ++serial;
+  revision = op.next;
   undoStack.push(op);
   redoStack = [];
   historyWeight += op.weight;
   while (undoStack.length > 1 && (undoStack.length > 64 || historyWeight > 16 * 1024 * 1024))
     historyWeight -= undoStack.shift().weight;
-  return true;
+  queueRecovery();
 }
-function undoOrRedo(redo) {
+async function undoOrRedo(redo) {
   flush();
   cancelGesture();
   const source = redo ? redoStack : undoStack,
     target = redo ? undoStack : redoStack;
-  const op = source.pop();
-  if (!op) return;
+  const op = source.at(-1);
+  if (!op || busy) return;
+  if (op.group === "pages") {
+    const pages = redo ? op.after : op.before,
+      index = redo ? op.nextPage : op.previousPage;
+    if (!(await showNotebookPages(pages, index))) return;
+  } else if (op.group === "title") {
+    data.title = image.name = redo ? op.after : op.before;
+  } else if (op.pageIndex !== pageIndex && !(await switchPage(op.pageIndex))) return;
+  source.pop();
   const from = redo ? op.before : op.after,
     to = redo ? op.after : op.before;
-  page()[op.group].splice(op.index, from ? 1 : 0, ...(to ? [to] : []));
+  if (collections.includes(op.group)) page()[op.group].splice(op.index, from ? 1 : 0, ...(to ? [to] : []));
   revision = redo ? op.next : op.previous;
   target.push(op);
+  queueRecovery();
   historyWeight += redo ? op.weight : -op.weight;
   selected = to?.id ?? null;
   openNote = null;
@@ -210,7 +267,7 @@ function duplicateSelected() {
   const copy = { ...moved(sel.obj, 14 / zoom, 14 / zoom, page()), id: crypto.randomUUID() };
   try {
     const combined = { ...page(), [sel.group]: [...page()[sel.group], copy] };
-    serialize({ ...data, pages: [combined] });
+    serialize({ ...data, pages: data.pages.map((p, i) => (i === pageIndex ? combined : p)) });
   } catch (error) {
     errorMessage(error, "size");
     return;
@@ -273,9 +330,14 @@ function editSelected() {
     field.select();
   }
 }
-function initDoc(next, source, fingerprint, loaded, canvas) {
+function initDoc(next, source, fingerprint, loaded, canvas, index = 0, portable = false) {
   cancelGesture();
   $("#pictures").replaceChildren();
+  if (image !== source) image?.dispose?.();
+  clearTimeout(recoverTimer);
+  recovery = { id: crypto.randomUUID(), stored: false };
+  pageIndex = index;
+  portableMode = portable || next.kind === "Notebook";
   data = next;
   image = source;
   sourceFingerprint = fingerprint;
@@ -290,78 +352,112 @@ function initDoc(next, source, fingerprint, loaded, canvas) {
   state = loaded ? "loaded" : "ready";
   tool = "pen";
   fit = true;
-  if (canvas) $("#source").replaceWith(canvas);
+  wholePage = false;
+  if (canvas) attachCanvas(canvas);
   $("#message").hidden = true;
   updateStatus();
   resize();
   viewport.scrollTo(0, 0);
   render();
-  viewport.focus({ preventScroll: true });
+  if (!embedded) viewport.focus({ preventScroll: true });
 }
 async function openFiles(files) {
   if (!files.length || busy) return;
   flush();
   cancelGesture();
-  let bitmap = null;
+  let candidate;
   try {
     busy = true;
     updateStatus();
-    const images = files.filter((f) => /\.(png|jpe?g)$/i.test(f.name)),
-      json = files.filter((f) => /\.json$/i.test(f.name));
-    if (images.length + json.length !== files.length || images.length > 1 || json.length > 1)
-      throw new EditorError("files");
-    const envelope = json.length ? await readEnvelope(json[0]) : null;
-    if (!images.length && !image) {
-      requestSource(json[0], envelope.doc.sourceImagePath);
-      return;
-    }
-    const source = images.length ? await openImage(images[0]) : image;
-    bitmap = images.length ? source.bitmap : null;
-    let loaded = null;
-    try {
-      if (json.length) loaded = await readSidecar(json[0], source, envelope);
-    } catch (error) {
-      if (error.message === "identity" && !images.length) {
-        requestSource(json[0], envelope.doc.sourceImagePath);
+    let next,
+      source,
+      fingerprint = null,
+      loaded = false;
+    const portable = files.length === 1 && /\.inklane$/i.test(files[0].name);
+    if (portable) {
+      ({ doc: next, source, fingerprint } = await readPortable(files[0]));
+      candidate = source;
+      loaded = true;
+    } else {
+      const originals = files.filter((f) => /\.(png|jpe?g|pdf)$/i.test(f.name));
+      const json = files.filter((f) => /\.json$/i.test(f.name));
+      if (originals.length + json.length !== files.length || originals.length > 1 || json.length > 1)
+        throw new EditorError("files");
+      const envelope = json.length ? await readEnvelope(json[0]) : null;
+      const sourceName = envelope?.doc.sourcePdfName ?? envelope?.doc.sourceImagePath;
+      if (!originals.length && (!image?.file || (envelope.doc.kind === "Pdf") !== (data.kind === "Pdf"))) {
+        requestSource(json[0], sourceName);
         return;
       }
-      throw error;
+      source = originals.length ? await openBackdrop(originals[0]) : image;
+      if (originals.length) candidate = source;
+      if (envelope) {
+        try {
+          if ((envelope.doc.kind === "Pdf") !== (source.mediaType === "application/pdf"))
+            throw new EditorError("identity");
+          ({ doc: next, fingerprint } = await readSidecar(json[0], source, envelope));
+          loaded = true;
+        } catch (error) {
+          if (error.message === "identity") {
+            if (!originals.length) {
+              requestSource(json[0], sourceName);
+              return;
+            }
+            if (envelope.doc.kind === "Pdf") throw new EditorError("identityPdf");
+          }
+          throw error;
+        }
+      } else next = createLayer(source);
     }
-    let canvas = null;
-    if (bitmap) {
-      canvas = document.createElement("canvas");
-      canvas.id = "source";
-      canvas.setAttribute("aria-hidden", "true");
-      canvas.width = source.width;
-      canvas.height = source.height;
-      const paint = canvas.getContext("2d");
-      if (!paint) throw new EditorError("decode");
-      paint.drawImage(bitmap, 0, 0);
-    }
+    const canvas = await backdropCanvas(next, source, 0);
     if (dirty() && !confirm(t("discard"))) return;
-    const { name, hash, width, height, mediaType } = source;
-    initDoc(
-      loaded?.doc ?? newDocument(source),
-      { name, hash, width, height, mediaType },
-      loaded?.fingerprint ?? null,
-      Boolean(loaded),
-      canvas
-    );
+    await discardRecovery();
+    initDoc(next, source, fingerprint, loaded, canvas, 0, portable);
+    candidate = null;
   } catch (error) {
     errorMessage(error, "fileError");
   } finally {
-    bitmap?.close();
+    if (candidate !== image) candidate?.dispose?.();
     busy = false;
     render();
   }
 }
+async function switchPage(index) {
+  if (!data || busy || index < 0 || index >= data.pages.length) return false;
+  if (index === pageIndex) return true;
+  flush();
+  cancelGesture();
+  busy = true;
+  updateStatus();
+  try {
+    const canvas = await backdropCanvas(data, image, index);
+    pageIndex = index;
+    openNote = selected = draft = null;
+    attachCanvas(canvas);
+    resize();
+    viewport.scrollTo(0, 0);
+    return true;
+  } catch (error) {
+    errorMessage(error, "fileError");
+    return false;
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
 function requestSource(sidecar, sourcePath) {
   $("#message").hidden = true;
   pendingSidecar = sidecar;
   $("#source-name").textContent = typeof sourcePath === "string" ? sourcePath.split(/[\\/]/).at(-1) : "";
   $("#relink").showModal();
 }
-function requestDownload(blob, name = image.name + ".inklane.json", notification = "downloaded") {
+async function requestDownload(blob, name = image.name + ".inklane.json", notification = "downloaded") {
+  if (typeof globalThis.inklaneSaveCopy === "function") {
+    await globalThis.inklaneSaveCopy(blob, name);
+    message("nativeSaved");
+    return true;
+  }
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = name;
@@ -376,27 +472,39 @@ async function save(downloadOnly = false) {
   flush();
   render();
   try {
-    const blob = serialize(data);
-    if (downloadOnly || !window.showSaveFilePicker) {
-      requestDownload(blob);
-      return;
-    }
     busy = true;
     updateStatus();
+    const bundle = portableMode && (!downloadOnly || data.kind === "Notebook");
+    const suggestedName = bundle
+      ? image.name.replace(/[<>:"/\\|?*]/g, "-") + ".inklane"
+      : image.name + ".inklane.json";
+    const blob = bundle ? await portableFile(data, image) : serialize(data);
+    if (downloadOnly || globalThis.inklaneSaveCopy || !window.showSaveFilePicker) {
+      const confirmed = await requestDownload(blob, suggestedName, bundle ? "portableDone" : "downloaded");
+      if (confirmed && !downloadOnly) {
+        savedRevision = revision;
+        state = "saved";
+        await discardRecovery();
+      }
+      return;
+    }
     const handle =
       savedHandle ??
       (await window.showSaveFilePicker({
-        suggestedName: image.name + ".inklane.json",
+        suggestedName,
         id: "inklane-annotations",
-        types: [{ description: "Inklane JSON", accept: { "application/json": [".json"] } }]
+        types: bundle
+          ? [{ description: "Inklane", accept: { "application/octet-stream": [".inklane"] } }]
+          : [{ description: "Inklane JSON", accept: { "application/json": [".json"] } }]
       }));
-    if (!handle.name.toLowerCase().endsWith(".inklane.json")) throw new EditorError("extension");
+    if (!handle.name.toLowerCase().endsWith(bundle ? ".inklane" : ".inklane.json"))
+      throw new EditorError(bundle ? "portableExtension" : "extension");
     const write = await handle.createWritable({ mode: "exclusive" });
     try {
       const existing = await handle.getFile();
       if (
         (savedHandle || existing.size) &&
-        (existing.size > JSON_LIMIT ||
+        (existing.size > (bundle ? 100 * 1024 * 1024 : JSON_LIMIT) ||
           !sourceFingerprint ||
           (await digest(await existing.arrayBuffer())) !== sourceFingerprint)
       ) {
@@ -415,6 +523,7 @@ async function save(downloadOnly = false) {
     savedHandle = handle;
     savedRevision = revision;
     state = "saved";
+    await discardRecovery();
     message("saved");
   } catch (error) {
     if (error.name !== "AbortError") errorMessage(error, "saveError");
@@ -428,15 +537,15 @@ function resize() {
   if (fit) {
     const padding = parseFloat(getComputedStyle($("#mat")).paddingLeft) * 2;
     zoom = Math.min(
-      (viewport.clientWidth - padding) / image.width,
-      (viewport.clientHeight - padding) / image.height,
+      (viewport.clientWidth - padding) / page().width,
+      data.kind === "Image" || wholePage ? (viewport.clientHeight - padding) / page().height : 1.45,
       2
     );
     zoom = Math.max(zoom, 0.001);
   }
-  sheet.style.width = image.width * zoom + "px";
-  sheet.style.height = image.height * zoom + "px";
-  marks.setAttribute("viewBox", `0 0 ${image.width} ${image.height}`);
+  sheet.style.width = page().width * zoom + "px";
+  sheet.style.height = page().height * zoom + "px";
+  marks.setAttribute("viewBox", `0 0 ${page().width} ${page().height}`);
   render();
 }
 function zoomBy(factor, clientX, clientY) {
@@ -584,6 +693,7 @@ function render() {
         el.value = draft.text;
         el.oninput = () => {
           draft.text = el.value;
+          queueRecovery();
           updateStatus();
         };
       } else {
@@ -664,14 +774,15 @@ for (const field of [$("#note-title"), $("#note-body")]) {
       field.value = field.value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
       draft.title = field.value;
     } else draft.text = field.value;
+    queueRecovery();
     updateStatus();
   };
 }
 function point(e) {
   const r = sheet.getBoundingClientRect();
   return {
-    x: Math.max(0, Math.min(image.width - 1, (e.clientX - r.left) / zoom)),
-    y: Math.max(0, Math.min(image.height - 1, (e.clientY - r.top) / zoom)),
+    x: Math.max(0, Math.min(page().width - 1, (e.clientX - r.left) / zoom)),
+    y: Math.max(0, Math.min(page().height - 1, (e.clientY - r.top) / zoom)),
     pressure: e.pointerType === "pen" ? e.pressure : 0.5
   };
 }
@@ -893,10 +1004,14 @@ $("#feedback").onclick = async () => {
   try {
     busy = true;
     updateStatus();
-    const blob = await feedbackFile(data, image);
-    requestDownload(blob, image.name + ".feedback.json", "feedbackDownload");
+    const revision = data.kind === "Notebook"
+      ? { name: image.name + ".inklane", mediaType: "application/vnd.inklane.workspace",
+          hash: await digest(await (await portableFile(data, image)).arrayBuffer()) }
+      : image;
+    const blob = await feedbackFile(data, revision);
+    await requestDownload(blob, image.name + ".feedback.json", "feedbackDownload");
   } catch (error) {
-    errorMessage(error, "saveError");
+    if (error.name !== "AbortError") errorMessage(error, "saveError");
   } finally {
     busy = false;
     updateStatus();
@@ -923,6 +1038,7 @@ $("#redo").onclick = () => undoOrRedo(true);
 $("#plus").onclick = () => zoomBy(1.25);
 $("#minus").onclick = () => zoomBy(0.8);
 $("#fit").onclick = () => {
+  wholePage = false;
   fit = true;
   resize();
 };
@@ -1020,7 +1136,8 @@ document.addEventListener("keydown", (e) => {
 });
 translate();
 updateStatus();
-function reveal(id) {
+async function reveal(id, index = pageIndex) {
+  if (index !== pageIndex && !(await switchPage(index))) return;
   const selection = find(id);
   if (!selection) return;
   flush();
@@ -1043,35 +1160,42 @@ function fillIndex() {
   const list = $("#results"),
     query = $("#search").value.trim().toLocaleLowerCase();
   const rows = document.createDocumentFragment();
-  const notes = page().items.filter((o) => o.isNote);
-  let index = 0;
-  for (const item of [...notes, ...page().items.filter((o) => !o.isNote), ...page().ink, ...page().images]) {
-    const label = item.isNote
-      ? item.title || t("nativeNote") + " " + (index + 1)
-      : item.points
-        ? t("stroke")
-        : item.pngData
-          ? t("picture")
-          : t("placed");
-    if (item.isNote) index++;
-    if (
-      query &&
-      !label.toLocaleLowerCase().includes(query) &&
-      !item.text?.toLocaleLowerCase().includes(query)
-    )
-      continue;
-    const b = document.createElement("button");
-    b.textContent = label;
-    if (item.text) {
-      const detail = document.createElement("small");
-      detail.textContent = item.text.slice(0, 160);
-      b.append(detail);
+  for (const [pageNumber, content] of data.pages.entries()) {
+    const notes = content.items.filter((o) => o.isNote);
+    let index = 0;
+    for (const item of [
+      ...notes,
+      ...content.items.filter((o) => !o.isNote),
+      ...content.ink,
+      ...content.images
+    ]) {
+      const label = item.isNote
+        ? item.title || t("nativeNote") + " " + (index + 1)
+        : item.points
+          ? t("stroke")
+          : item.pngData
+            ? t("picture")
+            : t("placed");
+      if (item.isNote) index++;
+      if (
+        query &&
+        !label.toLocaleLowerCase().includes(query) &&
+        !item.text?.toLocaleLowerCase().includes(query)
+      )
+        continue;
+      const b = document.createElement("button");
+      b.textContent = data.pages.length > 1 ? pageNumber + 1 + " · " + label : label;
+      if (item.text) {
+        const detail = document.createElement("small");
+        detail.textContent = item.text.slice(0, 160);
+        b.append(detail);
+      }
+      b.onclick = () => {
+        $("#browse").close();
+        reveal(item.id, pageNumber);
+      };
+      rows.append(b);
     }
-    b.onclick = () => {
-      $("#browse").close();
-      reveal(item.id);
-    };
-    rows.append(b);
   }
   if (!rows.childElementCount) {
     const p = document.createElement("p");
@@ -1145,9 +1269,15 @@ async function pasted(e) {
       if (!collections.includes(incoming.group)) throw new EditorError("invalid");
       group = incoming.group;
       // Validate data from other tabs and applications exactly as an opened annotation file.
-      const shell = newDocument(image);
+      const target = {
+        width: page().width,
+        height: page().height,
+        name: "selection.png",
+        hash: "0".repeat(64)
+      };
+      const shell = newDocument(target);
       shell.pages[0][group].push(incoming.obj);
-      const checked = await readSidecar(new File([JSON.stringify(shell)], "selection.json"), image);
+      const checked = await readSidecar(new File([JSON.stringify(shell)], "selection.json"), target);
       const original = checked.doc.pages[0][group][0];
       obj = { ...moved(original, 14 / zoom, 14 / zoom, page()), id: crypto.randomUUID() };
     } else if (png) {
@@ -1176,9 +1306,9 @@ async function pasted(e) {
       obj = { ...newItem(false, pos.x, pos.y, page()), text };
     }
     const combined = { ...page(), [group]: [...page()[group], obj] };
-    const checked = serialize({ ...data, pages: [combined] });
+    serialize({ ...data, pages: data.pages.map((p, i) => (i === pageIndex ? combined : p)) });
     // Check aggregate PNG limits before accepting a newly pasted or duplicated picture.
-    if (group === "images") await readSidecar(checked, image);
+    if (group === "images") await validateDocument({ ...data, pages: [combined] });
     if (!change(group, page()[group].length, null, obj)) return;
     tool = "select";
     selected = obj.id;
@@ -1193,3 +1323,411 @@ async function pasted(e) {
   }
 }
 document.addEventListener("paste", pasted);
+
+function queueRecovery() {
+  if (!data || !recovery || embedded) return;
+  clearTimeout(recoverTimer);
+  recoverTimer = setTimeout(() => captureRecovery().catch(() => message("draftError", true)), 300);
+}
+function captureRecovery() {
+  clearTimeout(recoverTimer);
+  if (!data || !recovery || embedded || !dirty()) return Promise.resolve();
+  const entry = recovery;
+  const doc = { ...data, pages: [...data.pages] };
+  if (changedDraft()) {
+    const original = find(draft.id);
+    doc.pages[pageIndex] = { ...page(), items: [...page().items] };
+    doc.pages[pageIndex].items[original.index] = { ...original.obj, text: draft.text, title: draft.title };
+  }
+  const snapshot = structuredClone(doc),
+    source = image,
+    index = pageIndex;
+  const task = recoverQueue
+    .catch(() => {})
+    .then(async () => {
+      await writeDraft(entry.id, snapshot, source, !entry.stored, index);
+      entry.stored = true;
+    });
+  recoverQueue = task;
+  return task;
+}
+async function discardRecovery() {
+  clearTimeout(recoverTimer);
+  const entry = recovery;
+  recovery = null;
+  if (!entry) return;
+  try {
+    await recoverQueue;
+    if (entry.stored) await removeDraft(entry.id);
+  } catch {
+    /* A failed recovery write never changes the edited file. */
+  }
+  if (data) recovery = { id: crypto.randomUUID(), stored: false };
+}
+async function showRecent() {
+  let entries;
+  try {
+    entries = await listDrafts();
+  } catch {
+    entries = [];
+  }
+  if (data) return;
+  const list = $("#draft-list");
+  list.replaceChildren();
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    const open = document.createElement("button"),
+      remove = document.createElement("button");
+    const label = document.createElement("strong"),
+      last = document.createElement("small");
+    label.textContent = entry.name;
+    last.textContent = new Intl.DateTimeFormat(document.documentElement.lang, {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(entry.time);
+    open.append(label, last);
+    open.onclick = () => resume(entry);
+    remove.textContent = "×";
+    remove.className = "icon";
+    remove.title = t("forget");
+    remove.setAttribute("aria-label", t("forget") + " · " + entry.name);
+    remove.onclick = async () => {
+      if (!confirm(t("forgetConfirm"))) return;
+      try {
+        await removeDraft(entry.id);
+        await showRecent();
+      } catch {
+        message("draftError", true);
+      }
+    };
+    row.append(open, remove);
+    list.append(row);
+  }
+  $("#recent").hidden = !entries.length;
+}
+async function resume(entry) {
+  if (busy || data) return;
+  busy = true;
+  updateStatus();
+  let candidate;
+  try {
+    const { doc, file } = await readDraft(entry.id);
+    candidate = file ? await openBackdrop(file) : notebookSource(doc.title);
+    if (
+      (doc.sourceImageSha256 ?? doc.sourcePdfSha256 ?? null)?.toUpperCase() !== (candidate.hash ?? undefined)
+    )
+      throw new EditorError("invalid");
+    await validateDocument(
+      doc,
+      doc.kind === "Pdf" ? candidate.pages : doc.kind === "Image" ? [candidate] : undefined
+    );
+    const index = Math.max(0, Math.min(doc.pages.length - 1, entry.index));
+    const canvas = await backdropCanvas(doc, candidate, index);
+    initDoc(doc, candidate, null, true, canvas, index);
+    candidate = null;
+    revision = ++serial;
+    await captureRecovery();
+    await removeDraft(entry.id);
+    message("recovered");
+  } catch (error) {
+    errorMessage(error, "draftError");
+  } finally {
+    candidate?.dispose?.();
+    busy = false;
+    render();
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") captureRecovery().catch(() => message("draftError", true));
+});
+$("#home").onclick = async () => {
+  closeMenu();
+  if (!data || busy) return;
+  flush();
+  cancelGesture();
+  busy = true;
+  try {
+    if (dirty() && embedded && !confirm(t("discard"))) return;
+    await captureRecovery();
+    clearTimeout(recoverTimer);
+    recovery = null;
+    image?.dispose?.();
+    data = image = selected = draft = openNote = null;
+    $("#card").hidden = true;
+    $("#message").hidden = true;
+    $("#source").width = $("#source").height = 1;
+    objects.replaceChildren();
+    marks.replaceChildren();
+    $("#pictures").replaceChildren();
+    revision = savedRevision = 0;
+    undoStack = [];
+    redoStack = [];
+    render();
+    await showRecent();
+    $("#start").focus();
+  } catch {
+    message("draftError", true);
+  } finally {
+    busy = false;
+    render();
+  }
+};
+async function sample() {
+  if (busy) return;
+  busy = true;
+  updateStatus();
+  try {
+    const language = document.documentElement.lang === "de" ? "de" : "en";
+    const response = await fetch("../assets/field-guide-" + language + ".png");
+    if (!response.ok) throw new EditorError("fileError");
+    const source = await openBackdrop(
+      new File([await response.blob()], t("sampleName"), { type: "image/png" })
+    );
+    const next = createLayer(source),
+      p = next.pages[0];
+    p.items.push(
+      {
+        ...newItem(true, 312, 292, p),
+        title: t("sampleTitle"),
+        text: t("sampleBody"),
+        isExpanded: innerWidth >= 700
+      },
+      { ...newItem(true, 850, 445, p), title: t("sampleTitle2"), text: t("sampleBody2"), isExpanded: false }
+    );
+    const canvas = await backdropCanvas(next, source, 0);
+    if (dirty() && !confirm(t("discard"))) return;
+    await discardRecovery();
+    initDoc(next, source, null, false, canvas, 0, true);
+    tool = "select";
+  } catch (error) {
+    errorMessage(error, "fileError");
+  } finally {
+    busy = false;
+    render();
+  }
+}
+$("#sample-link").onclick = sample;
+$("#portable").onclick = async () => {
+  closeMenu();
+  if (!data || busy) return;
+  flush();
+  render();
+  busy = true;
+  updateStatus();
+  try {
+    await requestDownload(
+      await portableFile(data, image),
+      image.name.replace(/[<>:"/\\|?*]/g, "-") + ".inklane",
+      "portableDone"
+    );
+  } catch (error) {
+    if (error.name !== "AbortError") errorMessage(error, "saveError");
+  } finally {
+    busy = false;
+    updateStatus();
+  }
+};
+$("#prev-page").onclick = () => switchPage(pageIndex - 1);
+$("#next-page").onclick = () => switchPage(pageIndex + 1);
+async function showNotebookPages(pages, index) {
+  if (busy) return false;
+  busy = true;
+  updateStatus();
+  try {
+    const canvas = await backdropCanvas({ ...data, pages }, image, index);
+    data.pages = pages;
+    pageIndex = index;
+    selected = openNote = draft = null;
+    attachCanvas(canvas);
+    resize();
+    viewport.scrollTo(0, 0);
+    return true;
+  } catch (error) {
+    errorMessage(error, "fileError");
+    return false;
+  } finally {
+    busy = false;
+    render();
+  }
+}
+async function arrangePage(action) {
+  if (data?.kind !== "Notebook" || busy) return;
+  flush();
+  cancelGesture();
+  const previousPage = pageIndex,
+    before = data.pages,
+    after = [...before];
+  let index = previousPage;
+  if (action === "remove") {
+    if (after.length <= 1 || !confirm(t("deletePageConfirm"))) return;
+    after.splice(index, 1);
+    index = Math.min(index, after.length - 1);
+  } else if (action === "back" || action === "forward") {
+    const dest = index + (action === "back" ? -1 : 1);
+    if (dest < 0 || dest >= after.length) return;
+    [after[index], after[dest]] = [after[dest], after[index]];
+    index = dest;
+  } else {
+    if (after.length >= 1000) {
+      message("size", true);
+      return;
+    }
+    const source = page(),
+      next = action === "copy" ? structuredClone(source) : { ...source, items: [], images: [], ink: [] };
+    if (action === "copy") {
+      for (const group of collections) for (const obj of next[group]) obj.id = crypto.randomUUID();
+      try {
+        serialize({ ...data, pages: [...after, next] });
+      } catch (e) {
+        errorMessage(e, "size");
+        return;
+      }
+    }
+    after.splice(++index, 0, next);
+  }
+  $("#page-list").close();
+  if (await showNotebookPages(after, index)) {
+    record({
+      group: "pages",
+      before,
+      after,
+      previousPage,
+      nextPage: index,
+      weight:
+        512 +
+        Math.abs(after.length - before.length) *
+          (action === "new"
+            ? 256
+            : collections.reduce(
+                (sum, k) => sum + before[previousPage][k].reduce((n, o) => n + weight(o), 0),
+                0
+              ))
+    });
+    render();
+  }
+}
+$("#add-page").onclick = () => arrangePage("new");
+for (const b of document.querySelectorAll("[data-page-action]"))
+  b.onclick = () => arrangePage(b.dataset.pageAction);
+$("#page-count").onclick = () => {
+  const list = $("#page-choices");
+  list.replaceChildren();
+  data.pages.forEach((p, i) => {
+    const button = document.createElement("button");
+    button.textContent = t("page") + " " + (i + 1);
+    button.setAttribute("aria-current", i === pageIndex ? "page" : "false");
+    button.onclick = () => {
+      $("#page-list").close();
+      switchPage(i);
+    };
+    list.append(button);
+  });
+  $("#page-manage").hidden = data.kind !== "Notebook";
+  for (const b of document.querySelectorAll("[data-page-action]")) {
+    b.disabled =
+      (b.dataset.pageAction === "remove" && data.pages.length === 1) ||
+      (b.dataset.pageAction === "back" && pageIndex === 0) ||
+      (b.dataset.pageAction === "forward" && pageIndex === data.pages.length - 1);
+  }
+  $("#page-list").showModal();
+  list.children[pageIndex].focus();
+};
+const paperDialog = $("#new-document");
+$("#rename-book").onclick = () => {
+  closeMenu();
+  if (!data || data.kind !== "Notebook" || busy) return;
+  $("#rename-title").value = data.title;
+  $("#rename").showModal();
+  $("#rename-title").select();
+};
+$("#cancel-rename").onclick = () => $("#rename").close();
+$("#rename-form").onsubmit = (e) => {
+  e.preventDefault();
+  const name = $("#rename-title")
+    .value.trim()
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
+  if (!name) {
+    $("#rename-title").focus();
+    return;
+  }
+  if (name !== data.title) {
+    const before = data.title;
+    data.title = image.name = name;
+    record({ group: "title", before, after: name, weight: 512 });
+  }
+  $("#rename").close();
+  render();
+};
+function configurePaper() {
+  const ruled = $("#pattern").value !== "Blank";
+  $("#spacing-row").hidden = !ruled;
+  $("#custom-spacing-row").hidden = !ruled || $("#spacing").value !== "custom";
+  $("#custom-spacing").disabled = $("#custom-spacing-row").hidden;
+}
+$("#pattern").onchange = $("#spacing").onchange = configurePaper;
+$("#new-notebook").onclick = $("#new-sheet").onclick = () => {
+  if (busy) return;
+  closeMenu();
+  $("#book-title").value = t("untitled");
+  paperDialog.showModal();
+  $("#book-title").select();
+};
+$("#cancel-new").onclick = () => paperDialog.close();
+$("#paper-form").onsubmit = async (e) => {
+  e.preventDefault();
+  if (busy) return;
+  const title = $("#book-title")
+    .value.trim()
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
+  if (!title) {
+    $("#book-title").focus();
+    return;
+  }
+  const spacing =
+    $("#spacing").value === "custom" ? Number($("#custom-spacing").value) : Number($("#spacing").value);
+  const p = paperPage(
+    $("#paper-size").value,
+    $("#orientation").value,
+    $("#pattern").value,
+    $("#pattern").value === "Blank" ? 5 : spacing
+  );
+  flush();
+  if (dirty() && !confirm(t("discard"))) return;
+  busy = true;
+  updateStatus();
+  try {
+    const doc = notebookDocument(title, p),
+      source = notebookSource(title);
+    const canvas = await backdropCanvas(doc, source, 0);
+    await discardRecovery();
+    paperDialog.close();
+    initDoc(doc, source, null, false, canvas);
+  } catch (error) {
+    errorMessage(error, "fileError");
+  } finally {
+    busy = false;
+    render();
+  }
+};
+$("#print").onclick = async () => {
+  closeMenu();
+  if (data?.kind !== "Notebook" || busy) return;
+  flush();
+  render();
+  try {
+    const { printNotebook } = await import("./print.js");
+    await printNotebook(data, strokeVisual, t("printNotes"));
+  } catch (error) {
+    errorMessage(error, "fileError");
+  }
+};
+showRecent();
+if (["field-guide", "review"].includes(new URLSearchParams(location.search).get("sample"))) sample();
+
+$("#whole-page").onclick = () => {
+  closeMenu();
+  wholePage = true;
+  fit = true;
+  resize();
+};
+$("#keep-sample").onclick = () => $("#portable").click();

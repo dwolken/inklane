@@ -107,29 +107,59 @@ export async function readEnvelope(file) {
     throw new EditorError("invalid");
   }
   check(doc?.format !== "inklane.feedback", "feedbackOnly");
-  check([1, 2].includes(doc?.schemaVersion) && doc.kind === "Image", "version");
-  check(typeof doc.sourceImageSha256 === "string" && /^[0-9a-f]{64}$/i.test(doc.sourceImageSha256));
+  const pdf = doc?.kind === "Pdf";
+  check(
+    pdf ? doc.schemaVersion === 3 : [1, 2].includes(doc?.schemaVersion) && doc.kind === "Image",
+    "version"
+  );
+  const identity = pdf ? doc.sourcePdfSha256 : doc.sourceImageSha256;
+  check(typeof identity === "string" && /^[0-9a-f]{64}$/i.test(identity));
   return { doc, fingerprint: await digest(bytes) };
 }
 
 export async function readSidecar(file, image, envelope = null) {
   const { doc, fingerprint } = envelope ?? (await readEnvelope(file));
-  check(
-    typeof doc.sourceImageSha256 === "string" && doc.sourceImageSha256.toUpperCase() === image.hash,
-    "identity"
-  );
-  check(Array.isArray(doc.pages) && doc.pages.length === 1);
+  const pdf = doc.kind === "Pdf";
+  const identity = pdf ? doc.sourcePdfSha256 : doc.sourceImageSha256;
+  check(identity.toUpperCase() === image.hash, "identity");
+  const dimensions = pdf ? image.pages : [image];
+  check(dimensions && doc.pages?.length === dimensions.length, "identity");
+  await validateDocument(doc, dimensions);
+  if (pdf) doc.sourcePdfName = image.name;
+  else doc.sourceImagePath = image.name;
+  return { doc, fingerprint };
+}
+
+export async function validateDocument(doc, dimensions) {
+  check(Array.isArray(doc.pages) && doc.pages.length >= 1 && doc.pages.length <= 1000, "size");
   defaults(doc, { title: "" });
   title(doc.title);
-  const p = doc.pages[0];
+  const totals = { points: 0, pixels: 0, bytes: 0, ids: new Set() };
+  for (const [index, page] of doc.pages.entries()) {
+    range(page?.width, 1, 100000);
+    range(page?.height, 1, 100000);
+    if (dimensions) {
+      const original = dimensions[index];
+      check(
+        original &&
+          Math.abs(page.width - original.width) < 0.01 &&
+          Math.abs(page.height - original.height) < 0.01,
+        "identity"
+      );
+    }
+    if (doc.kind === "Pdf") check(page.pattern === "Blank" && page.marginMm === 0);
+    if (doc.kind === "Notebook") range(page.marginMm, 0, (Math.min(page.width, page.height) * 25.4) / 192);
+    await validatePage(page, totals);
+  }
+}
+async function validatePage(p, totals) {
   defaults(p, { images: [], pattern: "Blank", spacingMm: 5, marginMm: 15 });
-  check(p.width === image.width && p.height === image.height, "identity");
   check(["Blank", "Ruled", "Squared"].includes(p.pattern));
   range(p.spacingMm, 1, 100);
   range(p.marginMm, 0, 1000);
   check([p.ink, p.items, p.images].every(Array.isArray));
   check(p.ink.length <= 10000 && p.items.length <= 2000 && p.images.length <= 100, "size");
-  const ids = new Set();
+  const ids = totals.ids;
   function id(obj) {
     check(typeof obj?.id === "string" && obj.id.trim() && obj.id.length <= 128 && !ids.has(obj.id));
     ids.add(obj.id);
@@ -144,14 +174,14 @@ export async function readSidecar(file, image, envelope = null) {
     range(obj.width, 1, 100000);
     range(obj.height, 1, 100000);
   }
-  let points = 0;
+
   for (const ink of p.ink) {
     id(ink);
     color(ink.color);
     range(ink.width, 0.1, 1000);
     check(Array.isArray(ink.points));
-    points += ink.points.length;
-    check(points <= 500000, "size");
+    totals.points += ink.points.length;
+    check(totals.points <= 500000, "size");
     for (const sample of ink.points) {
       point(sample);
       range(sample.pressure, 0, 1);
@@ -167,8 +197,7 @@ export async function readSidecar(file, image, envelope = null) {
     check(typeof item.isNote === "boolean" && typeof item.isExpanded === "boolean");
     check(typeof item.text === "string" && item.text.length <= 1000000);
   }
-  let pixels = 0,
-    imageBytes = 0;
+
   for (const pic of p.images) {
     id(pic);
     rect(pic);
@@ -181,8 +210,8 @@ export async function readSidecar(file, image, envelope = null) {
     }
     const tail = [0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130];
     check(tail.every((byte, i) => png[png.length - 12 + i] === byte));
-    imageBytes += png.length;
-    check(imageBytes <= 24 * 1024 * 1024, "size");
+    totals.bytes += png.length;
+    check(totals.bytes <= 24 * 1024 * 1024, "size");
     const dim = pngSize(png);
     check(
       dim &&
@@ -190,8 +219,8 @@ export async function readSidecar(file, image, envelope = null) {
         png.length <= 16 * 1024 * 1024 &&
         dim[0] * dim[1] <= 24000000
     );
-    pixels += dim[0] * dim[1];
-    check(pixels <= 32_000_000, "size");
+    totals.pixels += dim[0] * dim[1];
+    check(totals.pixels <= 32_000_000, "size");
     try {
       const decoded = await createImageBitmap(new Blob([png], { type: "image/png" }));
       decoded.close();
@@ -199,22 +228,27 @@ export async function readSidecar(file, image, envelope = null) {
       throw new EditorError("invalid");
     }
   }
-  doc.sourceImagePath = image.name;
-  return { doc, fingerprint };
 }
 export function serialize(document) {
-  const page = document.pages[0];
-  check(page.ink.length <= 10000 && page.items.length <= 2000 && page.images.length <= 100, "size");
-  check(page.ink.reduce((count, stroke) => count + stroke.points.length, 0) <= 500000, "size");
-  const pixels = page.images.reduce((count, picture) => {
-    const header = Uint8Array.from(atob(picture.pngData.slice(0, 48)), (ch) => ch.charCodeAt(0));
-    const dimensions = pngSize(header);
-    check(dimensions, "invalid");
-    return count + dimensions[0] * dimensions[1];
-  }, 0);
-  check(pixels <= 32_000_000, "size");
-  const extended = document.title || page.images.length || page.items.some((item) => item.title);
-  const json = JSON.stringify({ ...document, schemaVersion: extended ? 2 : document.schemaVersion }, null, 2);
+  let points = 0,
+    pixels = 0,
+    bytes = 0;
+  let extended = Boolean(document.title);
+  for (const page of document.pages) {
+    check(page.ink.length <= 10000 && page.items.length <= 2000 && page.images.length <= 100, "size");
+    for (const stroke of page.ink) points += stroke.points.length;
+    for (const picture of page.images) {
+      const header = Uint8Array.from(atob(picture.pngData.slice(0, 48)), (ch) => ch.charCodeAt(0));
+      const dimensions = pngSize(header);
+      check(dimensions, "invalid");
+      pixels += dimensions[0] * dimensions[1];
+      bytes += Math.floor((picture.pngData.length * 3) / 4);
+    }
+    if (page.images.length || page.items.some((item) => item.title)) extended = true;
+  }
+  check(points <= 500000 && pixels <= 32_000_000 && bytes <= 24 * 1024 * 1024, "size");
+  const schemaVersion = document.kind === "Pdf" ? 3 : extended ? 2 : document.schemaVersion;
+  const json = JSON.stringify({ ...document, schemaVersion }, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   check(blob.size <= JSON_LIMIT, "size");
   return blob;
@@ -254,45 +288,55 @@ export function moved(object, dx, dy, page) {
 }
 
 export async function feedbackFile(doc, image) {
-  const p = doc.pages[0];
-  const annotations = [];
-  for (const picture of p.images) {
-    const { id, x, y, width, height } = picture;
-    const bytes = Uint8Array.from(atob(picture.pngData), (ch) => ch.charCodeAt(0));
-    annotations.push({
-      id,
-      type: "picture",
-      x,
-      y,
-      width,
-      height,
-      sha256: (await digest(bytes)).toLowerCase()
+  const pages = [];
+  for (const [index, p] of doc.pages.entries()) {
+    const annotations = [];
+    for (const picture of p.images) {
+      const { id, x, y, width, height } = picture;
+      const bytes = Uint8Array.from(atob(picture.pngData), (ch) => ch.charCodeAt(0));
+      annotations.push({
+        id,
+        type: "picture",
+        x,
+        y,
+        width,
+        height,
+        sha256: (await digest(bytes)).toLowerCase()
+      });
+    }
+    for (const stroke of p.ink) {
+      annotations.push({
+        id: stroke.id,
+        type: "ink",
+        color: stroke.color,
+        width: stroke.width,
+        points: stroke.points.map(({ x, y, pressure }) => ({ x, y, pressure }))
+      });
+    }
+    for (const item of p.items) {
+      const { id, x, y, width, height, text, color, fontSize } = item;
+      const record = { id, type: item.isNote ? "note" : "text", x, y, width, height, text, color, fontSize };
+      if (item.isNote) record.title = item.title;
+      annotations.push(record);
+    }
+    pages.push({
+      number: index + 1,
+      width: p.width,
+      height: p.height,
+      unit: doc.kind === "Image" ? "image-pixel" : "dip-96",
+      annotations
     });
   }
-  for (const stroke of p.ink) {
-    annotations.push({
-      id: stroke.id,
-      type: "ink",
-      color: stroke.color,
-      width: stroke.width,
-      points: stroke.points.map(({ x, y, pressure }) => ({ x, y, pressure }))
-    });
-  }
-  for (const item of p.items) {
-    const { id, x, y, width, height, text, color, fontSize } = item;
-    const record = { id, type: item.isNote ? "note" : "text", x, y, width, height, text, color, fontSize };
-    if (item.isNote) record.title = item.title;
-    annotations.push(record);
-  }
+  const hash = image.hash;
   return new Blob(
     [
       JSON.stringify(
         {
           format: "inklane.feedback",
           version: 1,
-          source: { name: image.name, mediaType: image.mediaType, sha256: image.hash.toLowerCase() },
+          source: { name: image.name, mediaType: image.mediaType, sha256: hash.toLowerCase() },
           coordinateSystem: "top-left",
-          pages: [{ number: 1, width: p.width, height: p.height, unit: "image-pixel", annotations }]
+          pages
         },
         null,
         2
