@@ -1,6 +1,6 @@
 # Third-party notices
 
-Inklane itself is private software. This notice does not grant an open-source license to Inklane.
+The Inklane repository is public. These dependency notices do not grant an open-source license to Inklane itself.
 
 ## PDFsharp-WPF 6.2.4
 
