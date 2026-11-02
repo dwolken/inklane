@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, mkdtempSync } from 'node:fs';
+import { readdirSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -54,12 +54,15 @@ const visible = s => js('!!'+find(s)+'?.getClientRects().length');
 async function tap(sel, fx=.5, fy=.5) {
   await waitFor(()=>visible(sel),sel);
   const {x,y}=await js('(()=>{const e='+find(sel)+';e.scrollIntoView({block:"nearest"});const r=e.getBoundingClientRect();return {x:r.left+r.width*'+fx+',y:r.top+r.height*'+fy+'}})()');
-  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
-  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x,y});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x,y});
 }
 async function type(sel,value) {
+  await waitFor(()=>visible(sel),'visible text field '+sel);
   await js(find(sel)+'.focus();'+find(sel)+'.select()');
+  await waitFor(()=>js('document.activeElement === '+find(sel)),'focused text field '+sel);
   await command('Input.insertText',{text:value});
+  await waitFor(()=>js(find(sel)+'.value === '+JSON.stringify(value)),'typed value in '+sel);
 }
 function nodes() {
   adb('shell','uiautomator','dump','/data/local/tmp/inklane-ui.xml');
@@ -145,6 +148,20 @@ try {
   await waitFor(()=>visible('#close-card'),'visible expanded note');
   assert.equal(await js(find('#note-body')+'.value'),'Leave room for the handle.');
   await tap('#close-card');
+  await tap('#more summary');
+  await tap('#home');
+  await tap('#sample-link');
+  await waitFor(()=>js('document.querySelector("#name").textContent === "Field guide.png" && !document.querySelector("#viewport").inert && document.querySelectorAll(".marker").length === 2'),'bundled field guide');
+  const sampleMarker = await js('(() => {const e=document.querySelector(".marker");const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
+  if (!await visible('#close-card')) {
+    await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[sampleMarker]});
+    await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }
+  await waitFor(()=>visible('#close-card'),'visible sample card');
+  await js('document.fonts.ready.then(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))))');
+  mkdirSync('.scratch',{recursive:true});
+  writeFileSync('.scratch/android-review.png',execFileSync('adb',['exec-out','screencap','-p'],{maxBuffer:8*1024*1024}));
+  await tap('#close-card');
   await loadFixture('website/assets/field-guide-en.png', 'image/png');
   assert.ok(await js('document.querySelector("#source").width') > 500);
   const pdf = await loadFixture('website/fixtures/review-pages.pdf', 'application/pdf');
@@ -174,7 +191,7 @@ try {
   assert.equal(report.pages[1].annotations[0].text,'Change the units.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
-  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
+  console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),focus:document.activeElement?.id,cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
   throw error;
 } finally {
   socket.close();
