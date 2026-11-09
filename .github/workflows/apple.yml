@@ -16,7 +16,9 @@ jobs:
     name: ${{ matrix.label }} workspace
     concurrency:
       group: apple-${{ matrix.queue }}-${{ github.ref }}
-      cancel-in-progress: false
+      # Verify the current PR revision instead of queuing superseded simulators.
+      # Integrated main builds retain their complete qualification runs.
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:

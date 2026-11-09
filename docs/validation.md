@@ -2,7 +2,7 @@
 
 ## Development editor · 9 November 2026
 
-The extended editor was exercised locally with **19 persistence, 32 WPF surface and 38 lifecycle checks**. These use the real document writers, WPF controls, clipboard and filesystem. They are separate from physical pen, printer and screen-reader acceptance.
+The extended editor was exercised locally with **20 persistence, 32 WPF surface and 39 lifecycle checks**, including the optional actual LibreOffice conversion journey. These use the real document writers, WPF controls, clipboard and filesystem. They are separate from physical pen, printer and screen-reader acceptance.
 
 - Schema 4 round trips retain Markdown source, styles, opacity, mixed object order, editable shapes, connector references and reusable grouped elements. Historical documents remain readable. Simple documents retain their older schema; readers that cannot understand extended objects refuse them before editing.
 - Actual Windows UI review covered English dark and German light layouts, rendered headings, tables, code and mathematics, selection, save and reopen. Dragging a text-box handle changed its wrapping without changing the font size. Review corrected clipped German formatting controls, unexpected scrolling on selection and a low-contrast source-edit button. The Shapes rail item and Properties footer are labeled.

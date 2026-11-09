@@ -18,6 +18,8 @@ The candidate is unsigned. Windows may display the publisher as unknown. A porta
 
 The shared workspace can also be built as an offline [Android app](platforms/android/README.md), [macOS or iOS app](platforms/apple/README.md), or [Linux desktop package](platforms/linux/README.md). Each bundles the editor and renderer and uses the system file picker. These are development builds. There are no mobile store releases or published native installers for these platforms; the [web workspace](https://dwolken.github.io/inklane/editor/) is the immediately available option.
 
+To annotate a live webpage, build and load the local [Inklane Web Review extension](platforms/browser/README.md). It keeps remarks, text and ink in your browser profile and exports editable reviews, visible-area snapshots and complete printable reports. Chromium and Firefox installed-extension workflows are tested; individual branded-browser qualification remains open. This is an unsigned development package, with no browser-store release.
+
 ## Development editor
 
 The source build extends the published RC.3. New formatting, shapes, connectors, grouping and layers use schema 4; older releases refuse these documents rather than discard unfamiliar objects. Documents using only older features retain their earlier schema. Keep a copy before moving between different app versions.
