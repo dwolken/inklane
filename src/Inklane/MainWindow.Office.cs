@@ -1,5 +1,9 @@
 using System.IO;
 using System.IO.Compression;
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Inklane.Core;
@@ -39,24 +43,27 @@ public sealed partial class MainWindow
             && new FileInfo(previous.PdfPath).Length <= 128L * 1024 * 1024
             && DocumentStore.GetFileHash(previous.PdfPath) == previous.PdfHash) return previous;
 
-        string message = previous == null ? L.F("OfficeReviewIntro", source.Name) : L.T("OfficeReviewChanged");
+        string message = previous == null ? WorkflowText.T("OfficeRendererMissing") : L.T("OfficeReviewChanged");
         if (_officeRenderer != null)
         {
-            int action = _interaction.Choose(this,L.T("OfficeReview"), previous == null ? L.F("OfficeReviewCreateIntro",source.Name) : message,
-                L.T("CreateReviewPdf"),L.T("ChooseReviewPdf"),L.T("Cancel"));
-            if (action == 0)
+            try { return CreateOfficeCopy(_officeRenderer,source); }
+            catch (OperationCanceledException) { return null; }
+            catch (Exception ex) when (IsExpected(ex) || ex is System.Xml.XmlException or System.ComponentModel.Win32Exception)
             {
-                try { return CreateOfficeCopy(_officeRenderer,source); }
-                catch (OperationCanceledException) { return null; }
-                catch (Exception ex) when (IsExpected(ex) || ex is System.Xml.XmlException or System.ComponentModel.Win32Exception)
-                {
-                    var reason = L.IsOpenProblem(ex.Message) ? ex.Message : L.T("OfficeConvertFailed");
-                    if (_interaction.Choose(this,L.T("OfficeReview"),reason,L.T("ChooseReviewPdf"),L.T("Cancel")) != 0) return null;
-                }
+                var reason = L.IsOpenProblem(ex.Message) ? ex.Message : L.T("OfficeConvertFailed");
+                if (_interaction.Choose(this,L.T("OfficeReview"),reason,L.T("ChooseReviewPdf"),L.T("Cancel")) != 0) return null;
             }
-            else if (action != 1) return null;
         }
-        else if (_interaction.Choose(this,L.T("OfficeReview"),message,L.T("ChooseReviewPdf"),L.T("Cancel")) != 0) return null;
+        else
+        {
+            int action = _interaction.Choose(this,L.T("OfficeReview"),message,L.T("ChooseReviewPdf"),WorkflowText.T("GetRenderer"),L.T("Cancel"));
+            if (action == 1)
+            {
+                Process.Start(new ProcessStartInfo("https://www.libreoffice.org/download/download-libreoffice/") { UseShellExecute = true });
+                return null;
+            }
+            if (action != 0) return null;
+        }
         var picker = new OpenFileDialog { Title = L.T("ChooseReviewPdf"), Filter = L.T("SourcePdfFilter"),
             InitialDirectory = source.DirectoryName, FileName = Path.ChangeExtension(source.Name, ".pdf"),
             CheckFileExists = true, Multiselect = false };
@@ -71,11 +78,31 @@ public sealed partial class MainWindow
 
     private OfficeReviewLink? CreateOfficeCopy(string renderer, FileInfo source)
     {
-        var picker = new SaveFileDialog { Title = L.T("CreateReviewPdf"), Filter = L.T("SourcePdfFilter"),
-            FileName = Path.GetFileNameWithoutExtension(source.Name) + L.T("ReviewSuffix") + ".pdf", InitialDirectory = source.DirectoryName,
-            AddExtension = true, DefaultExt = ".pdf", OverwritePrompt = false };
-        var destination = _interaction.ChooseSavePath(this,picker);
-        if (destination == null) return null;
+        // A stable, revision-specific location survives recent-list eviction and never
+        // overwrites an older review. The editable layer lives beside this local copy.
+        var sourceHash = DocumentStore.GetFileHash(source.FullName);
+        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.FullName.ToUpperInvariant() + "\n" + sourceHash)));
+        var folder = Path.Combine(App.DataDirectory,"OfficeReviews",key);
+        Directory.CreateDirectory(folder);
+        var destination = Path.Combine(folder,"review.pdf");
+        var receipt = Path.Combine(folder,"rendering.json");
+        if (File.Exists(receipt))
+        {
+            // Only adopt a valid complete rendering. A failed/corrupt cache is kept
+            // for recovery instead of deleting an existing review or its annotations.
+            try
+            {
+                var cached=JsonSerializer.Deserialize<OfficeReviewLink>(File.ReadAllText(receipt));
+                if(cached!=null && SamePath(cached.OfficePath,source.FullName) && cached.OfficeHash==sourceHash &&
+                    SamePath(Path.GetDirectoryName(cached.PdfPath)!,folder) && File.Exists(cached.PdfPath) &&
+                    new FileInfo(cached.PdfPath).Length<=DocumentStore.MaxPdfBytes && DocumentStore.GetFileHash(cached.PdfPath)==cached.PdfHash)
+                    return cached;
+            }
+            catch (Exception ex) when (IsExpected(ex))
+            { /* Keep damaged local files available for recovery. */ }
+        }
+        if(File.Exists(destination) || File.Exists(destination+".inklane.json"))
+            destination=Path.Combine(folder,"review-"+Guid.NewGuid().ToString("N")+".pdf");
         using var cancellation = new CancellationTokenSource();
         var convert = OfficePdfConverter.ConvertAsync(renderer,source.FullName,destination,cancellation.Token);
         if (IsVisible)
@@ -95,7 +122,9 @@ public sealed partial class MainWindow
             };
             progress.ShowDialog();
         }
-        return convert.GetAwaiter().GetResult();
+        var result=convert.GetAwaiter().GetResult();
+        AtomicWrite(receipt,stream=>JsonSerializer.Serialize(stream,result));
+        return result;
     }
 
     private static void RememberOfficeReview(OfficeReviewLink link)
