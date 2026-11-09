@@ -149,3 +149,56 @@ video { display: block; width: 100%; aspect-ratio: 16/9; max-height: 78dvh; back
 @media (forced-colors: active) {
   .button, .view-choice[aria-pressed="true"], .stage, .screenshot, .desktop-switch { border: 1px solid ButtonText; }
 }
+
+.experiments,.continuity,.platforms { padding-block:clamp(2.5rem,6vw,6rem); }
+.section-intro { display:grid; grid-template-columns:1fr 1fr; gap:2rem; align-items:end; margin-bottom:2.5rem; }
+.section-intro h2 { font-size:clamp(1.9rem,3.1vw,3rem); font-weight:600; letter-spacing:-.045em; line-height:1.1; max-width:20ch; }
+.section-intro p { color:var(--muted); max-width:43ch; }
+.experiment { display:grid; grid-template-columns:minmax(0,.72fr) minmax(0,1.4fr); gap:clamp(2rem,6vw,6rem); align-items:center; padding-block:2rem; border-top:1px solid var(--line); }
+.experiment.reverse { grid-template-columns:minmax(0,1.4fr) minmax(0,.72fr); }
+.reverse .experiment-copy { order:2; }
+.experiment h3,.file-choices h3 { font-size:1.45rem; line-height:1.2; letter-spacing:-.025em; font-weight:610; margin:0 0 .85rem; }
+.experiment-copy p { max-width:34ch; color:var(--muted); }
+.demo-controls { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; margin-top:1.4rem; }
+.demo-controls button,.demo-controls label,.text-button,.demo-card button { font:inherit; font-size:.88rem; border:1px solid var(--line); padding:.5rem .8rem; border-radius:.45rem; background:var(--panel); min-height:44px; }
+.demo-controls label { display:inline-flex; align-items:center; gap:.6rem; }
+.demo-controls input { width:30px; height:28px; padding:0; border:0; cursor:pointer; background:none; }
+.demo-controls button[aria-pressed=true] { color:var(--on-button); background:var(--button); }
+.text-button { margin-top:1.3rem; }
+.mini-stage { position:relative; height:310px; background:#fffefa; border:1px solid var(--line); border-radius:.65rem; overflow:hidden; color:#282333; }
+.plan,#demo-ink { position:absolute; width:100%; height:100%; inset:0; }
+.plan path { fill:none; }.plan .walls {stroke:#615b6b;stroke-width:3;}.plan .furniture{stroke:#c0b8c5;stroke-width:2;fill:#f3f0f6;}.plan .opening{stroke:#9c94a4;stroke-width:1.5;}
+#demo-ink { touch-action:none; cursor:crosshair; }
+#demo-ink polyline { fill:none; stroke-width:5; stroke-linecap:round; stroke-linejoin:round; }
+.mini-caption { position:absolute; bottom:.6rem; left:.9rem; font-size:.75rem; color:#625d6b; pointer-events:none; }
+.specimen>img { width:100%;height:100%;object-fit:cover; }
+.demo-pin { position:absolute; left:56%;top:40%;width:36px;height:36px;border-radius:50%;border:2px solid #fffefa;box-shadow:0 0 0 2px #684f9c;background:#684f9c;color:#fff;font-weight:700; }
+.demo-card { position:absolute; top:19%;right:3%;width:min(260px,76%);padding:.85rem;border:1px solid #b6a8d0;border-radius:.6rem;background:#fffefa;box-shadow:0 8px 32px #28233322; }
+.demo-card label { display:block;font-size:.85rem;font-weight:600;margin-bottom:.5rem; }
+.demo-card textarea { width:100%;border:0;resize:vertical;max-height:130px;min-height:80px;font-family:inherit;font-size:14px;line-height:1.5;background:#fffefa;color:#282333; }
+.demo-card button { margin-top:.5rem;color:#282333;background:#f2eef9;border-color:#b6a8d0; }
+.paper-demo { background-color:#fffefa;background-image:linear-gradient(#cec5da55 1px,transparent 1px),linear-gradient(90deg,#cec5da55 1px,transparent 1px);background-size:24px 24px; }
+.demo-object { position:absolute;left:15%;top:24%;width:65%;height:140px;border:1px solid #8062b9;background:#fffefad9;min-width:120px; }
+.demo-object textarea { resize:none;padding:15px;width:100%;height:100%;border:0;background:none;color:#36274f;font:400 21px/1.45 "Segoe UI",system-ui,sans-serif; }
+.demo-object button { position:absolute;width:30px;height:30px;border:1px solid #8062b9;background:#fffefa;color:#61448e;touch-action:none; }
+#demo-move { left:-1px;top:-31px;border-radius:.3rem .3rem 0 0;cursor:move; }
+#demo-resize { bottom:-1px;right:-1px;cursor:nwse-resize; }
+.demo-next { display:flex;gap:1rem;align-items:center;justify-content:space-between;padding-top:1.5rem;border-top:1px solid var(--line); }
+.demo-next p {color:var(--muted);font-size:.91rem;max-width:60ch;}
+.continuity {border-bottom:1px solid var(--line);}
+.file-choices {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.5rem;}
+.file-choices p {color:var(--muted);margin-bottom:1rem;max-width:34ch;}
+.file-choices code {font-size:.9rem;color:var(--plum);}
+.file-choices a {display:inline-flex;align-items:center;gap:.4rem;color:var(--plum);font-weight:600;}
+.platform-list a {display:grid;grid-template-columns:1fr 2fr 24px;align-items:center;gap:2rem;padding:1.2rem 0;border-top:1px solid var(--line);}
+.platform-list a span {color:var(--muted);font-size:.94rem;}
+.platform-list a:hover strong {text-decoration:underline;text-underline-offset:.2em;}
+.platform-list a:hover {text-decoration:none;}
+@media(max-width:43rem){
+ .section-intro,.experiment,.experiment.reverse{grid-template-columns:minmax(0,1fr);gap:1rem;}
+ .section-intro{margin-bottom:1.7rem;}.reverse .experiment-copy{order:0;}.experiment{padding-block:1.6rem;}
+ .experiment-copy p{max-width:100%;}.mini-stage{height:250px;}.demo-controls{margin-top:1rem;}
+ .demo-object textarea{font-size:18px;}.demo-next{align-items:start;flex-direction:column;}
+ .file-choices{grid-template-columns:1fr;gap:1.8rem;}.file-choices p{max-width:100%;}
+ .platform-list a{grid-template-columns:90px 1fr 16px;gap:.8rem;}.platform-list a span{font-size:.86rem;}
+}
