@@ -12,6 +12,7 @@ internal static class Studio
     // Each silhouette is drawn on the same 24-unit grid.
     private static readonly Dictionary<string, string> Paths = new()
     {
+        ["Shape"] = "M3,4 H15 V16 H3 Z M13,12 A5,5 0 1 0 13.01,12",
         ["Pen"] = "M4,20 L5.6,13.8 L16.5,2.9 Q17.6,1.8 18.8,3 L21,5.2 Q22.2,6.4 21,7.6 L10.1,18.5 Z M14.2,5.2 L18.9,9.8 M5.6,13.8 L10.1,18.5",
         ["Select"] = "M5,3 L19,13 L12.6,14.1 L10,21 Z",
         ["Eraser"] = "M3.7,13.7 L13.5,3.9 Q14.7,2.7 15.9,3.9 L21,9 Q22,10 21,11 L12,20 L9.3,20 Z M8,9.4 L16,17.4 M11.5,20 L21,20",

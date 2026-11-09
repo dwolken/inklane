@@ -20,7 +20,7 @@ namespace Inklane.SurfaceTests;
 /// STA integration checks exercise real WPF controls and renderer, without
 /// synthesizing physical input or claiming hardware/UI acceptance coverage.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private static int _failures;
     private static int _checks;
@@ -45,6 +45,10 @@ internal static class Program
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
         Run("Windows clipboard between independent editor processes", () => ClipboardChecks.Run(run));
+        Run("Markdown, tables, code and vector LaTeX render and retain editable source", RichTextLifecycle);
+        Run("Text handles resize layout without scaling fonts and retain formatting after PDF reopen", TextResizeAndStyle);
+        Run("Diagram connections follow nodes and duplicated groups retain internal identities", DiagramLifecycle);
+        Run("Arbitrary colors and opacity survive edited ink and note round trips", ColorLifecycle);
         Run("A4 raster dimensions and white page boundaries", PageRaster);
         Run("Original image pixels survive rendering without annotations", ImageRaster);
         Run("View, tool and clean export operations do not mutate document", ViewPurity);
@@ -418,7 +422,7 @@ internal static class Program
                 "ComboBox lost its Fluent base style.");
             Assert(button.Template.FindName("Shell", button) is Border { CornerRadius.TopLeft: > 0 },
                 "Studio command template is missing.");
-            Equal("#FF352B18", Editor(surface, "Note").Foreground.ToString());
+            Equal("#FF202020", Editor(surface, "Note").Foreground.ToString());
             Equal("#FF202020", Editor(surface, "Text").Foreground.ToString());
             Equal(1_000_000, Editor(surface, "Text").MaxLength);
             var clean = surface.RenderPage(); Save(clean, $"page-{mode.ToLowerInvariant()}.png");

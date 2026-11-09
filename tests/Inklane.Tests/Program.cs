@@ -12,7 +12,7 @@ using PdfSharp.Pdf.IO;
 
 namespace Inklane.Tests;
 
-internal static class Program
+internal static partial class Program
 {
     private static int failures;
     private static int checks;
@@ -23,6 +23,7 @@ internal static class Program
     {
         output = Path.GetFullPath(args.FirstOrDefault() ?? ".scratch/test-output");
         Directory.CreateDirectory(output);
+        Run("Schema 4 retains text style, vector connections and rejects dangling references", ExtendedObjectRoundTrip);
         Run("JSON round trip retains multiline note, pressure and coordinates", JsonRoundTrip);
         Run("PDF round trip retains two editable pages and full Unicode text", PdfRoundTrip);
         Run("A4 and A5 media boxes match physical dimensions", PageGeometry);

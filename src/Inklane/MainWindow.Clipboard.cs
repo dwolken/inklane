@@ -33,6 +33,7 @@ public sealed partial class MainWindow
     private void PopulateObjectMenu(ItemsControl menu, Point? point)
     {
         var selected = _surface.HasSelection;
+        AddVisualObjectCommands(menu);
         if (_surface.HasSingleText) Command(menu, "EditTextObject", _surface.EditSelectedText, "F2");
         if (_surface.HasSingleObject && _surface.SelectedNoteId is { } id)
             Command(menu, "RenameNote", () => _surface.RenameNote(id), "F2");
@@ -131,6 +132,7 @@ public sealed partial class MainWindow
             page.Ink.AddRange(content.Page.Ink);
             page.Items.AddRange(content.Page.Items);
             page.Images.AddRange(content.Page.Images);
+            page.Shapes.AddRange(content.Page.Shapes);
             DocumentStore.Serialize(notebook); // Reject oversize or invalid data before switching documents.
             if (!CanLeave()) return false;
             ClearRecovery(); _sessionId = Guid.NewGuid().ToString("N");

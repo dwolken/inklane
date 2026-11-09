@@ -95,7 +95,7 @@ public sealed class PortableWorkspace
         long pixels = 0, points = 0;
         foreach (var page in document.Pages)
         {
-            if (page.Images.Count > 100 || page.Items.Count > 2000 || page.Ink.Count > 10000)
+            if (page.Images.Count > 100 || page.Items.Count > 2000 || page.Shapes.Count > 2000 || page.Ink.Count > 10000)
                 throw new PortableCapacityException("The page has too many objects for a portable workspace.");
             foreach (var picture in page.Images) pixels += EmbeddedPng.CheckHeader(picture.PngData);
             foreach (var stroke in page.Ink) points += stroke.Points.Count;

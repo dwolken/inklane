@@ -90,8 +90,8 @@ public sealed partial class MainWindow : Window
     {
         _surface.CommitEdits(); _surface.Tool = tool;
         foreach (var pair in _tools) pair.Value.IsChecked = pair.Key == tool;
-        _inkProperties.Visibility = tool is EditorTool.Pen or EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
-        _strokeWidth.Visibility = tool == EditorTool.Pen ? Visibility.Visible : Visibility.Collapsed;
+        _inkProperties.Visibility = tool is EditorTool.Pen or EditorTool.Text or EditorTool.Note or EditorTool.Select or EditorTool.Shape ? Visibility.Visible : Visibility.Collapsed;
+        _strokeWidth.Visibility = tool is EditorTool.Pen or EditorTool.Shape ? Visibility.Visible : Visibility.Collapsed;
         _textProperties.Visibility = tool == EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
     }
     private void ShowPage(bool fit = true) => DisplayPage(fit, reveal: fit);

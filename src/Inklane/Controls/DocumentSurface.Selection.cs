@@ -51,7 +51,7 @@ public sealed partial class DocumentSurface
             for (var current = source; current is Visual && current != this; current = VisualTreeHelper.GetParent(current))
             {
                 if (current is TextBoxBase box && !box.IsReadOnly) return;
-                if (current is FrameworkElement { Tag: string id } && (_items.ContainsKey(id) || _pictures.ContainsKey(id)))
+                if (current is FrameworkElement { Tag: string id } && (_items.ContainsKey(id) || _pictures.ContainsKey(id) || _shapes.ContainsKey(id)))
                     objectId = id;
             }
             e.Handled = true;
@@ -63,6 +63,8 @@ public sealed partial class DocumentSurface
             if (objectId == null && position is { } p)
             {
                 objectId = _page.Items.LastOrDefault(i => !i.IsNote && new Rect(i.X,i.Y,i.Width,i.Height).Contains(p))?.Id;
+                if (objectId == null && hit == null)
+                    objectId = _page.Shapes.OrderBy(s => s.Layer).LastOrDefault(s => ShapeGeometry.Bounds(_page, s).Contains(p))?.Id;
                 if (objectId == null && hit == null)
                     objectId = _page.Images.LastOrDefault(i => new Rect(i.X,i.Y,i.Width,i.Height).Contains(p))?.Id;
             }
@@ -111,6 +113,7 @@ public sealed partial class DocumentSurface
         _selectedItem = id;
         if (_editingText != id) _editingText = null;
         if (_ink.GetSelectedStrokes().Count != 0) SelectStrokes([]);
+        ExpandGroupSelection(id);
         UpdateItemStates();
     }
 
@@ -149,7 +152,7 @@ public sealed partial class DocumentSurface
     {
         if (_page == null) return;
         EnterSelectionTool();
-        SelectObjects(_page.Items.Select(i => i.Id).Concat(_page.Images.Select(i => i.Id)), _ink.Strokes);
+        SelectObjects(_page.Items.Select(i => i.Id).Concat(_page.Images.Select(i => i.Id)).Concat(_page.Shapes.Select(i => i.Id)), _ink.Strokes);
     }
 
     private void SelectObjects(IEnumerable<string> ids, StrokeCollection strokes)
@@ -174,8 +177,26 @@ public sealed partial class DocumentSurface
             Width = _page!.Width, Height = _page.Height, MarginMm = 0,
             Items = _page.Items.Where(i => IncludesObject(i.Id)).ToList(),
             Images = _page.Images.Where(i => IncludesObject(i.Id)).ToList(),
+            Shapes = SelectedShapeCopy(),
             Ink = _ink.GetSelectedStrokes().Select(FromStroke).ToList()
         };
+    }
+
+    private List<ShapeItem> SelectedShapeCopy()
+    {
+        var selected = SelectedShapes;
+        var copy = System.Text.Json.JsonSerializer.Deserialize<List<ShapeItem>>(System.Text.Json.JsonSerializer.Serialize(selected))!;
+        foreach (var shape in copy)
+        {
+            var (a,b) = ShapeGeometry.Endpoints(_page!, shape);
+            if (shape.StartId != null && !selected.Any(s => s.Id == shape.StartId) || shape.EndId != null && !selected.Any(s => s.Id == shape.EndId))
+            {
+                shape.X = Math.Min(a.X,b.X); shape.Y = Math.Min(a.Y,b.Y); shape.Width = Math.Max(1,Math.Abs(a.X-b.X)); shape.Height = Math.Max(1,Math.Abs(a.Y-b.Y)); shape.FlipX = a.X>b.X; shape.FlipY = a.Y>b.Y;
+                if (!selected.Any(s => s.Id == shape.StartId)) shape.StartId = null;
+                if (!selected.Any(s => s.Id == shape.EndId)) shape.EndId = null;
+            }
+        }
+        return copy;
     }
 
     private static Rect Bounds(PageData content)
@@ -183,6 +204,7 @@ public sealed partial class DocumentSurface
         var bounds = Rect.Empty;
         foreach (var item in content.Items)
             bounds.Union(new Rect(item.X, item.Y, item.IsNote ? 28 : item.Width, item.IsNote ? 28 : item.Height));
+        foreach (var shape in content.Shapes) bounds.Union(ShapeGeometry.Bounds(content, shape));
         foreach (var item in content.Images) bounds.Union(new Rect(item.X, item.Y, item.Width, item.Height));
         foreach (var stroke in content.Ink)
             foreach (var point in stroke.Points) bounds.Union(new Point(point.X, point.Y));
@@ -203,6 +225,7 @@ public sealed partial class DocumentSurface
             bounds.Union(new Rect(item.X, item.Y, item.IsNote ? 28 / _zoom : item.Width, item.IsNote ? 28 / _zoom : item.Height));
         foreach (var item in _page.Images.Where(i => IncludesObject(i.Id)))
             bounds.Union(new Rect(item.X, item.Y, item.Width, item.Height));
+        foreach (var shape in SelectedShapes) bounds.Union(ShapeGeometry.Bounds(_page, shape));
         if (bounds.IsEmpty) return default;
         dx = Constrain(dx, bounds.Left, bounds.Right, _page.Width);
         dy = Constrain(dy, bounds.Top, bounds.Bottom, _page.Height);
@@ -216,6 +239,8 @@ public sealed partial class DocumentSurface
             visual.Item.X += dx; visual.Item.Y += dy;
             PositionPicture(visual);
         }
+        foreach (var shape in SelectedShapes) { shape.X += dx; shape.Y += dy; }
+        RefreshShapes();
         if (moveInk && _ink.GetSelectedStrokes().Count != 0)
             _ink.GetSelectedStrokes().Transform(new Matrix(1, 0, 0, 1, dx, dy), false);
         return new Vector(dx, dy);
@@ -246,6 +271,7 @@ public sealed partial class DocumentSurface
             _page.Items.Remove(item);
         }
         foreach (var item in _page.Images.Where(i => IncludesObject(i.Id)).ToArray()) RemovePicture(item);
+        foreach (var item in _page.Shapes.Where(i => IncludesObject(i.Id)).ToArray()) RemoveShape(item);
         ClearObjectSelection();
         NumberNotes();
         SyncInkAndNotify();

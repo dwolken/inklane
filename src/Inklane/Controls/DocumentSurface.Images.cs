@@ -107,7 +107,10 @@ public sealed partial class DocumentSurface
         {
             Canvas.SetLeft(element, visual.Item.X); Canvas.SetTop(element, visual.Item.Y);
             element.Width = visual.Item.Width; element.Height = visual.Item.Height;
+            element.RenderTransformOrigin = new Point(.5,.5); element.RenderTransform = new RotateTransform(visual.Item.Rotation);
+            Panel.SetZIndex(element, visual.Item.Layer);
         }
+        visual.Image.Opacity = visual.Item.Opacity;
     }
 
     private void UpdatePictureStates()

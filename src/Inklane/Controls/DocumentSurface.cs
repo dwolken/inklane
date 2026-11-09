@@ -11,7 +11,7 @@ using Inklane.Core;
 
 namespace Inklane.Controls;
 
-public enum EditorTool { Pen, Select, Eraser, Text, Note, Pan }
+public enum EditorTool { Pen, Select, Eraser, Text, Note, Pan, Shape }
 public enum PageViewMode { Editing, FitWidth, FitPage, Manual }
 
 /// <summary>Transient view state. Offsets are viewport DIPs at the captured zoom.</summary>
@@ -131,7 +131,7 @@ public sealed partial class DocumentSurface : UserControl
             PositionNotes();
             QueueContinuousRefresh();
         };
-        _ink.StrokeCollected += (_, _) => SyncInkAndNotify();
+        _ink.StrokeCollected += (_, e) => { e.Stroke.AddPropertyData(StrokeOpacity, InkOpacity); SyncInkAndNotify(); };
         _ink.StrokeErased += (_, _) => SyncInkAndNotify();
         _ink.SelectionMoved += (_, _) => SyncInkAndNotify();
         _ink.SelectionResized += (_, _) => SyncInkAndNotify();
@@ -181,8 +181,10 @@ public sealed partial class DocumentSurface : UserControl
             _ink.Strokes = new StrokeCollection(page.Ink.Select(ToStroke));
             _objects.Children.Clear();
             _items.Clear();
+            _shapes.Clear();
             LoadPictures();
-            foreach (var item in page.Items) AddItemVisual(item);
+            foreach (var shape in page.Shapes.OrderBy(s => s.Layer)) AddShapeVisual(shape);
+            foreach (var item in page.Items.OrderBy(s => s.Layer)) AddItemVisual(item);
             NumberNotes();
             _ink.Select(new StrokeCollection());
             AutomationProperties.SetName(_ink, Translate("PageCanvas"));
@@ -320,6 +322,17 @@ public sealed partial class DocumentSurface : UserControl
             e.Handled = true;
             return;
         }
+        if (HasTextFocus && Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.B or Key.I or Key.U && Keyboard.FocusedElement is TextBox source)
+        {
+            var current = _items.Values.FirstOrDefault(v => v.Editor == source);
+            if (current != null)
+            {
+                var token = e.Key == Key.B ? "**" : e.Key == Key.I ? "*" : "++";
+                var selectedText = source.SelectedText; var start = source.SelectionStart;
+                current.Item.ContentFormat = "Markdown"; source.SelectedText = token + selectedText + token;
+                source.Select(start + token.Length, selectedText.Length); NotifyChanged(); e.Handled = true; return;
+            }
+        }
         if (HasTextFocus) return;
         if (e.Key == Key.F2 && _selectedItem != null && _items.TryGetValue(_selectedItem, out var selected) && !selected.Item.IsNote)
         {
@@ -396,7 +409,7 @@ public sealed partial class DocumentSurface : UserControl
     {
         _ink.DefaultDrawingAttributes = new DrawingAttributes
         {
-            Color = ParseColor(_inkColor), Width = _inkWidth, Height = _inkWidth,
+            Color = ColorWithOpacity(_inkColor, _opacity), Width = _inkWidth, Height = _inkWidth,
             IgnorePressure = false, FitToCurve = false
         };
     }
@@ -404,6 +417,7 @@ public sealed partial class DocumentSurface : UserControl
     private void CanvasPressed(object sender, MouseButtonEventArgs e)
     {
         if (_page is null || _spacePan) return;
+        if (_tool == EditorTool.Shape) { AddShape(e.GetPosition(_pageHost), ShapeKind); e.Handled = true; return; }
         if (_tool is not (EditorTool.Text or EditorTool.Note))
         {
             if (_tool == EditorTool.Select && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
@@ -436,7 +450,7 @@ public sealed partial class DocumentSurface : UserControl
             Id = Guid.NewGuid().ToString("N"), Text = "", IsNote = isNote,
             IsExpanded = true, X = Math.Clamp(point.X, 0, Math.Max(0, _page.Width - (isNote ? 28 / _zoom : width))),
             Y = Math.Clamp(point.Y, 0, Math.Max(0, _page.Height - 32 / _zoom)), Width = width,
-            Height = isNote ? 180 : 30, FontSize = Math.Clamp(TextSize, 8, 96), Color = _inkColor
+            Height = isNote ? 180 : 30, FontSize = isNote ? 14 : Math.Clamp(TextSize, 8, 96), Color = _inkColor, Opacity = InkOpacity
         };
         _page.Items.Add(item);
         AddItemVisual(item);
@@ -491,15 +505,15 @@ public sealed partial class DocumentSurface : UserControl
             AcceptsTab = false,
             MaxLength = 1_000_000,
             TextWrapping = TextWrapping.Wrap,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = item.IsNote ? 14 : item.FontSize,
+            FontFamily = new FontFamily(item.FontFamily),
+            FontSize = item.FontSize,
             MinHeight = item.IsNote ? 32 : Math.Max(24, item.FontSize * 1.4),
             BorderThickness = new Thickness(0),
             Padding = item.IsNote ? new Thickness(12, 5, 12, 10) : new Thickness(0),
             Background = Brushes.Transparent,
             Foreground = item.IsNote ? new SolidColorBrush(Color.FromRgb(53, 43, 24)) : new SolidColorBrush(ParseColor(item.Color)),
             SelectionBrush = new SolidColorBrush(Color.FromRgb(168, 165, 235)),
-            VerticalScrollBarVisibility = item.IsNote ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             IsUndoEnabled = true,
             UndoLimit = 100,
@@ -563,7 +577,7 @@ public sealed partial class DocumentSurface : UserControl
             Grid.SetColumn(collapse, 1);
             header.Children.Add(collapse);
             collapse.Click += (_, _) => SetNoteExpanded(item, false);
-            editor.Height = Math.Clamp(item.Height, 100, 300);
+            editor.Height = Math.Max(64, item.Height);
             root.BorderBrush = new SolidColorBrush(Color.FromRgb(209, 174, 103));
         }
         Grid.SetRow(editor, 1);
@@ -574,6 +588,13 @@ public sealed partial class DocumentSurface : UserControl
         _objects.Children.Add(root);
         var visual = new ItemVisual(item, root, editor, header, grip);
         _items.Add(item.Id, visual);
+        var preview = new FlowDocumentScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            IsToolBarVisible = false, Visibility = Visibility.Collapsed, Background = Brushes.Transparent, Padding = item.IsNote ? new Thickness(12,5,12,10) : new Thickness(0) };
+        Grid.SetRow(preview, 1); panel.Children.Add(preview); visual.Preview = preview;
+        var sourceToggle = new Button { Content = "</>", ToolTip = Translate("EditContent"), Width = 30, Height = 22, MinWidth = 0, MinHeight = 0,
+            Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,0,item.IsNote ? 35 : 0,0), Visibility = Visibility.Collapsed };
+        sourceToggle.Click += (_, _) => { if (_editingText == item.Id) { _editingText = null; Focus(); UpdateItemStates(); } else BeginTextEdit(visual); };
+        header.Children.Add(sourceToggle); visual.SourceToggle = sourceToggle;
         if (item.IsNote)
         {
             CreateNoteTitle(visual);
@@ -601,16 +622,13 @@ public sealed partial class DocumentSurface : UserControl
             };
             AttachMoveHandle(bodyHandle);
         }
+        AttachTextResize(visual, panel);
+        ApplyTextStyle(visual);
         PositionItem(visual);
         editor.TextChanged += (_, _) =>
         {
             if (_loading) return;
             item.Text = editor.Text;
-            if (!item.IsNote)
-            {
-                editor.UpdateLayout();
-                item.Height = Math.Max(24, editor.ActualHeight);
-            }
             NotifyChanged();
         };
         editor.GotKeyboardFocus += (_, _) =>
@@ -881,7 +899,7 @@ public sealed partial class DocumentSurface : UserControl
             Math.Max(1, viewportWidth - 16) / _zoom, Math.Max(1, viewportHeight - 16) / _zoom);
         visual.Root.Width = Math.Min(item.Width, Math.Max(40, viewportWidth - 16));
         var headerHeight = visual.Header.Height + 2;
-        visual.Editor.Height = Math.Min(Math.Clamp(item.Height, 100, 300), Math.Max(32, viewportHeight - 16 - headerHeight));
+        visual.Editor.Height = Math.Min(Math.Max(64, item.Height), Math.Max(32, viewportHeight - 16 - headerHeight));
         var cardWidth = visual.Root.Width / _zoom;
         var cardHeight = (visual.Editor.Height + headerHeight) / _zoom;
         var gap = 8 / _zoom;
@@ -910,6 +928,7 @@ public sealed partial class DocumentSurface : UserControl
         {
             var item = visual.Item;
             var selected = IncludesObject(item.Id);
+            foreach (var handle in visual.ResizeHandles) handle.Visibility = selected && HasSingleObject && _tool is EditorTool.Select or EditorTool.Text or EditorTool.Note ? Visibility.Visible : Visibility.Collapsed;
             if (!item.IsNote)
             {
                 visual.Root.IsHitTestVisible = _tool is EditorTool.Select or EditorTool.Text or EditorTool.Eraser;
@@ -933,7 +952,22 @@ public sealed partial class DocumentSurface : UserControl
                 UpdateNoteTitle(visual);
             }
         }
+        foreach (var visual in _items.Values)
+        {
+            var rich = visual.Item.ContentFormat == "Markdown";
+            var source = _editingText == visual.Item.Id || !visual.Item.IsNote && _tool == EditorTool.Text;
+            visual.SourceToggle!.Visibility = rich ? Visibility.Visible : Visibility.Collapsed;
+            visual.Preview!.Visibility = rich && !source ? Visibility.Visible : Visibility.Collapsed;
+            visual.Editor.Visibility = rich && !source ? Visibility.Collapsed : Visibility.Visible;
+            if (rich && !source)
+            {
+                UpdateRichPreview(visual);
+                visual.Preview.Height = visual.Item.IsNote ? visual.Editor.Height : Math.Max(24,visual.Item.Height);
+            }
+        }
         UpdatePictureStates();
+        RefreshShapes();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
         var noteId = SelectedNoteId;
         if (_lastSelectedNote == noteId) return;
         _lastSelectedNote = noteId;
@@ -964,6 +998,7 @@ public sealed partial class DocumentSurface : UserControl
                 new Rect(picture.X, picture.Y, picture.Width, picture.Height));
         var strokes = live?._ink.Strokes ?? new StrokeCollection(page.Ink.Select(ToStroke));
         strokes.Draw(dc);
+        foreach (var shape in page.Shapes.OrderBy(s => s.Layer)) DrawShape(dc, page, shape);
         var noteNumber = 0;
         foreach (var item in page.Items)
         {
@@ -986,16 +1021,26 @@ public sealed partial class DocumentSurface : UserControl
                     dc.Pop();
                 }
             }
+            else if (item.ContentFormat == "Markdown")
+            {
+                dc.PushTransform(new TranslateTransform(item.X,item.Y));
+                dc.PushTransform(new RotateTransform(item.Rotation,item.Width/2,item.Height/2));
+                dc.DrawDrawing(StructuredText.CreateDrawing(item)); dc.Pop(); dc.Pop();
+            }
             else
             {
                 var text = new FormattedText(item.Text, System.Globalization.CultureInfo.CurrentUICulture,
-                    FlowDirection.LeftToRight, new Typeface("Segoe UI"), item.FontSize,
-                    new SolidColorBrush(ParseColor(item.Color)), 1)
+                    FlowDirection.LeftToRight, new Typeface(new FontFamily(item.FontFamily), item.Italic ? FontStyles.Italic : FontStyles.Normal, item.Bold ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal), item.FontSize,
+                    new SolidColorBrush(ColorWithOpacity(item.Color, item.Opacity)), 1)
                 {
                     MaxTextWidth = Math.Max(1, item.Width),
+                    TextAlignment = Enum.Parse<TextAlignment>(item.Alignment),
                     Trimming = TextTrimming.None
                 };
+                if (item.Underline) text.SetTextDecorations(TextDecorations.Underline);
+                dc.PushTransform(new RotateTransform(item.Rotation, item.X + item.Width / 2, item.Y + item.Height / 2));
                 dc.DrawText(text, new Point(item.X, item.Y));
+                dc.Pop();
             }
         }
     }
@@ -1006,10 +1051,13 @@ public sealed partial class DocumentSurface : UserControl
         if (points.Count == 0) points.Add(new StylusPoint(0, 0));
         var stroke = new Stroke(points, new DrawingAttributes
         {
-            Color = ParseColor(ink.Color), Width = ink.Width, Height = ink.Width,
+            Color = ColorWithOpacity(ink.Color, ink.Opacity), Width = ink.Width, Height = ink.Width,
             IgnorePressure = false, FitToCurve = false
         });
         stroke.AddPropertyData(StrokeId, ink.Id);
+        stroke.AddPropertyData(StrokeOpacity, ink.Opacity);
+        stroke.AddPropertyData(StrokeGroup, ink.GroupId);
+        stroke.AddPropertyData(StrokeLayer, ink.Layer);
         return stroke;
     }
 
@@ -1020,6 +1068,9 @@ public sealed partial class DocumentSurface : UserControl
         {
             Id = stroke.GetPropertyData(StrokeId) as string ?? Guid.NewGuid().ToString("N"),
             Color = $"#{stroke.DrawingAttributes.Color.R:X2}{stroke.DrawingAttributes.Color.G:X2}{stroke.DrawingAttributes.Color.B:X2}",
+            Opacity = stroke.ContainsPropertyData(StrokeOpacity) ? (double)stroke.GetPropertyData(StrokeOpacity) : stroke.DrawingAttributes.Color.A / 255d,
+            GroupId = stroke.ContainsPropertyData(StrokeGroup) ? (string)stroke.GetPropertyData(StrokeGroup) : "",
+            Layer = stroke.ContainsPropertyData(StrokeLayer) ? (int)stroke.GetPropertyData(StrokeLayer) : 0,
             Width = stroke.DrawingAttributes.Width,
             Points = stroke.StylusPoints.Select(p => new InkPoint { X = p.X, Y = p.Y, Pressure = p.PressureFactor }).ToList()
         };
@@ -1040,6 +1091,10 @@ public sealed partial class DocumentSurface : UserControl
         public Thumb Grip { get; } = grip;
         public Button? Marker { get; set; }
         public Thumb? BodyHandle { get; set; }
+        public FlowDocumentScrollViewer? Preview { get; set; }
+        public Button? SourceToggle { get; set; }
+        public string? PreviewKey { get; set; }
+        public List<Thumb> ResizeHandles { get; } = [];
         public TextBox? TitleEditor { get; set; }
         public TextBlock? TitleHint { get; set; }
     }

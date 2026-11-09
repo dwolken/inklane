@@ -41,17 +41,20 @@ public static class FeedbackExport
     private static IEnumerable<object> Annotations(PageData page)
     {
         foreach (var image in page.Images)
-            yield return new { image.Id, type = "picture", image.X, image.Y, image.Width, image.Height,
+            yield return new { image.Id, type = "picture", image.X, image.Y, image.Width, image.Height, image.Opacity, image.Rotation, image.Layer, image.GroupId,
                 sha256 = Convert.ToHexStringLower(SHA256.HashData(image.PngData)) };
         foreach (var ink in page.Ink)
-            yield return new { ink.Id, type = "ink", ink.Color, ink.Width,
+            yield return new { ink.Id, type = "ink", ink.Color, ink.Width, ink.Opacity, ink.Layer, ink.GroupId,
                 points = ink.Points.Select(p => new { p.X, p.Y, p.Pressure }) };
+        foreach (var shape in page.Shapes)
+            yield return new { shape.Id, type = "shape", kind = shape.Kind.ToString(), shape.X, shape.Y, shape.Width, shape.Height,
+                shape.Color, shape.FillColor, shape.StrokeWidth, shape.Opacity, shape.Rotation, shape.FlipX, shape.FlipY, shape.Label, shape.GroupId, shape.Layer, shape.StartId, shape.EndId };
         foreach (var item in page.Items)
         {
             if (item.IsNote)
-                yield return new { item.Id, type = "note", item.X, item.Y, item.Width, item.Height, item.Text, item.Title, item.Color, item.FontSize };
+                yield return new { item.Id, type = "note", item.X, item.Y, item.Width, item.Height, item.Text, item.Title, item.Color, item.FontSize, item.FontFamily, item.Bold, item.Italic, item.Underline, item.Alignment, item.ContentFormat, item.Opacity, item.Rotation, item.Layer, item.GroupId };
             else
-                yield return new { item.Id, type = "text", item.X, item.Y, item.Width, item.Height, item.Text, item.Color, item.FontSize };
+                yield return new { item.Id, type = "text", item.X, item.Y, item.Width, item.Height, item.Text, item.Color, item.FontSize, item.FontFamily, item.Bold, item.Italic, item.Underline, item.Alignment, item.ContentFormat, item.Opacity, item.Rotation, item.Layer, item.GroupId };
         }
     }
 

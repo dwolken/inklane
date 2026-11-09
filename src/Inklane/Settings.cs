@@ -12,6 +12,8 @@ public sealed class Settings
     public string Appearance { get; set; } = "System";
     public List<string> RecentFiles { get; set; } = [];
     public List<OfficeReviewLink> OfficeReviews { get; set; } = [];
+    public List<string> RecentColors { get; set; } = [];
+    public List<string> SavedColors { get; set; } = [];
     public string Language { get; set; } = "System";
     public static Settings Current { get; private set; } = new();
     public static void Load()
@@ -20,6 +22,8 @@ public sealed class Settings
         {
             Current = JsonSerializer.Deserialize<Settings>(File.ReadAllText(Path.Combine(App.DataDirectory, "settings.json"))) ?? new();
             Current.Language ??= "System";
+            Current.RecentColors = (Current.RecentColors ?? []).Where(Controls.ColorPicker.Valid).Distinct(StringComparer.OrdinalIgnoreCase).Take(12).ToList();
+            Current.SavedColors = (Current.SavedColors ?? []).Where(Controls.ColorPicker.Valid).Distinct(StringComparer.OrdinalIgnoreCase).Take(100).ToList();
             Current.Appearance ??= "System";
             Current.RecentFiles = (Current.RecentFiles ?? []).Where(p => !string.IsNullOrWhiteSpace(p) && Path.IsPathFullyQualified(p))
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();

@@ -159,8 +159,9 @@ public static partial class DocumentStore
                             Units.DipToPoint(item.Width), Units.DipToPoint(item.Height));
                     }
                 }
-                foreach (var stroke in model.Ink) AddInk(pdf, page, stroke);
-                foreach (var item in model.Items) AddText(pdf, page, item);
+                foreach (var shape in model.Shapes.OrderBy(s => s.Layer)) AddShape(pdf, page, shape, model);
+                foreach (var stroke in model.Ink.OrderBy(s => s.Layer)) AddInk(pdf, page, stroke);
+                foreach (var item in model.Items.OrderBy(s => s.Layer)) AddText(pdf, page, item);
             }
             AtomicWrite(path, temporary =>
             {
@@ -277,6 +278,7 @@ public static partial class DocumentStore
         };
         annotation.Elements.SetString("/NM", ink.Id);
         annotation.Elements.SetInteger("/F", 4); // Print
+        annotation.Elements.SetReal("/CA", ink.Opacity);
         annotation.Elements["/C"] = ColorArray(pdf, ink.Color);
         var border = new PdfDictionary(pdf);
         border.Elements.SetReal("/W", Units.DipToPoint(ink.Width));
@@ -310,7 +312,7 @@ public static partial class DocumentStore
                         polygon.Add(new XPoint(Units.DipToPoint(single.Point.X) - left, Units.DipToPoint(single.Point.Y) - top));
                 if (polygon.Count > 2) outline.AddPolygon(polygon.ToArray());
             }
-            graphics.DrawPath(new XSolidBrush(ParseColor(ink.Color)), outline);
+            graphics.DrawPath(new XSolidBrush(WithOpacity(ink.Color, ink.Opacity)), outline);
         });
         page.Annotations.Add(annotation);
     }
@@ -320,7 +322,8 @@ public static partial class DocumentStore
         var left = Units.DipToPoint(item.X);
         var top = Units.DipToPoint(item.Y);
         var width = Units.DipToPoint(item.IsNote ? 26 : item.Width);
-        var height = Units.DipToPoint(item.IsNote ? 26 : item.Height);
+        var rich = !item.IsNote && item.ContentFormat == "Markdown" ? StructuredText.CreateDrawing(item) : null;
+        var height = Units.DipToPoint(item.IsNote ? 26 : Math.Max(item.Height, rich?.Bounds.Bottom ?? 0));
         var annotation = new StandardAnnotation(pdf, item.IsNote ? "/Text" : "/FreeText")
         {
             Rectangle = new PdfRectangle(new XRect(left, page.Height.Point - top - height, width, height)),
@@ -329,6 +332,7 @@ public static partial class DocumentStore
         };
         annotation.Elements.SetString("/NM", item.Id);
         annotation.Elements.SetInteger("/F", 4);
+        annotation.Elements.SetReal("/CA", item.Opacity);
         annotation.Elements["/C"] = ColorArray(pdf, item.IsNote ? "#E7AA32" : item.Color);
         if (item.IsNote)
         {
@@ -339,7 +343,7 @@ public static partial class DocumentStore
         else
         {
             annotation.Elements.SetString("/DA", $"/Helv {Number(Units.DipToPoint(item.FontSize))} Tf 0 g");
-            annotation.Elements.SetInteger("/Q", 0);
+            annotation.Elements.SetInteger("/Q", item.Alignment == "Center" ? 1 : item.Alignment == "Right" ? 2 : 0);
         }
         SetAppearance(pdf, annotation, width, height, graphics =>
         {
@@ -350,11 +354,20 @@ public static partial class DocumentStore
                 var pen = new XPen(XColor.FromArgb(114, 75, 10), .9);
                 for (var y = 6d; y < height - 4; y += 3.5) graphics.DrawLine(pen, 5, y, width - 5, y);
             }
+            else if (rich != null)
+            {
+                var rotation = new System.Windows.Media.Matrix(); rotation.RotateAt(item.Rotation,item.Width/2,item.Height/2);
+                DrawRichText(graphics, rich, rotation);
+            }
             else
             {
-                var font = new XFont("Segoe UI", Units.DipToPoint(item.FontSize), XFontStyleEx.Regular);
-                var formatter = new XTextFormatter(graphics);
-                formatter.DrawString(item.Text, font, new XSolidBrush(ParseColor(item.Color)),
+                graphics.RotateAtTransform(item.Rotation, new XPoint(width / 2,height / 2));
+                var style = (item.Bold ? XFontStyleEx.Bold : XFontStyleEx.Regular) | (item.Italic ? XFontStyleEx.Italic : XFontStyleEx.Regular) | (item.Underline ? XFontStyleEx.Underline : XFontStyleEx.Regular);
+                XFont font;
+                try { font = new XFont(item.FontFamily, Units.DipToPoint(item.FontSize), style); }
+                catch (InvalidOperationException) { font = new XFont("Segoe UI", Units.DipToPoint(item.FontSize), style); }
+                var formatter = new XTextFormatter(graphics) { Alignment = item.Alignment switch { "Center" => XParagraphAlignment.Center, "Right" => XParagraphAlignment.Right, "Justify" => XParagraphAlignment.Justify, _ => XParagraphAlignment.Left } };
+                formatter.DrawString(item.Text, font, new XSolidBrush(WithOpacity(item.Color, item.Opacity)),
                     new XRect(0, 0, width, height), XStringFormats.TopLeft);
             }
         });
@@ -409,7 +422,7 @@ public static partial class DocumentStore
 
     public static void CheckPageCapacity(PageData page)
     {
-        if (page.Ink is null || page.Items is null || page.Images is null || page.Images.Count > 1000 ||
+        if (page.Ink is null || page.Items is null || page.Images is null || page.Shapes is null || page.Shapes.Count > 10000 || page.Images.Count > 1000 ||
             page.Ink.Count > 100000 || page.Items.Count > 10000)
             throw new InvalidDataException("The page contains too many annotations or missing collections.");
     }
@@ -417,7 +430,7 @@ public static partial class DocumentStore
     public static void Validate(DocumentData data, bool decodeImages = false)
     {
         ArgumentNullException.ThrowIfNull(data);
-        if (data.Kind == DocumentKind.Pdf ? data.SchemaVersion != 3 : data.SchemaVersion is not (1 or 2))
+        if (data.Kind == DocumentKind.Pdf ? data.SchemaVersion is not (3 or 4) : data.SchemaVersion is not (1 or 2 or 4))
             throw new NotSupportedException("This Inklane document version is not supported.");
         if (data.Kind == DocumentKind.Pdf)
         {
@@ -458,6 +471,7 @@ public static partial class DocumentStore
             {
                 if (image is null) throw new InvalidDataException("An embedded image is missing.");
                 Id(image.Id, ids);
+                ExtendedStyle(image.GroupId, image.Layer, image.Opacity, image.Rotation);
                 Range(image.X, -100000, 200000, "Image X");
                 Range(image.Y, -100000, 200000, "Image Y");
                 Range(image.Width, 1, 100000, "Image width");
@@ -471,6 +485,7 @@ public static partial class DocumentStore
             {
                 if (ink is null || ink.Points is null) throw new InvalidDataException("An ink stroke is invalid.");
                 Id(ink.Id, ids);
+                ExtendedStyle(ink.GroupId, ink.Layer, ink.Opacity, 0);
                 Color(ink.Color);
                 Range(ink.Width, .1, 1000, "Stroke width");
                 pointCount += ink.Points.Count;
@@ -488,6 +503,10 @@ public static partial class DocumentStore
                 if (item is null || item.Text is null || item.Text.Length > 1000000)
                     throw new InvalidDataException("A text annotation is invalid or too long.");
                 Id(item.Id, ids);
+                ExtendedStyle(item.GroupId, item.Layer, item.Opacity, item.Rotation);
+                if (item.FontFamily == null || item.FontFamily.Length is 0 or > 128 || item.FontFamily.Any(char.IsControl) ||
+                    item.Alignment is not ("Left" or "Center" or "Right" or "Justify") || item.ContentFormat is not ("Plain" or "Markdown"))
+                    throw new InvalidDataException("Unsupported text formatting.");
                 CheckTitle(item.Title);
                 Color(item.Color);
                 Range(item.X, -100000, 200000, "Text X");
@@ -497,10 +516,32 @@ public static partial class DocumentStore
                 Range(item.FontSize, 1, 1000, "Font size");
             }
         }
+        foreach (var page in data.Pages)
+        {
+            var nodes = page.Shapes.Where(s => s != null && s.Kind is not (ShapeKind.Line or ShapeKind.Arrow)).Select(s => s.Id).ToHashSet();
+            foreach (var shape in page.Shapes)
+            {
+                if (shape == null || !Enum.IsDefined(shape.Kind) || shape.Label == null || shape.Label.Length > 100000)
+                    throw new InvalidDataException("Invalid shape.");
+                Id(shape.Id, ids); Color(shape.Color); if (shape.FillColor != null) Color(shape.FillColor);
+                ExtendedStyle(shape.GroupId, shape.Layer, shape.Opacity, shape.Rotation);
+                Range(shape.X, -100000, 200000, "Shape X"); Range(shape.Y, -100000, 200000, "Shape Y");
+                Range(shape.Width, 1, 100000, "Shape width"); Range(shape.Height, 1, 100000, "Shape height");
+                Range(shape.StrokeWidth, .1, 1000, "Shape stroke");
+                if ((shape.StartId != null || shape.EndId != null) && shape.Kind is not (ShapeKind.Line or ShapeKind.Arrow) ||
+                    shape.StartId != null && !nodes.Contains(shape.StartId) || shape.EndId != null && !nodes.Contains(shape.EndId))
+                    throw new InvalidDataException("Connector endpoints must refer to shapes on the same page.");
+            }
+        }
         // Establish aggregate bounds for every page before allocating any decoded images.
         if (decodeImages)
             foreach (var image in data.Pages.SelectMany(page => page.Images))
                 EmbeddedPng.Decode(image.PngData);
+    }
+    private static void ExtendedStyle(string group, int layer, double opacity, double rotation)
+    {
+        if (group == null || group.Length > 128 || group.Any(char.IsControl)) throw new InvalidDataException("Invalid group identifier.");
+        Range(layer, -1000000, 1000000, "Layer"); Range(opacity, 0, 1, "Opacity"); Range(rotation, -360, 360, "Rotation");
     }
     private static void CheckTitle(string title)
     {
