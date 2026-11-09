@@ -1,0 +1,42 @@
+name: Browser webpage review
+
+on:
+  pull_request:
+    paths: ['platforms/browser/**', 'website/package*.json', '.github/workflows/browser.yml']
+  push:
+    branches: [main]
+    paths: ['platforms/browser/**', 'website/package*.json', '.github/workflows/browser.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extension:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install locked test browsers
+        run: |
+          npm ci --prefix website --ignore-scripts --no-audit
+          node website/node_modules/playwright-core/cli.js install --with-deps chromium firefox
+      - name: Exercise the installed Chromium extension
+        run: node platforms/browser/test.mjs
+      - name: Install pinned Firefox WebDriver
+        run: |
+          curl --fail --location --retry 3 https://github.com/mozilla/geckodriver/releases/download/v0.37.1/geckodriver-v0.37.1-linux64.tar.gz --output "$RUNNER_TEMP/geckodriver.tar.gz"
+          echo 'e815130ea95983e162ae91843b48d3a3ce991735635fce83a647afde21e09f7e  '"$RUNNER_TEMP/geckodriver.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/geckodriver"
+          tar -xzf "$RUNNER_TEMP/geckodriver.tar.gz" -C "$RUNNER_TEMP/geckodriver"
+          echo "$RUNNER_TEMP/geckodriver" >> "$GITHUB_PATH"
+      - name: Exercise the installed Firefox extension
+        run: node platforms/browser/test-firefox.mjs
+      - name: Check both local packages
+        run: python3 platforms/browser/package.py

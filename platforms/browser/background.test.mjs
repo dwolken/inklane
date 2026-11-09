@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
+const key='review:'+ 'a'.repeat(64), url='https://example.test/review';
+const local={[key]:{revision:1,data:{url}}},session={};let listener,currentUrl=url,release,entered,hold=true;
+const gate=new Promise(resolve=>release=resolve),atSet=new Promise(resolve=>entered=resolve);
+function storage(values){return{get:async key=>key===null?structuredClone(values):{[key]:structuredClone(values[key])},set:async update=>{if(values===local && hold){hold=false;entered();await gate;}Object.assign(values,structuredClone(update));},remove:async keys=>{for(const key of Array.isArray(keys)?keys:[keys])delete values[key];}};}
+const api={runtime:{id:'ext',getURL:path=>'chrome-extension://ext/'+path,onMessage:{addListener:fn=>listener=fn}},action:{onClicked:{addListener:()=>{}}},tabs:{get:async()=>({url:currentUrl}),sendMessage:async()=>({ok:true})},storage:{local:storage(local),session:storage(session)}};
+runInNewContext(await readFile(new URL('./background.js',import.meta.url),'utf8'),{chrome:api,InklaneWeb:{validate:x=>x,cleanUrl:x=>x,keyFor:async()=>key},URL,console,crypto});
+const content={id:'ext',tab:{id:1},frameId:0,url},help={id:'ext',url:'chrome-extension://ext/help.html'};
+const request=(message,sender=content)=>new Promise(resolve=>listener({target:'inklane-web',...message},sender,resolve));
+const writing=request({command:'save',data:{url},revision:1});await atSet;
+const deleting=request({command:'delete',key,revision:1},help);release();
+assert.equal((await writing).revision,2);assert.equal((await deleting).conflict,true);assert.equal(local[key].revision,2);
+assert.equal((await request({command:'delete',key,revision:2},help)).ok,true);assert.equal(local[key].deleted,true);assert.equal(local[key].revision,3);
+assert.equal((await request({command:'save',data:{url},revision:2})).conflict,true);
+assert.equal((await request({command:'delete',key,revision:3},content)).error,'sender');
+currentUrl='https://example.test/different';assert.equal((await request({command:'save',data:{url},revision:3})).error,'changed');
+currentUrl=url;const opened=await request({command:'editor-open',url,objectId:'text',title:'Private title',text:'Private body'});
+const editor={id:'ext',tab:{id:1},frameId:2,url:'chrome-extension://ext/editor.html#'+opened.nonce};
+assert.equal((await request({command:'editor-load',nonce:opened.nonce},editor)).text,'Private body');
+assert.equal((await request({command:'editor-load',nonce:opened.nonce},{...editor,frameId:3})).error,'session');
+assert.equal((await request({command:'editor-load',nonce:opened.nonce},{...editor,tab:{id:4}})).error,'session');
+assert.equal((await request({command:'editor-load',nonce:opened.nonce},content)).error,'sender');
+console.log('PASS Serialized delete/save, tombstones, current-tab URL and private editor frame boundaries');
+
+await import('./core.js');
+const crossing=InklaneWeb.object('ink',{selector:'',quote:'',tag:'',rx:0,ry:0,x:0,y:0});crossing.points=[{x:-10,y:50,pressure:.5},{x:110,y:50,pressure:.5}];
+const partial=InklaneWeb.object('text',crossing.anchor);partial.width=60;partial.height=60;
+const visible=InklaneWeb.portable({title:'Boundary review',objects:[crossing,partial]},new Uint8Array(),100,100,100,100,{[crossing.id]:{x:0,y:0},[partial.id]:{x:-20,y:10}});
+assert.equal(visible.excluded,0);console.log('PASS Visible export retains crossing ink and partly visible text');
