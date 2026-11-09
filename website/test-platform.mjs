@@ -125,6 +125,7 @@ try {
   assert.equal(rich.math,1);assert.ok(rich.bytes>10000);
   const output=resolve(process.argv[3] || '.scratch/platform-rich');await mkdir(output,{recursive:true});
   await writeFile(resolve(output,engine+'-offline-rich.png'),Buffer.from(rich.base64,'base64'));
+  await (await import('./test-pdf-export.mjs')).checkReviewPdf(offline,resolve(output,engine+'-offline-pdf'));
   assert.deepEqual(errors,[]); assert.deepEqual(external,[]);
   console.log(`${process.platform}/${engine}: offline navigation, first local PDF import, rotation/crop, source hash, rendered pixels, page navigation, rich math rendering and annotated PNG export passed.`);
 } finally { await context.close(); server.close(); }

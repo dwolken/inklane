@@ -430,6 +430,7 @@ try {
   await (await import("./test-editing-freedom.mjs")).verifyEditingFreedom(browser,origin + base,output);
   await (await import("./test-startup.mjs")).verifyStartup(browser,origin + base,output);
   await (await import("./test-pdf-actions.mjs")).verifyPdfActions(browser,origin + base);
+  await (await import("./test-pdf-export.mjs")).checkReviewPdf(page,output);
   await (await import("./test-touch-actions.mjs")).verifyTouchActions(browser,origin + base);
   for (const [language,width,height] of [["en",390,844],["de",390,844],["en",320,740],["de",320,740]]) {
     const phone = await browser.newContext({ viewport: { width, height }, isMobile:true, hasTouch:true, locale:language });
