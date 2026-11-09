@@ -18,7 +18,7 @@ The release candidate uses one editor with distinct entry points and file semant
 
 The identity joins a pen, a tapered ink stroke and an open frame: a mark placed in context. The SVG masters include an outlined Manrope wordmark, light/dark and monochrome lockups, and an optical adjustment for small icons. The full [logo sting](../brand/motion/README.md) is a promotional asset, separate from application startup. A brief desktop arrival never gates document access or replays when returning Home; reduced-motion preferences skip it. Android and iOS retain native launch behavior. The website uses a static lockup and offers the full film only on request.
 
-## PDF and editable data
+## Windows PDF and editable data
 
 PDFsharp-WPF **6.2.4** is explicitly pinned. Its downloaded NuGet manifest and tagged source license are MIT. Version 6.5 and later changed to AGPL/commercial licensing, and upstream states that the 6.2 branch will receive no further updates. Upgrading therefore requires a fresh maintenance and licensing decision.
 
@@ -46,7 +46,7 @@ Saving writes a separate schema 3 (or schema 4 with extended objects) JSON file 
 
 PNG export flattens the current page and visible marks, then adds a separately laid-out gutter containing every remark in full. Printing renders the chosen source page range and appends paginated rich remarks, identified by source page and marker number. Collapsed cards are included. An image that would exceed the readable single-image size bounds is refused with alternative export choices. The source stays unobscured; the editable sidecar retains the full source and styles. Image workspaces continue to use their original PNG or JPEG and accompanying JSON.
 
-## Word and PowerPoint review copies
+## Windows Word and PowerPoint review copies
 
 The development opening workflow converts supported Office files directly into a private revision-specific directory under application data. A receipt identifies the original source and verified rendering by SHA-256. The recent-file list is only navigation: its eviction does not remove or detach saved annotations. Missing LibreOffice offers an official download link and a manual-export fallback. Conversion remains local and uses the bounded, isolated renderer described below.
 
