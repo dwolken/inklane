@@ -11,15 +11,26 @@ const escape = (text) =>
         c
       ],
   );
-const math = (source, displayMode) =>
-  katex.renderToString(source, {
-    displayMode,
-    throwOnError: false,
-    trust: false,
-    strict: "ignore",
-    maxExpand: 500,
-    maxSize: 20,
-  });
+const math = (source, displayMode) => {
+  const fallback = () => displayMode
+    ? `<pre><code>${escape(source)}</code></pre>`
+    : `<code>${escape(source)}</code>`;
+  // KaTeX's expansion budget does not bound parser nesting. Match the native
+  // renderer's formula budget and keep the complete source when it is exceeded.
+  if (source.length > 4000 || (source.match(/\{/g) || []).length > 100) return fallback();
+  try {
+    return katex.renderToString(source, {
+      displayMode,
+      throwOnError: false,
+      trust: false,
+      strict: "ignore",
+      maxExpand: 500,
+      maxSize: 20,
+    });
+  } catch {
+    return fallback();
+  }
+};
 const markdown = new Marked({ gfm: true, breaks: true });
 markdown.use({
   renderer: {
@@ -103,19 +114,27 @@ export function renderText(element, item) {
   }
   // Bound expensive parsing separately from the lossless stored source.
   if (item.text.length > 100000) {
+    element.classList.remove("rich-content");
     element.textContent = item.text;
     return;
   }
-  const clean = DOMPurify.sanitize(markdown.parse(item.text), {
-    USE_PROFILES: { html: true, mathMl: true },
-    FORBID_TAGS: ["img", "style", "input", "button", "form", "video", "audio"],
-    FORBID_ATTR: ["id", "name"],
-  });
-  element.innerHTML = clean;
-  for (const link of element.querySelectorAll("a")) {
-    if (!/^(https?:|mailto:)/i.test(link.getAttribute("href") || ""))
-      link.removeAttribute("href");
-    link.target = globalThis.inklaneNativeHost ? "_self" : "_blank";
-    link.rel = "noopener noreferrer";
+  try {
+    const clean = DOMPurify.sanitize(markdown.parse(item.text), {
+      USE_PROFILES: { html: true, mathMl: true },
+      FORBID_TAGS: ["img", "style", "input", "button", "form", "video", "audio"],
+      FORBID_ATTR: ["id", "name"],
+    });
+    element.innerHTML = clean;
+    for (const link of element.querySelectorAll("a")) {
+      if (!/^(https?:|mailto:)/i.test(link.getAttribute("href") || ""))
+        link.removeAttribute("href");
+      link.target = globalThis.inklaneNativeHost ? "_self" : "_blank";
+      link.rel = "noopener noreferrer";
+    }
+  } catch {
+    // A parser or highlighter failure must never prevent opening, editing or
+    // exporting a document. Stored Markdown remains unchanged and editable.
+    element.classList.remove("rich-content");
+    element.textContent = item.text;
   }
 }

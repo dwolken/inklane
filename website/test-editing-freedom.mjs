@@ -122,6 +122,22 @@ export async function verifyEditingFreedom(browser, base, output) {
       await page.locator('.placed a[href^="javascript:"]').count(),
       0,
     );
+    for (const depth of [8000, 101]) {
+      const formula = "{".repeat(depth) + "x" + "}".repeat(depth);
+      const source = "$$\n" + formula + "\n$$";
+      await page.keyboard.press("F2");
+      await page.locator(".placed-editor").fill(source);
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator(".placed code").textContent(), formula,
+        "An expensive formula stays readable as complete source without crashing the editor");
+      const preserved = await download(`bounded-formula-${depth}.inklane`);
+      assert.equal(preserved.document.pages[0].items[0].text, source);
+    }
+    await page.keyboard.press("F2");
+    await page.locator(".placed-editor").fill(markdown);
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator(".placed .katex").count(), 1,
+      "Ordinary mathematics renders again after editing an expensive formula");
     await click("properties");
     await input("object-height", 350);
     await input("object-width", 420);
