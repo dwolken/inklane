@@ -339,12 +339,19 @@ function removeSelected() {
   if (!sel) return;
   const ids = new Set(selectedObjects().map((o) => o.id));
   mutatePage((p) => {
-    for (const group of collections)
-      p[group] = p[group].filter((o) => !ids.has(o.id));
     for (const shape of p.shapes) {
+      if (ids.has(shape.id) || !ids.has(shape.startId) && !ids.has(shape.endId)) continue;
+      const [a, b] = shapeEndpoints(shape, p);
+      Object.assign(shape, {
+        x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+        width: Math.max(1, Math.abs(b.x - a.x)), height: Math.max(1, Math.abs(b.y - a.y)),
+        flipX: b.x < a.x, flipY: b.y < a.y,
+      });
       if (ids.has(shape.startId)) shape.startId = null;
       if (ids.has(shape.endId)) shape.endId = null;
     }
+    for (const group of collections)
+      p[group] = p[group].filter((o) => !ids.has(o.id));
   });
   selectionIds.clear();
   selected = openNote = null;
