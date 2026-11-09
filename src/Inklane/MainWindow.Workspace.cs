@@ -247,6 +247,7 @@ public sealed partial class MainWindow
         menu.Items.Add(new Separator());
         Command(menu,_document.Kind == DocumentKind.Notebook ? "ExportPortable" : "ExportPortableReview",ExportPortableWorkspace);
         Command(menu,"ExportFeedback",ExportFeedback).ToolTip = L.T("FeedbackHint");
+        AddDocumentExports(menu);
         Command(menu,"ExportImage",ExportImage); Command(menu,"ExportJson",ExportJson);
         Command(menu,"Print",Print,"Ctrl+P");
         menu.Items.Add(new Separator());

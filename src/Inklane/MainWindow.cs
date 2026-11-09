@@ -82,7 +82,7 @@ public sealed partial class MainWindow : Window
 
     private static DocumentData NewDocument(PageData? page = null) => new() { Kind = DocumentKind.Notebook, Pages = [page ?? new PageData { Width = Units.MmToDip(210), Height = Units.MmToDip(297), Pattern = PaperPattern.Blank, SpacingMm = 5, MarginMm = 15 }] };
     private string DisplayName => _document.Kind != DocumentKind.Notebook
-        ? Path.GetFileName(SourcePath) ?? L.T(_document.Kind == DocumentKind.Image ? "Image" : "PdfType")
+        ? Path.GetFileName(_activeOfficeReview!=null && SourcePath!=null && SamePath(SourcePath,_activeOfficeReview.PdfPath) ? _activeOfficeReview.OfficePath : SourcePath) ?? L.T(_document.Kind == DocumentKind.Image ? "Image" : "PdfType")
         : _document.Title.Length > 0 ? _document.Title : _filePath == null ? L.T("Untitled") : Path.GetFileName(_filePath);
     private bool IsDirty => _pendingEdit || _history.Count > 0 && _history[_historyIndex].Data != _savedState;
 
@@ -329,8 +329,8 @@ public sealed partial class MainWindow : Window
             _document = candidate; _filePath = savePath; _diskHash = hash; _image = image; _pageIndex = 0;
             _sessionId = SourcePath ?? path;
             _noteSearch.Clear();
-            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); _surface.Focus();
             _activeOfficeReview = office;
+            SetupFolder(); ResetHistory(); ShowEditor(); ShowPage(); _surface.Focus();
             if (office != null) RememberOfficeReview(office);
             RememberRecent(office?.OfficePath ?? path);
         }
@@ -736,7 +736,7 @@ public sealed partial class MainWindow : Window
         var temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, $".inklane-{Guid.NewGuid():N}.tmp");
         try
         {
-            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { write(stream); stream.Flush(true); }
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None)) { write(stream); stream.Flush(true); }
             if (allowReplace && File.Exists(path))
             {
                 for (var attempt = 0; ; attempt++)
