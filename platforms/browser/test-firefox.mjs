@@ -13,7 +13,7 @@ const downloads = await mkdtemp(join(output, 'downloads-'));
 const packaged = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['platforms/browser/package.py', join(output, 'package')], { encoding: 'utf8', windowsHide: true });
 assert.equal(packaged.status, 0, packaged.stderr);
 const source = '<!doctype html><html lang="de"><meta charset="utf-8"><title>Feldnotizen</title><style>body{font:20px system-ui;margin:220px 40px 0;background:white}p{padding:20px;background:#f4f5f9;line-height:1.6}</style><h1>Feldnotizen</h1><p id="target">Die Erklärung gehört direkt an diese Textstelle.</p><script>window.pageKeys=[];window.addEventListener("keydown",e=>pageKeys.push(e.key),true);</script></html>';
-const server = createServer((q, r) => r.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(source));
+const server = createServer((q, r) => r.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "frame-src 'none'" }).end(source));
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const portServer = createServer(); await new Promise(r => portServer.listen(0, '127.0.0.1', r));
 const port = portServer.address().port; await new Promise(r => portServer.close(r));
