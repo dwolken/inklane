@@ -597,8 +597,10 @@ public sealed partial class DocumentSurface : UserControl
         var preview = new FlowDocumentScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             IsToolBarVisible = false, Visibility = Visibility.Collapsed, Background = Brushes.Transparent, Padding = item.IsNote ? new Thickness(12,5,12,10) : new Thickness(0) };
         Grid.SetRow(preview, 1); panel.Children.Add(preview); visual.Preview = preview;
-        var sourceToggle = new Button { Content = "</>", ToolTip = Translate("EditContent"), Width = 30, Height = 22, MinWidth = 0, MinHeight = 0,
+        var sourceToggle = new Button { Content = "</>", ToolTip = Translate("EditContent"), Width = 30, Height = item.IsNote ? 22 : 18, MinWidth = 0, MinHeight = 0,
+            Foreground = new SolidColorBrush(Color.FromRgb(67, 56, 112)), Background = Brushes.Transparent,
             Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,0,item.IsNote ? 35 : 0,0), Visibility = Visibility.Collapsed };
+        AutomationProperties.SetName(sourceToggle, Translate("EditContent"));
         sourceToggle.Click += (_, _) => { if (_editingText == item.Id) { _editingText = null; Focus(); UpdateItemStates(); } else BeginTextEdit(visual); };
         header.Children.Add(sourceToggle); visual.SourceToggle = sourceToggle;
         if (item.IsNote)
