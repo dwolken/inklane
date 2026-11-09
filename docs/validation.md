@@ -1,4 +1,23 @@
-# Release candidate validation
+# Development and release validation
+
+## Development editor · 9 November 2026
+
+The extended editor was exercised locally with **19 persistence, 32 WPF surface and 38 lifecycle checks**. These use the real document writers, WPF controls, clipboard and filesystem. They are separate from physical pen, printer and screen-reader acceptance.
+
+- Schema 4 round trips retain Markdown source, styles, opacity, mixed object order, editable shapes, connector references and reusable grouped elements. Historical documents remain readable. Simple documents retain their older schema; readers that cannot understand extended objects refuse them before editing.
+- Actual Windows UI review covered English dark and German light layouts, rendered headings, tables, code and mathematics, selection, save and reopen. Dragging a text-box handle changed its wrapping without changing the font size. Review corrected clipped German formatting controls, unexpected scrolling on selection and a low-contrast source-edit button. The Shapes rail item and Properties footer are labeled.
+- Native and browser fixtures were exchanged in both directions. The browser editing journey exercises post-creation formatting, resize, recolor, grouping, duplicate, layers, attached connectors, the reusable-element library, undo/redo, save and reopen. Chromium completed the offline journey. Playwright WebKit on Windows completed the online rich-editing and PNG-export journey; its service-worker limitation does not establish offline Safari behavior.
+- PNG export includes complete expanded and collapsed remarks beside the source. Print output appends rich, paginated explanations. A long-note fixture verified the final paragraph in both PNG and serialized XPS output. Rendered results were inspected. Extremely large single-image output is refused with other export choices instead of truncating text.
+- Source-PDF handoff was independently rendered with Poppler at all four page rotations. Original page content, crop geometry, mixed image/ink/text/shape order, image rotation and single application of opacity were checked. Standard note contents retain the complete explanation. Notebook PDFs remain the editable source; external-review copies do not retain a stale editable-model marker.
+- DOCX and PPTX opened through the actual local LibreOffice conversion engine, saved annotations and reopened using the private source-revision cache. Source hashes stayed unchanged. Word review sections and PowerPoint review slides retained complete remarks; PowerPoint also received native comments. Package comparisons checked preservation of original content. The actual PowerPoint application opened the exported presentation without repair, retained the original editable slides and displayed the review slides and comments. These appendices are presentation output, not a reconstruction of native text-range annotations.
+
+The shared workspace also ran in the actual GTK/WebKitGTK Linux host under WSL with a virtual display: open, rich edit, save, reopen, PNG export and crash recovery were exercised. Android assembled locally with its locked dependencies. Native Apple and Android workflows additionally run on GitHub Actions; consult the run for the specific commit before treating a build as verified. Earlier passing runs do not certify later editor changes. No physical Android, iOS or Linux device is implied by these checks.
+
+The bilingual product website was tested at widths from 320 to 1440 pixels, in light and dark themes, with keyboard interaction and accessibility scans. Its drawing, text and anchored-remark demonstrations are temporary examples; the separately opened workspace provides actual document editing and persistence.
+
+The open [hardware and assistive-technology checks](https://github.com/dwolken/inklane/issues/1), [PDFsharp maintenance decision](https://github.com/dwolken/inklane/issues/2), and [trusted signing and clean Windows qualification](https://github.com/dwolken/inklane/issues/3) still apply. Automated checks and visual inspection do not replace user acceptance. The following sections retain the earlier release-candidate observations as historical evidence.
+
+## Release candidate validation
 
 Inklane 1.0.0-rc.1 was exercised on Windows 11 at 125% display scaling. This record separates desktop observations, repeatable regression checks and device work that remains open.
 
