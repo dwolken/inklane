@@ -36,6 +36,11 @@ internal static partial class Program
             state.Interaction.Choices.Enqueue(0); state.Interaction.ReviewPdfs.Enqueue(pdf);
             w.OpenFile(office);
             Equal(DocumentKind.Pdf,Document(w).Kind); Equal(2,Document(w).Pages.Count);
+            Call(w,"SetContinuousPages",true);
+            Call(w,"GoToPage",1);
+            Equal(1,Field<int>(w,"_pageIndex"));
+            Call(w,"GoToPage",0);
+            Call(w,"SetContinuousPages",false);
             AddText(w,"Observe the threshold."); Assert(Call<bool>(w,"Save",false),"Failed to save review.");
             Equal(office,Settings.Current.RecentFiles[0]);
             var savedReview = State(w);

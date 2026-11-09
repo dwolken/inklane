@@ -65,6 +65,7 @@ public sealed partial class MainWindow : Window
         _surface.Changed += (_, _) => DocumentChanged();
         _surface.NoteSelectionChanged += (_, _) => RefreshNotes();
         _surface.ViewChanged += (_, _) => _zoomLabel.Text = $"{_surface.Zoom:P0}";
+        _surface.PageActivated += index => SwitchToPage(index, reveal: false);
         _editTimer.Tick += (_, _) => { _editTimer.Stop(); CaptureHistory(); };
         _recoveryTimer.Tick += (_, _) => { _recoveryTimer.Stop(); WriteRecovery(); };
         PreviewKeyDown += OnKey;
@@ -93,11 +94,13 @@ public sealed partial class MainWindow : Window
         _strokeWidth.Visibility = tool == EditorTool.Pen ? Visibility.Visible : Visibility.Collapsed;
         _textProperties.Visibility = tool == EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
     }
-    private void ShowPage(bool fit = true)
+    private void ShowPage(bool fit = true) => DisplayPage(fit, reveal: fit);
+
+    private void DisplayPage(bool fit, bool reveal)
     {
         _loading = true;
         _pageIndex = Math.Clamp(_pageIndex, 0, _document.Pages.Count - 1);
-        LoadCurrentPage(fit);
+        LoadCurrentPage(fit,reveal);
         _loading = false;
         RefreshNotes();
         UpdateState();

@@ -334,9 +334,19 @@ internal static class Program
             Layout(content);
             var fileEntry = Named<Button>(content, "OpenFile");
             var bookEntry = Named<Button>(content, "NewNotebook");
-            Assert(IsVisibleWithin(fileEntry, content) && IsVisibleWithin(bookEntry, content), "Home is missing a workspace entry.");
-            Near(fileEntry.ActualWidth, bookEntry.ActualWidth);
-            Near(fileEntry.ActualHeight, bookEntry.ActualHeight);
+            foreach (var dpi in new[] { 1d, 1.25, 1.5 })
+            foreach (var size in new[] { new Size(760,560), new Size(1200,880) })
+            {
+                VisualTreeHelper.SetRootDpi(content, new DpiScale(dpi,dpi));
+                content.Measure(size); content.Arrange(new Rect(size)); content.UpdateLayout();
+                Assert(IsVisibleWithin(fileEntry, content) && IsVisibleWithin(bookEntry, content), "Home is missing a workspace entry.");
+                var a = fileEntry.TransformToAncestor(content).TransformBounds(new Rect(fileEntry.RenderSize));
+                var b = bookEntry.TransformToAncestor(content).TransformBounds(new Rect(bookEntry.RenderSize));
+                Assert(Math.Abs(a.Width - b.Width) * dpi <= 1.01,"The two home cards differ by more than one physical pixel.");
+                Near(a.Height,b.Height);
+                Near(a.Top,b.Top);
+                Assert(Math.Abs(b.Left - a.Right - 14) * dpi <= 1.01,"The gap between the home cards changed.");
+            }
             RenderContent(content, window.Background, $"home-{language}.png");
             StopTimers(window);
         }

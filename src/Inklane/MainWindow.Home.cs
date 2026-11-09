@@ -37,10 +37,12 @@ public sealed partial class MainWindow
         _resume = Studio.Action("Resume","Arrow",ShowEditor,true);
         DockPanel.SetDock(_resume,Dock.Right); titleRow.Children.Add(_resume);
         titleRow.Children.Add(Studio.Label(L.T("HomeTitle"),32,strong:true)); page.Children.Add(titleRow);
-        var entries = new Grid { Margin = new Thickness(0,0,0,24) };
-        entries.ColumnDefinitions.Add(new ColumnDefinition()); entries.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) }); entries.ColumnDefinitions.Add(new ColumnDefinition());
-        entries.Children.Add(EntryCard("OpenFile","FileEntryDetail","Open",OpenDialog));
-        var book = EntryCard("NewNotebook","BookEntryDetail","Notebook",NewNotebook); Grid.SetColumn(book,2); entries.Children.Add(book);
+        var entries = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Columns = 2, Margin = new Thickness(0,0,0,24) };
+        var file = EntryCard("OpenFile","FileEntryDetail","Open",OpenDialog);
+        file.Margin = new Thickness(0,0,7,0);
+        var book = EntryCard("NewNotebook","BookEntryDetail","Notebook",NewNotebook);
+        book.Margin = new Thickness(7,0,0,0);
+        entries.Children.Add(file); entries.Children.Add(book);
         page.Children.Add(entries);
         page.Children.Add(Studio.Rule());
         var recentHeader = new DockPanel { Margin = new Thickness(0,19,0,6) };

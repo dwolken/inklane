@@ -61,6 +61,7 @@ internal static partial class Program
             Run("LibreOffice creates two independent, editable reviews through the Windows open workflow", DirectOfficeReview);
         Run("Relative image sidecars travel with the source, even beside an unrelated namesake in the working directory", PortableImagePair);
         Run("Source PDF markup uses displayed page geometry, editable sidecars and source pixels", PdfMarkupJourney);
+        Run("Continuous pages scroll, render and keep annotations attached across both views", ContinuousPagesJourney);
         Run("Feedback identifies the source image, includes every mark, and protects original work", ImageFeedback);
         Run("PDF feedback uses displayed page coordinates and excludes underlying source contents", PdfFeedback);
         Run("Notebook feedback requires a saved matching PDF and honors cancellation", NotebookFeedback);
