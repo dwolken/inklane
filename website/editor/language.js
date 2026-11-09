@@ -3,13 +3,32 @@ const labels = {
   singlePageView: ["Single page", "Einzelne Seite"],
   activatePage: ["Select page to edit", "Seite zum Bearbeiten auswählen"],
   exportImage: ["Export page as PNG…", "Seite als PNG exportieren …"],
+  exportPdf: ["Export review PDF…", "PDF mit Anmerkungen exportieren …"],
+  pdfTitle: ["Export review PDF", "PDF mit Anmerkungen exportieren"],
+  pdfExport: ["Export PDF", "PDF exportieren"],
+  pdfDownloaded: ["Review PDF download requested.", "PDF-Download angefordert."],
+  pdfDescription: [
+    "Pages with their marks, followed by complete notes. This PDF is a visible copy; keep the Inklane file to continue editing.",
+    "Seiten mit Markierungen, gefolgt von vollständigen Notizen. Dieses PDF ist eine Ansichtskopie. Behalten Sie die Inklane-Datei zum Weiterbearbeiten.",
+  ],
+  preparingPdf: ["Preparing PDF…", "PDF wird vorbereitet …"],
+  pdfPagesProgress: ["Page {current} of {total}", "Seite {current} von {total}"],
+  pdfNotesProgress: ["Notes · {current} of {total}", "Notizen · {current} von {total}"],
+  pdfExportLimit: [
+    "This review exceeds the PDF export limit. Try exporting the current page, or save a portable Inklane copy to keep all content.",
+    "Diese Ansicht überschreitet die PDF-Exportgrenze. Exportieren Sie die aktuelle Seite oder speichern Sie eine portable Inklane-Kopie mit allen Inhalten.",
+  ],
+  pdfExportFailed: [
+    "The review PDF could not be created or saved. Your original and edits are unchanged.",
+    "Das PDF mit Anmerkungen konnte nicht erstellt oder gespeichert werden. Original und Bearbeitungen sind unverändert.",
+  ],
   imageTooTall: [
-    "These remarks are too long for a readable image. Use Print review to export a PDF with all remarks.",
-    "Diese Anmerkungen sind für ein lesbares Bild zu lang. Über Mit Anmerkungen drucken können Sie ein PDF mit allen Anmerkungen erstellen.",
+    "These remarks are too long for a readable image. Use Export review PDF to include them in full.",
+    "Diese Anmerkungen sind für ein lesbares Bild zu lang. Über PDF mit Anmerkungen exportieren können Sie sie vollständig ausgeben.",
   ],
   imageExportFailed: [
-    "The page could not be exported as an image. Try Print review for PDF output.",
-    "Die Seite konnte nicht als Bild exportiert werden. Versuchen Sie ein PDF über Mit Anmerkungen drucken.",
+    "The page could not be exported as an image. Try Export review PDF.",
+    "Die Seite konnte nicht als Bild exportiert werden. Versuchen Sie PDF mit Anmerkungen exportieren.",
   ],
 
   colorTarget: ["Color target", "Farbbereich"],

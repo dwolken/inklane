@@ -18,4 +18,4 @@ Select the **Inklane** scheme, choose **My Mac** or an **iPhone simulator** and 
 
 WebKit loads the bundled assets from a read-only listener bound to the device’s IPv4 loopback interface. The app retains its chosen port so the WebKit storage origin stays the same on later launches. Only bundled editor assets are served. Document bytes reach the host through a bounded message bridge when the user saves a file.
 
-Printing is currently available from the browser and Windows editions. No App Store or notarized Mac package is published by this project’s CI.
+**Export review PDF** prepares marked pages and a complete, paginated remarks appendix, then opens the macOS Save panel or iOS Files picker. Choose all pages or the current page. The PDF is a visible copy; keep the portable `.inklane` workspace for editing. Direct printing remains available from the browser and Windows editions. No App Store or notarized Mac package is published by this project’s CI.

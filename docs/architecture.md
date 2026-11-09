@@ -64,6 +64,12 @@ Schema 4 adds text family/emphasis/alignment/source format, per-object opacity a
 
 The same stable mixed paint order drives native editing, raster output and PDF appearances. InkCanvas retains pen input, pressure, erasing and lasso behavior; completed strokes have object-layer visuals. Duplication remaps object, group and connector identities. Local reusable elements contain editable object data, not raster snapshots. Native PDF remarks retain their complete source in standard annotation contents; their popup presentation depends on the recipient reader.
 
+## Shared review PDF export
+
+The web workspace and Android, Apple and Linux hosts use one local PDF writer. It renders source pages sequentially with the same ordered annotation composition as PNG output, preserving physical notebook/PDF dimensions and fitting image reviews to A4. Every included remark appears in a separate, readable appendix. Browser column layout paginates rich text, code, tables and math before rasterization; text is not shrunk to fit a single bitmap.
+
+This is a flattened presentation PDF, distinct from the Windows source-preserving annotation export and from an editable portable workspace. The original source, model, saved revision and recovery state are unchanged. Preparation is cancellable; a complete PDF is handed to the existing native SaveCopy bridge or browser download only after generation succeeds. Page rasters are limited to eight million pixels and 4,096 pixels per edge. Encoded page images, final output size and page count are bounded. No external service, document upload or remote font is involved.
+
 ## Persistence and boundaries
 
 PNG/JPEG sources are read-only inputs. JSON sidecars hold image identity (SHA-256) and all annotations; the store refuses writing annotation data over the source image. PDF export checks the source hash. Writes use a unique temporary file in the destination directory, flush it to disk, then atomically replace or move it. A failed write leaves the existing destination intact. Read-only and locked destinations produce errors.

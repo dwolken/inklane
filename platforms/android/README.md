@@ -2,7 +2,7 @@
 
 This Android development app bundles the document workspace and PDF renderer in its APK. It opens images, PDFs and portable Inklane documents from the system file picker. Creating a notebook, editing marks and reopening a copy use the same document model as the browser. No account or network permission is required.
 
-Save and export create a new file in a location you choose. To preserve existing documents, pick an empty destination. Android can return recent files or files from installed document providers. Notebook printing is available in the desktop browser edition.
+Save and export create a new file in a location you choose. To preserve existing documents, pick an empty destination. Android can return recent files or files from installed document providers. **Export review PDF** saves marked pages followed by complete, paginated remarks through the same system picker. The PDF is a visible copy; keep the portable `.inklane` workspace for editing. Direct printing remains available from the browser and Windows editions.
 
 ## Build
 
