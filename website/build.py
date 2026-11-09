@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 from shutil import copyfile
 from string import Template
+from time import sleep
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from build_workspace import build_workspace
 
@@ -17,6 +19,7 @@ SITE = "https://dwolken.github.io/inklane/"
 REPO = "https://github.com/dwolken/inklane"
 API = "https://api.github.com/repos/dwolken/inklane/releases?per_page=100"
 TAG = re.compile(r"v(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)")
+TRANSIENT_DOWNLOAD_ERRORS = {429, 500, 502, 503, 504}
 
 
 def choose_release(releases):
@@ -38,17 +41,46 @@ def choose_release(releases):
     raise ValueError("No published Inklane release contains a matching Windows installer.")
 
 
+def verify_installer_download(asset, token=None):
+    # Check the same public, unauthenticated route a visitor will use.
+    for delay in (0, 2, 6):
+        if delay:
+            sleep(delay)
+        try:
+            with urlopen(Request(asset["browser_download_url"], method="HEAD"), timeout=20) as response:
+                length = response.headers.get("Content-Length")
+                if response.status != 200 or (length and int(length) != asset["size"]):
+                    raise ValueError("The published installer failed the public download check.")
+                return
+        except HTTPError as error:
+            if error.code not in TRANSIENT_DOWNLOAD_ERRORS:
+                raise
+        except (URLError, TimeoutError):
+            pass
+
+    # A failing gateway can affect the browser URL while GitHub still serves the
+    # exact uploaded binary through its release asset endpoint.
+    asset_url = f"https://api.github.com/repos/dwolken/inklane/releases/assets/{int(asset['id'])}"
+    request = Request(asset_url, headers={"Accept": "application/octet-stream",
+                                          "Range": "bytes=0-1", "User-Agent": "Inklane-Pages"})
+    if token:
+        request.add_unredirected_header("Authorization", f"Bearer {token}")
+    with urlopen(request, timeout=30) as response:
+        size_matches = (response.status == 200 and response.headers.get("Content-Length") == str(asset["size"])
+                        or response.status == 206 and response.headers.get("Content-Range") == f"bytes 0-1/{asset['size']}")
+        if not size_matches or response.read(2) != b"MZ":
+            raise ValueError("GitHub's release asset endpoint did not serve the expected Windows installer.")
+    print("The public download probe timed out or returned a temporary error. Verified the binary through GitHub's release asset API.")
+
+
 def published_installer():
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "Inklane-Pages"}
-    if token := os.environ.get("GITHUB_TOKEN"):
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
         headers["Authorization"] = f"Bearer {token}"
     with urlopen(Request(API, headers=headers), timeout=30) as response:
         release, asset, version = choose_release(json.load(response))
-    # Check the same public, unauthenticated route a visitor will use.
-    with urlopen(Request(asset["browser_download_url"], method="HEAD"), timeout=45) as response:
-        length = response.headers.get("Content-Length")
-        if response.status != 200 or (length and int(length) != asset["size"]):
-            raise ValueError("The published installer failed the public download check.")
+    verify_installer_download(asset, token)
     return release, asset, version
 
 

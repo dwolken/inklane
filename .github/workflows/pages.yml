@@ -41,6 +41,8 @@ jobs:
           persist-credentials: false
       - name: Install locked browser dependencies
         run: npm ci --prefix website --ignore-scripts --no-audit
+      - name: Check release download verification
+        run: python3 website/test_build.py
       - name: Build static site from the published installer
         env:
           GITHUB_TOKEN: ${{ github.token }}
