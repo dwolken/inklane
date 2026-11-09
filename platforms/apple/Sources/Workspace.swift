@@ -70,6 +70,12 @@ final class WorkspaceHost: NSObject, ObservableObject, WKNavigationDelegate, WKU
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         let controller = WKUserContentController()
         controller.addScriptMessageHandler(exporter, contentWorld: .page, name: "exportFile")
+        #if os(iOS)
+        let launchPolicy = "globalThis.inklaneLaunchMotion = false;"
+        #else
+        let launchPolicy = "globalThis.inklaneReducedMotion = \(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion);"
+        #endif
+        controller.addUserScript(WKUserScript(source: launchPolicy, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         if let script = bundle.url(forResource: "NativeSave", withExtension: "js"),
            let source = try? String(contentsOf: script, encoding: .utf8) {
             controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -81,10 +87,30 @@ final class WorkspaceHost: NSObject, ObservableObject, WKNavigationDelegate, WKU
         webView.navigationDelegate = self
         webView.uiDelegate = self
         #if os(iOS)
+        webView.isOpaque = false
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.allowsLinkPreview = false
+        #else
+        webView.underPageBackgroundColor = .windowBackgroundColor
+        NSWorkspace.shared.notificationCenter.addObserver(self,
+            selector: #selector(motionPreferenceChanged(_:)),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         #endif
     }
+
+    #if os(macOS)
+    @objc private func motionPreferenceChanged(_ notification: Notification) {
+        let source = "globalThis.inklaneReducedMotion = \(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion);"
+        let controller = webView.configuration.userContentController
+        let remaining = controller.userScripts.filter { !$0.source.hasPrefix("globalThis.inklaneReducedMotion = ") }
+        controller.removeAllUserScripts()
+        for script in remaining { controller.addUserScript(script) }
+        controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        webView.evaluateJavaScript(source + "globalThis.dispatchEvent(new Event('inklane-motion-change'));") { _, _ in }
+    }
+    #endif
 
     func start() {
         guard server == nil || failed else { return }

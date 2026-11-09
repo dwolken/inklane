@@ -1,20 +1,19 @@
-# Inklane motion mark
+# Inklane promotional sting
 
-[Watch the film](inklane-sting.mp4) · [Open the editable vector animation](inklane-sting.svg)
+[Watch the film](inklane-sting.mp4) · [Silent version](inklane-sting-silent.mp4) · [Editable timeline](inklane-sting.html) · [Contact sheet](previews/motion-sheet.png)
 
-The camera opens inside the diagonal fold of the [Inklane mark](../../src/Inklane/Assets/inklane.svg). Two faces turn around the shared edge as the camera pulls back. The film settles on the original mark and wordmark.
+The 5.2-second film introduces the pen, ink arc and enclosing frame before the outlined Inklane wordmark appears. It is intended for promotional videos and presentations. Application cold-launch feedback uses a separate brief treatment.
 
-The MP4 runs for 3.6 seconds at 1920 × 1080 and 60 fps. Its original stereo score combines a textured brush with two resonances. The standalone SVG is silent and shows the final lockup immediately when the viewer requests reduced motion.
+The frame finishes at 1.53 s and holds until 2.00 s. The composition opens from 2.00–3.40 s; overlapping letter arrivals run from 2.28–3.52 s. The complete lockup holds to 5.20 s. The original quiet contact and frame sound remains aligned to the drawing and enclosure; no external audio samples are used.
 
-## Edit and render
+The master is 1920 × 1080 at 60 fps, H.264/yuv420p with stereo 48 kHz AAC. The silent variant contains the same video stream. Open `inklane-sting.html` directly in a browser to replay, scrub or view the dark treatment; reduced-motion preference opens the resolved still.
 
-Edit the fold, camera keys and typography in [inklane-sting.svg](inklane-sting.svg). The camera uses the same 48-unit coordinate space as the mark. Edit the sound timing and voicing in [score.mjs](score.mjs). No external audio samples are needed.
+Edit timing and easing in `motion.mjs`, sound in `score.mjs`, and the preview template in `player.html`. Geometry and outlined lettering are in `geometry.json`. The vector identity source and licensed fonts are kept in the parent brand directory.
 
-Install Node.js, Microsoft Edge or Chrome, and FFmpeg with the libx264 encoder. From the repository root run
+Render locally with the website's locked `playwright-core`, Microsoft Edge and FFmpeg:
 
 ```powershell
-npm ci --prefix website --ignore-scripts
 node brand/motion/render.mjs
 ```
 
-The renderer seeks each SVG timeline at 60 fps, synthesizes the score at 48 kHz and encodes the MP4. An optional argument sets the output path. Use `BROWSER_PATH` or `FFMPEG_PATH` to select a local executable. The Windows master uses Segoe UI Variable Display. Other systems use the local font fallback.
+`--previews` renders the chronological stills and contact sheet without encoding a video. Set `BROWSER_PATH` to use another installed Chromium browser. The documented and verified render environment is Windows with Microsoft Edge. No network services are used.

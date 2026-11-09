@@ -44,6 +44,7 @@ internal static partial class Program
         L.Initialize("en");
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
+        Run("Cold launch brand motion never blocks input or replays on Home; reduced motion remains static", StartupMotion);
         Run("Windows clipboard between independent editor processes", () => ClipboardChecks.Run(run));
         Run("Mixed image, ink and shape layers agree in live view, raster and PDF", LayerLifecycle);
         Run("Markdown, tables, code and vector LaTeX render and retain editable source", RichTextLifecycle);

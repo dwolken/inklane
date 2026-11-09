@@ -118,7 +118,8 @@ final class WorkspaceTests: XCTestCase {
         if FileManager.default.fileExists(atPath: cache.appendingPathComponent("Inklane-screen.armed").path) {
             try Data().write(to: cache.appendingPathComponent("Inklane-screen.ready"), options: .atomic)
             let done = cache.appendingPathComponent("Inklane-screen.done").path
-            for _ in 0..<400 {
+            // Allow two 60-second compositor attempts plus process/handshake overhead.
+            for _ in 0..<1500 {
                 if FileManager.default.fileExists(atPath: done) { break }
                 try await Task.sleep(nanoseconds: 100_000_000)
             }
@@ -200,6 +201,17 @@ final class WorkspaceTests: XCTestCase {
     private func restartBridge(_ host: WorkspaceHost) async throws {
         try await wait(host, "typeof document.querySelector('#sample-link')?.onclick === 'function'")
         try await wait(host, "window.isSecureContext && !!crypto.subtle && typeof window.inklaneSaveCopy === 'function'")
+        try await wait(host, "document.querySelector('.brand img')?.complete && document.querySelector('.brand img')?.naturalWidth > 0")
+        #if os(iOS)
+        let staticLaunch = try await javascript(host, "globalThis.inklaneLaunchMotion === false && !document.querySelector('.brand').classList.contains('launch')")
+        XCTAssertEqual(staticLaunch as? Bool, true, "The phone workspace must retain its native static launch behavior")
+        #else
+        let reducedMotion = try await javascript(host, "globalThis.inklaneReducedMotion")
+        XCTAssertEqual(reducedMotion as? Bool, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        _ = try await javascript(host, "globalThis.motionNotifications = 0; addEventListener('inklane-motion-change', () => globalThis.motionNotifications++); true")
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        try await wait(host, "globalThis.motionNotifications >= 1")
+        #endif
         let partial = """
         globalThis.previousProcess = true;
         const bridge = window.webkit.messageHandlers.exportFile;

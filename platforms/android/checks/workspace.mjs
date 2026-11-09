@@ -35,8 +35,14 @@ const socket = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve,reject) => {socket.onopen=resolve;socket.onerror=reject;});
 let sequence = 0;
 const pending = new Map();
+const startupDiagnostics = [];
 socket.onmessage = ({data}) => {
   const msg = JSON.parse(data);
+  if (msg.method === 'Runtime.exceptionThrown') startupDiagnostics.push(msg.params.exceptionDetails);
+  if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
+    startupDiagnostics.push(msg.params.args.map(arg => arg.description || arg.value));
+  if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') startupDiagnostics.push(msg.params.entry);
+  if (msg.method === 'Network.loadingFailed') startupDiagnostics.push(msg.params);
   const call = pending.get(msg.id);
   if (!call) return;
   pending.delete(msg.id);
@@ -57,9 +63,24 @@ const find = selector => 'document.querySelector('+JSON.stringify(selector)+')';
 const visible = s => js('!!'+find(s)+'?.getClientRects().length');
 async function tap(sel, fx=.5, fy=.5) {
   await waitFor(()=>visible(sel),sel);
-  const {x,y}=await js('(()=>{const e='+find(sel)+';e.scrollIntoView({block:"nearest"});const r=e.getBoundingClientRect();return {x:r.left+r.width*'+fx+',y:r.top+r.height*'+fy+'}})()');
-  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x,y});
-  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x,y});
+  const {x,y,click}=await js(`(async()=>{
+    const e=${find(sel)}; e.scrollIntoView({block:'nearest'});
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const r=e.getBoundingClientRect(), x=r.left+r.width*${fx}, y=r.top+r.height*${fy};
+    const click=e.matches('button,summary,a');
+    window.__lastTap={selector:${JSON.stringify(sel)},x,y,click,received:false};
+    const observed=event=>{if(e.contains(event.target)){__lastTap.received=true;document.removeEventListener('click',observed,true);}};
+    window.__stopTapObservation=()=>document.removeEventListener('click',observed,true);
+    if(click)document.addEventListener('click',observed,true);
+    return {x,y,click};
+  })()`);
+  try {
+    await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1,radiusX:1,radiusY:1,force:1}]});
+    await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    // A native WebView may deliver its compatibility click after touchEnd returns.
+    // Observe that actual event before starting another gesture; never replay a tap.
+    if(click) await waitFor(()=>js('window.__lastTap?.received === true'),'touch activation of '+sel);
+  } finally { await js('window.__stopTapObservation?.()').catch(()=>{}); }
 }
 async function type(sel,value) {
   await waitFor(()=>visible(sel),'visible text field '+sel);
@@ -99,8 +120,26 @@ const saveButton = n => /^save$/i.test(n.text) && n.enabled==='true';
 const fresh = mkdtempSync(join(tmpdir(),'inklane-android-'));
 const title = 'AndroidReview';
 try {
+  await command('Runtime.enable',{});
+  await command('Log.enable',{});
+  await command('Network.enable',{});
   await waitFor(()=>visible('#new-notebook'), 'document home');
+  await waitFor(()=>js('document.body.getAttribute("aria-busy") !== "true" && typeof document.querySelector("#new-notebook")?.onclick === "function" && !document.querySelector("#new-notebook").disabled'),
+    'initialized document controls');
   assert.equal(await js('isSecureContext && typeof inklaneSaveCopy === "function"'),true);
+  assert.equal(await js('globalThis.inklaneLaunchMotion === false && !document.querySelector(".brand").classList.contains("launch")'),true,
+    'Android keeps the OS-native static launch and opens the usable workspace immediately');
+  await waitFor(()=>js('document.querySelector(".brand img").complete && document.querySelector(".brand img").naturalWidth > 0'),'bundled brand asset');
+  await js(`(() => {
+    window.__reviewInputs = [];
+    for (const type of ['pointerdown','pointerup','pointercancel','click','focusout']) {
+      document.addEventListener(type, event => {
+        __reviewInputs.push({type,target:event.target.id || event.target.tagName,tool:event.target.closest?.('[data-tool]')?.dataset.tool,pointer:event.pointerType,
+          x:event.clientX,y:event.clientY,focus:document.activeElement?.id,width:innerWidth,height:innerHeight});
+        if (__reviewInputs.length > 30) __reviewInputs.shift();
+      }, true);
+    }
+  })()`);
   await tap('#new-notebook');
   await type('#book-title',title);
   await js('document.querySelector("#paper-form").requestSubmit()');
@@ -262,6 +301,12 @@ try {
   console.log('Android schema4 rich math/code editing, text resize/recolor, grouped connector movement/undo, native save/reopen and PNG pixels passed.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
+  console.error('WebView startup diagnostics:', JSON.stringify(startupDiagnostics));
+  console.error('Recent input events:', await js('JSON.stringify(window.__reviewInputs || [])').catch(()=>'unavailable'));
+  console.error('Last touch activation:', await js('JSON.stringify(window.__lastTap)').catch(()=>'unavailable'));
+  console.error('Module startup state:', await js('JSON.stringify({ready:document.readyState,busy:document.body.getAttribute("aria-busy"),handler:typeof document.querySelector("#new-notebook")?.onclick,error:document.querySelector("#startup-error")?.textContent,resources:performance.getEntriesByType("resource").filter(r=>/\\.m?js(?:$|\\?)/.test(r.name)).map(r=>({url:r.name,duration:r.duration,size:r.decodedBodySize}))})').catch(()=>'unavailable'));
+  try { mkdirSync('.scratch',{recursive:true}); writeFileSync('.scratch/android-failure.png',execFileSync('adb',['exec-out','screencap','-p'],{timeout:15000})); }
+  catch (captureError) { console.error('Failure screenshot unavailable:',captureError.message); }
   console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),focus:document.activeElement?.id,deviceTap:window.__deviceTap,cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
   throw error;
 } finally {

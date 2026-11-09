@@ -72,6 +72,7 @@ jobs:
         id: exercise
         run: |
           if [[ -n "${SIMULATOR_ID:-}" ]]; then
+            python3 -B -m unittest discover -s platforms/apple -p test_capture_simulator.py
             python3 platforms/apple/capture-simulator.py "$SIMULATOR_ID" "$RUNNER_TEMP/Inklane-iOS-field-guide-screen.png" &
             capture_pid=$!
             trap 'kill "$capture_pid" 2>/dev/null || true' EXIT

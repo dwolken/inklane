@@ -45,6 +45,13 @@ public sealed class Settings
 public static class Appearance
 {
     private static bool _subscribed;
+    private static readonly Dictionary<string, ImageSource> BrandImages = [];
+    private static ImageSource BrandImage(string theme)
+    {
+        if (BrandImages.TryGetValue(theme, out var image)) return image;
+        var bitmap = new System.Windows.Media.Imaging.BitmapImage(new Uri($"pack://application:,,,/Inklane;component/Assets/inklane-lockup-{theme}.png"));
+        bitmap.Freeze(); return BrandImages[theme] = bitmap;
+    }
     public static void Apply()
     {
         var mode = Settings.Current.Appearance;
@@ -58,11 +65,11 @@ public static class Appearance
         Brush("TextBrush", dark ? "#F3F0FA" : "#272534");
         Brush("MutedBrush", dark ? "#BAB6C7" : "#625E6B");
         Brush("BorderBrush", dark ? "#45424F" : "#DCD9DF");
-        Brush("AccentBrush", dark ? "#BDB0FF" : "#5B4597");
-        Brush("AccentSoftBrush", dark ? "#403653" : "#E9E3F7");
+        Brush("AccentBrush", dark ? "#9B87FF" : "#5633FF");
+        Brush("AccentSoftBrush", dark ? "#30284F" : "#EEE9FF");
         Brush("HoverBrush", dark ? "#35323F" : "#EFECF0");
         Brush("PressedBrush", dark ? "#494355" : "#E1DBEA");
-        Brush("PrimaryBrush", dark ? "#BDB0FF" : "#514083");
+        Brush("PrimaryBrush", dark ? "#9B87FF" : "#5633FF");
         Brush("OnPrimaryBrush", dark ? "#20162F" : "#FFFFFF");
         Brush("ErrorBrush", dark ? "#FF9B9B" : "#A4262C");
         if (SystemParameters.HighContrast)
@@ -76,6 +83,13 @@ public static class Appearance
             r["PrimaryBrush"] = SystemColors.HighlightBrush;
             r["OnPrimaryBrush"] = SystemColors.HighlightTextBrush;
         }
+        var logoDark = dark;
+        if (SystemParameters.HighContrast)
+        {
+            var background = SystemColors.WindowColor;
+            logoDark = .2126 * background.R + .7152 * background.G + .0722 * background.B < 128;
+        }
+        r["BrandLockupImage"] = BrandImage(logoDark ? "dark" : "light");
         if (!_subscribed)
         {
             _subscribed = true;

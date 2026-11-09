@@ -3,8 +3,8 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:windowBackground">#FAF9F7</item>
-        <item name="android:colorAccent">#6447B0</item>
+        <item name="android:windowBackground">#FAFAFB</item>
+        <item name="android:colorAccent">#5633FF</item>
     </style>
     <string name="open_error">The document picker is unavailable.</string>
 </resources>

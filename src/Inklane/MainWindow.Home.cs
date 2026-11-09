@@ -17,8 +17,8 @@ public sealed partial class MainWindow
         _home.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _home.RowDefinitions.Add(new RowDefinition());
         var header = new DockPanel { Height = 54, Margin = new Thickness(15,0,15,0) };
-        var brand = Studio.Line(BrandMark(31), Studio.Label("Inklane",18,strong:true));
-        brand.Children[0].SetValue(MarginProperty, new Thickness(0,0,7,0));
+        var brand = BrandLockup(31);
+        _startupBrand = brand;
         DockPanel.SetDock(brand,Dock.Left); header.Children.Add(brand);
         var more = MenuButton("More","More",() =>
         {
@@ -84,6 +84,7 @@ public sealed partial class MainWindow
 
     internal void ShowEditor()
     {
+        StopStartupBrandMotion();
         _onHome = false; _hasDocument = true; _home.Visibility = Visibility.Collapsed; _editor.Visibility = Visibility.Visible;
         UpdateState();
     }

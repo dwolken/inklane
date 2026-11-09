@@ -30,6 +30,7 @@ import { setupProperties } from "./properties.js";
 import { renderText, textStyle } from "./rich-text.js";
 import { shapeVisual, shapeEndpoints } from "./shapes.js";
 import { continuousPages } from "./continuous.js";
+import { launchBrand } from "./startup.js";
 
 const svgNS = "http://www.w3.org/2000/svg";
 const $ = (selector) => document.querySelector(selector);
@@ -75,6 +76,7 @@ let data = null,
 let zoom = 1,
   fit = true,
   gesture = null,
+  initializing = true,
   busy = false,
   printing = false,
   revision = 0,
@@ -168,7 +170,7 @@ function updateStatus() {
   $("#new-notebook").disabled =
     $("#new-sheet").disabled =
     $("#home").disabled =
-      busy;
+      busy || initializing;
   $("#rename-book").hidden = !notebook;
   $("#rename-book").disabled = busy;
   $("#print").hidden = !active || globalThis.inklaneNativePrinting === false;
@@ -201,7 +203,8 @@ function updateStatus() {
       !active || busy;
   for (const element of [viewport, card, $("#tools"), $("footer")])
     element.inert = busy;
-  $("#open").disabled = $("#start").disabled = busy;
+  $("#open").disabled = $("#start").disabled = busy || initializing;
+  $("#sample-link").disabled = busy || initializing;
   $("#welcome").hidden = active;
   $("#tools").hidden = viewport.hidden = $("footer").hidden = !active;
   $("#undo").disabled = !undoStack.length && !changedDraft();
@@ -1489,6 +1492,13 @@ $("#fit").onclick = () => {
   resize();
 };
 $("#close-card").onclick = closeCard;
+// Keep the field focused until click commits the collapse. Blurring it on press
+// can dismiss a phone keyboard and move this button before the finger releases.
+// Cancel only the focus-producing mouse event; canceling touch pointerdown also
+// suppresses the eventual click in WebKit.
+$("#close-card").onmousedown = (event) => {
+  if (event.button === 0) event.preventDefault();
+};
 const closeMenu = () => ($("#more").open = false);
 $("#shortcuts").onclick = () => {
   closeMenu();
@@ -2925,3 +2935,9 @@ function movementBase(object) {
   const [a,b]=shapeEndpoints(object,page());
   return {...object,x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(1,Math.abs(b.x-a.x)),height:Math.max(1,Math.abs(b.y-a.y)),flipX:b.x<a.x,flipY:b.y<a.y,startId:null,endId:null};
 }
+
+initializing = false;
+updateStatus();
+$("#more").inert = false;
+document.body.setAttribute("aria-busy", "false");
+launchBrand();

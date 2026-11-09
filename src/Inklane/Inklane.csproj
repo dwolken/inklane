@@ -18,6 +18,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets/inklane.ico" />
+    <Resource Include="Assets/inklane-lockup-light.png" />
+    <Resource Include="Assets/inklane-lockup-dark.png" />
     <ProjectReference Include="../Inklane.Core/Inklane.Core.csproj" />
     <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
   </ItemGroup>

@@ -44,7 +44,7 @@ Categories=Office;Graphics;
 """)
         icon = stage / "usr/share/icons/hicolor/scalable/apps/io.github.dwolken.Inklane.svg"
         icon.parent.mkdir(parents=True)
-        shutil.copyfile(ROOT / "src/Inklane/Assets/inklane.svg", icon)
+        shutil.copyfile(ROOT / "src/Inklane/Assets/inklane-app.svg", icon)
         control = stage / "DEBIAN/control"
         control.parent.mkdir()
         control.write_text("""Package: inklane

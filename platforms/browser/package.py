@@ -7,7 +7,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parent
 target = Path(sys.argv[1] if len(sys.argv) > 1 else root.parents[1] / '.scratch/browser-package').resolve()
-files = ['editor.html', 'editor.js', 'editor.css', 'core.js', 'content.js', 'background.js', 'report.html', 'report.js', 'help.html', 'help.js', 'pages.css', 'icon-192.png']
+files = ['editor.html', 'editor.js', 'editor.css', 'core.js', 'content.js', 'background.js', 'report.html', 'report.js', 'help.html', 'help.js', 'pages.css']
+files += [path.name for path in sorted(root.glob('icon-*.png'))]
 for name in ['chromium', 'firefox']:
     output = target / name
     output.mkdir(parents=True, exist_ok=True)

@@ -12,30 +12,34 @@
     />
     <meta name="color-scheme" content="light dark" />
     <title>Inklane · Workspace</title>
-    <link rel="icon" href="../assets/inklane.svg" />
+    <link rel="icon" href="icons/app-192.png" type="image/png" sizes="192x192" />
+    <link rel="icon" href="../assets/inklane-app.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="editor.css" />
     <link rel="stylesheet" href="rich-lib/katex.css" />
     <link rel="stylesheet" href="rich-text.css" />
-    <script type="module" src="editor.js"></script>
+    <script type="module" src="boot.js"></script>
   </head>
-  <body>
+  <body aria-busy="true">
     <header>
-      <a class="brand" href="../" aria-label="Inklane"
-        ><img src="../assets/inklane.svg" alt="" width="30" height="30" /><span
-          >Inklane</span
-        ></a
-      >
+      <a class="brand" href="../" aria-label="Inklane">
+        <picture>
+          <source media="(max-width: 660px) and (prefers-color-scheme: dark)" srcset="../assets/inklane-symbol-dark.svg" />
+          <source media="(max-width: 660px)" srcset="../assets/inklane-symbol-light.svg" />
+          <source media="(prefers-color-scheme: dark)" srcset="../assets/inklane-lockup-dark.svg" />
+          <img src="../assets/inklane-lockup-light.svg" alt="" width="124" height="32" />
+        </picture>
+      </a>
       <div id="document">
         <strong id="name" data-i="workspace">Workspace</strong
         ><small id="state" data-i="browser">Browser edition</small>
       </div>
       <div class="file-actions">
-        <button id="open" data-i="open">Open</button>
+        <button id="open" data-i="open" disabled>Open</button>
         <button class="primary" id="save" disabled data-label="save">
           <span class="wide" data-i="save">Save annotations</span
           ><span class="compact" data-i="saveShort">Save</span>
         </button>
-        <details id="more">
+        <details id="more" inert>
           <summary aria-label="More actions" data-label="more">
             <svg viewBox="0 0 24 24"><path d="M4 12h1m6.5 0h1m6.5 0h1" /></svg>
           </summary>
@@ -67,6 +71,9 @@
         </details>
       </div>
     </header>
+    <section id="startup-error" role="alert" hidden>
+      <p></p><button class="primary" type="button"></button>
+    </section>
     <main id="work">
       <section id="welcome">
         <div class="welcome-lead">
@@ -80,13 +87,13 @@
           </p>
         </div>
         <div class="launch-grid">
-          <button id="start" class="launch">
+          <button id="start" class="launch" disabled>
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M3 18V5h7l3 3h8v3M3 18l3-8h16l-3 9H3z" /></svg
             ><strong data-i="choose">Open document</strong
             ><small data-i="supported">PDF, PNG, JPEG or Inklane</small>
           </button>
-          <button id="new-notebook" class="launch">
+          <button id="new-notebook" class="launch" disabled>
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M5 4h14v16H5zM8 4v16m3-9h5m-2.5-2.5v5" /></svg
             ><strong data-i="create">New notebook</strong
@@ -97,7 +104,7 @@
           <h2 data-i="recent">On this device</h2>
           <div id="draft-list"></div>
         </section>
-        <button id="sample-link" class="sample-link" data-i="openSample">
+        <button id="sample-link" class="sample-link" data-i="openSample" disabled>
           Open the field guide
         </button>
       </section>

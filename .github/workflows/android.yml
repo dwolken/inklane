@@ -45,11 +45,11 @@ jobs:
           profile: pixel_5
           script: node platforms/android/checks/workspace.mjs
       - name: Retain the synthetic review screen
-        if: ${{ !cancelled() && github.event_name == 'pull_request' && hashFiles('.scratch/android-review.png') != '' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && hashFiles('.scratch/android-*.png') != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android-review-screen
-          path: .scratch/android-review.png
+          path: .scratch/android-*.png
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error

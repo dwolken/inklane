@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1c1b22" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141416" media="(prefers-color-scheme: dark)">
   <title>$page_title</title>
   <meta name="description" content="$description">
   <link rel="canonical" href="$canonical">
   <link rel="alternate" hreflang="en" href="$site">
   <link rel="alternate" hreflang="de" href="${site}de/">
   <link rel="alternate" hreflang="x-default" href="$site">
-  <link rel="icon" type="image/svg+xml" href="${base}assets/inklane.svg">
+  <link rel="icon" type="image/svg+xml" href="${base}assets/inklane-app.svg">
   <link rel="icon" sizes="32x32" href="${base}assets/inklane.ico">
   <link rel="stylesheet" href="${base}assets/site.css">
   <meta property="og:type" content="website">
@@ -33,7 +33,7 @@
 <body>
   <a class="skip" href="#main">$skip</a>
   <header class="topbar wrap">
-    <a class="brand" href="#main" aria-label="$home_label"><img src="${base}assets/inklane.svg" width="33" height="33" alt="">Inklane</a>
+    <a class="brand" href="#main" aria-label="$home_label"><picture><source media="(prefers-color-scheme: dark)" srcset="${base}assets/inklane-lockup-dark.svg"><img src="${base}assets/inklane-lockup-light.svg" width="247" height="64" alt=""></picture><span class="brand-text" aria-hidden="true">Inklane</span></a>
     <nav aria-label="$navigation">
       <a href="#try">$try_label</a>
       <a class="desktop-link" href="#workspace">$workspace</a>
@@ -55,7 +55,7 @@
     <section class="experiments wrap" id="try" aria-labelledby="try-heading" data-demo-label="$demo_label" data-demo-remark="$demo_remark">
       <div class="section-intro"><h2 id="try-heading">$try_heading</h2><p>$try_intro</p></div>
       <article class="experiment">
-        <div class="experiment-copy"><h3>$draw_heading</h3><p>$draw_body</p><div class="demo-controls"><label>$demo_color <input id="demo-color" type="color" value="#7651bb"></label><button type="button" data-reset="draw">$demo_reset</button></div></div>
+        <div class="experiment-copy"><h3>$draw_heading</h3><p>$draw_body</p><div class="demo-controls"><label>$demo_color <input id="demo-color" type="color" value="#5633ff"></label><button type="button" data-reset="draw">$demo_reset</button></div></div>
         <div class="mini-stage" data-station="draw">
           <svg class="plan" viewBox="0 0 600 300" aria-hidden="true"><path class="walls" d="M60 45H540V255H60V45M60 150H245M335 150H540M300 45V115M300 205V255"/><path class="furniture" d="M90 75h120v40H90zM400 75h80v45h-80zM85 185h90v40H85zM390 180h110v45H390z"/><path class="opening" d="M245 150v55a55 55 0 0 0 55-55M300 115h35"/></svg>
           <svg id="demo-ink" viewBox="0 0 600 300" role="img" tabindex="0" aria-label="$draw_canvas"></svg>
@@ -119,7 +119,7 @@
     <section class="platforms wrap" aria-labelledby="platform-heading"><div class="section-intro"><h2 id="platform-heading">$platform_heading</h2><p>$platform_intro</p></div><div class="platform-list"><a href="${base}editor/?lang=$lang"><strong>Web</strong><span>$platform_web</span><span aria-hidden="true">↗</span></a><a href="#download"><strong>Windows</strong><span>$platform_windows</span><span aria-hidden="true">↓</span></a><a href="${repo}/tree/main/platforms/android"><strong>Android</strong><span>$platform_native</span><span aria-hidden="true">↗</span></a><a href="${repo}/tree/main/platforms/linux"><strong>Linux</strong><span>$platform_native</span><span aria-hidden="true">↗</span></a><a href="${repo}/tree/main/platforms/apple"><strong>macOS · iOS</strong><span>$platform_apple</span><span aria-hidden="true">↗</span></a></div></section>
   </main>
   <footer class="wrap">
-    <a class="brand" href="#main"><img src="${base}assets/inklane.svg" width="27" height="27" alt="">Inklane</a>
+    <a class="brand" href="#main" aria-label="$home_label"><picture><source media="(prefers-color-scheme: dark)" srcset="${base}assets/inklane-lockup-dark.svg"><img src="${base}assets/inklane-lockup-light.svg" width="247" height="64" alt=""></picture><span class="brand-text" aria-hidden="true">Inklane</span></a>
     <nav aria-label="$footer_nav">
       <a id="motion-link" href="${base}assets/inklane-sting.mp4"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4.5 2.5 13 8l-8.5 5.5z"/></svg>$motion</a>
       <a href="$repo">GitHub</a><a href="${repo}/releases">$releases</a><a href="${repo}#readme">$guide</a>
