@@ -21,7 +21,7 @@ def build_workspace(output):
         files.append(path)
 
     for name in ("index.html", "boot.js", "editor.js", "editor.css", "language.js", "model.js", "pdf-source.js",
-                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "continuous.js", "startup.js", "register-offline.js", "manifest.webmanifest"):
+                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "pdf-export.js", "continuous.js", "startup.js", "register-offline.js", "manifest.webmanifest"):
         stage(SOURCE / "editor" / name, name)
     for size in [180, 192, 512]:
         name = f"icons/app-{size}.png"
@@ -77,6 +77,13 @@ def build_workspace(output):
         stage(font, "rich-lib/fonts/" + font.name)
     for package, license in [("marked", "LICENSE"), ("dompurify", "LICENSE"), ("katex", "LICENSE"), ("@highlightjs/cdn-assets", "LICENSE")]:
         stage(SOURCE / "node_modules" / package / license, "rich-lib/" + package.replace("/", "-") + "-LICENSE")
+
+    writer = SOURCE / "node_modules/jspdf"
+    if json.loads((writer / "package.json").read_text())["version"] != "4.2.1":
+        raise ValueError("Install the locked PDF writer dependency first")
+    # Keep the published bundle intact, including embedded third-party license comments.
+    stage(writer / "dist/jspdf.umd.min.js", "pdf-write/jspdf.umd.min.js")
+    stage(writer / "LICENSE", "pdf-write/LICENSE")
 
     maps = [name for name in files if name.endswith(".bcmap")]
     (editor / "offline-maps.json").write_text(json.dumps({

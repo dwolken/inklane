@@ -69,7 +69,10 @@ async function tap(sel, fx=.5, fy=.5) {
     const r=e.getBoundingClientRect(), x=r.left+r.width*${fx}, y=r.top+r.height*${fy};
     const click=e.matches('button,summary,a');
     window.__lastTap={selector:${JSON.stringify(sel)},x,y,click,received:false};
-    const observed=event=>{if(e.contains(event.target)){__lastTap.received=true;document.removeEventListener('click',observed,true);}};
+    // Selecting a canvas marker replaces its DOM node before the physical click.
+    // Match the same document object, while ordinary toolbar controls retain identity.
+    const objectId=e.dataset.id;
+    const observed=event=>{if(e.contains(event.target)||(objectId&&event.target.closest?.('[data-id]')?.dataset.id===objectId)){__lastTap.received=true;document.removeEventListener('click',observed,true);}};
     window.__stopTapObservation=()=>document.removeEventListener('click',observed,true);
     if(click)document.addEventListener('click',observed,true);
     return {x,y,click};
@@ -298,6 +301,40 @@ try {
   assert.deepEqual(await js(`(async()=>{const i=new Image();i.src='data:image/png;base64,${png.toString('base64')}';await i.decode();const c=document.createElement('canvas');c.width=i.width;c.height=i.height;c.getContext('2d').drawImage(i,0,0);return [...c.getContext('2d').getImageData(180,760,1,1).data];})()`),[234,179,8,255]);
   await loadFixture(richSaved,'application/octet-stream',rich.title);
   await waitFor(()=>js('document.querySelectorAll("[data-shape]").length === 3 && document.querySelectorAll(".placed .katex").length === 1'),'reopened rich workspace');
+  const pdfChecks = readFileSync('tests/browser-pdf-host.js','utf8');
+  const pdfCheck = (action,payload='') => js('('+pdfChecks+')('+JSON.stringify(action)+','+JSON.stringify(payload)+')');
+  const pdfFixture = Buffer.from(await pdfCheck('fixture',JSON.stringify(richModel)),'base64');
+  const pdfInput = join(fresh,'Native PDF review.inklane'); writeFileSync(pdfInput,pdfFixture);
+  await loadFixture(pdfInput,'application/octet-stream','Native PDF review');
+  await tap('.marker'); await type('#note-title','Complete native review'); await tap('#close-card');
+  const beforePdf = await js('document.querySelector("#state").textContent');
+  assert.equal(beforePdf,'Unsaved changes');
+  await pdfCheck('observe');
+  try {
+    await tap('#more summary'); await tap('#export-pdf');
+    await waitFor(async()=>nodes().some(saveButton),'native PDF destination picker',90000);
+    adb('shell','input','keyevent','BACK');
+    await waitFor(()=>js('document.hasFocus() && !document.querySelector("#export-pdf").disabled'),'cancelled PDF destination');
+    assert.equal(findDownload('Native PDF review-review.pdf'),undefined,'Cancelling must publish no PDF');
+    assert.equal(await js('document.querySelector("#state").textContent'),beforePdf);
+    await tap('#more summary'); await tap('#export-pdf');
+    await waitFor(async()=>nodes().some(saveButton),'complete PDF destination picker',90000);
+    await systemTap(saveButton,'system PDF Save');
+    await waitFor(()=>js('document.hasFocus() && !document.querySelector("#export-pdf").disabled'),'saved PDF destination');
+    const pdfDevice = await waitFor(async()=>findDownload('Native PDF review-review.pdf',1000),'complete saved PDF');
+    const pdfPath = join(fresh,'Native.pdf'); adb('pull',pdfDevice,pdfPath);
+    const pdfBytes = readFileSync(pdfPath);
+    assert.equal(pdfBytes.subarray(0,5).toString(),'%PDF-');
+    const expected = await js('nativePdfExpected');
+    assert.equal(createHash('sha256').update(pdfBytes).digest('hex'),expected.hash,'Native Save writes the entire generated PDF exactly');
+    const rendered = await pdfCheck('inspect',pdfBytes.toString('base64'));
+    assert.ok(rendered.pages >= 3,'Long notes continue onto additional PDF pages');
+    assert.ok(rendered.green > 40,'The final appendix page contains the continued green note body');
+    assert.ok(rendered.pixel.slice(0,3).every((value,index)=>Math.abs(value-[234,179,8][index]) <= 15),'Source-page diagram pixels remain visible in the PDF');
+    assert.equal(await js('document.querySelector("#state").textContent'),beforePdf);
+    assert.deepEqual(readFileSync(pdfInput),pdfFixture,'PDF export leaves its source workspace intact');
+  } finally { await pdfCheck('restore'); }
+  console.log('Android native PDF cancel/save, exact complete bytes, paginated long notes and source diagram pixels passed.');
   console.log('Android schema4 rich math/code editing, text resize/recolor, grouped connector movement/undo, native save/reopen and PNG pixels passed.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {

@@ -16,6 +16,8 @@ open platforms/apple/Inklane.xcodeproj
 
 Select the **Inklane** scheme, choose **My Mac** or an **iPhone simulator** and run. Choose **Product → Test** to exercise the bundled application and the native file export bridge. On macOS the **InklaneMacUI** scheme also drives the system Save and Open panels from a separate UI test process. The deployment targets are macOS 14 and iOS 17. Installing on an iPhone or iPad requires a development signing identity and provisioning.
 
+The hosted PDF journey checks the complete native staged file, source pixels and the last page of a long remarks appendix, then cancels the actual system picker and verifies cleanup. The Mac UI journey separately approves a PDF destination through the Save panel and reads the resulting file with PDFKit. The iOS hosted test does not automate an affirmative Files destination.
+
 WebKit loads the bundled assets from a read-only listener bound to the device’s IPv4 loopback interface. The app retains its chosen port so the WebKit storage origin stays the same on later launches. Only bundled editor assets are served. Document bytes reach the host through a bounded message bridge when the user saves a file.
 
-Printing is currently available from the browser and Windows editions. No App Store or notarized Mac package is published by this project’s CI.
+**Export review PDF** prepares marked pages and a complete, paginated remarks appendix, then opens the macOS Save panel or iOS Files picker. Choose all pages or the current page. The PDF is a visible copy; keep the portable `.inklane` workspace for editing. Direct printing remains available from the browser and Windows editions. No App Store or notarized Mac package is published by this project’s CI.

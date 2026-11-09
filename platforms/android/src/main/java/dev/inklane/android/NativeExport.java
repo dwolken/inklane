@@ -87,7 +87,7 @@ final class NativeExport {
     private static boolean allowed(String title) {
         if (title.length() > 255 || title.trim().isEmpty() || title.startsWith(".") || title.matches(".*[\\p{Cntrl}/\\\\].*")) return false;
         String lower = title.toLowerCase(Locale.ROOT);
-        return lower.endsWith(".png") || lower.endsWith(".inklane") || lower.endsWith(".inklane.json") || lower.endsWith(".feedback.json");
+        return lower.endsWith(".pdf") || lower.endsWith(".png") || lower.endsWith(".inklane") || lower.endsWith(".inklane.json") || lower.endsWith(".feedback.json");
     }
 
     void destination(Uri uri) {
@@ -98,7 +98,8 @@ final class NativeExport {
                 if (!activity.canAccess(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)) throw new IOException();
                 // Capture a new copy only. Providers can return an existing user-selected
                 // item or change the filename. Inspect it before opening any writable stream.
-                String extension = name.endsWith(".png") ? ".png" : name.endsWith(".inklane") ? ".inklane" : name.endsWith(".feedback.json") ? ".feedback.json" : ".inklane.json";
+                String lower = name.toLowerCase(Locale.ROOT);
+                String extension = lower.endsWith(".pdf") ? ".pdf" : lower.endsWith(".png") ? ".png" : lower.endsWith(".inklane") ? ".inklane" : lower.endsWith(".feedback.json") ? ".feedback.json" : ".inklane.json";
                 try (Cursor row = activity.getContentResolver().query(uri,
                         new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}, null, null, null)) {
                     if (row == null || !row.moveToFirst() || row.isNull(0) || !row.getString(0).toLowerCase(Locale.ROOT).endsWith(extension)) throw new IOException();

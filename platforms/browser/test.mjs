@@ -18,14 +18,36 @@ const results = [], errors = [];
 try {
   const browser = await context.browser().newBrowserCDPSession();
   const { id } = await browser.send('Extensions.loadUnpacked', { path: root });
-  const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'); await worker.evaluate(() => typeof InklaneWeb);
+  const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+  // CDP can expose a worker before its top-level action listener has finished
+  // registering. Observe readiness before the first action; never retry a lost action.
+  let actionReady = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    actionReady = await worker.evaluate(() => typeof InklaneWeb === 'object' && chrome.action.onClicked.hasListeners());
+    if (actionReady) break;
+    await new Promise(done => setTimeout(done, 50));
+  }
+  assert(actionReady, 'The installed extension did not register its toolbar action listener');
   const page = context.pages()[0]; page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin + '/study?utm_source=test&token=secret&chapter=2');
   const session = await context.newCDPSession(page);
   async function activate() {
     const { targetInfos } = await browser.send('Target.getTargets', { filter: [{ type: 'tab' }] }); const targetInfo = targetInfos.find(x => x.url === page.url()); assert(targetInfo, JSON.stringify(targetInfos));
-    await browser.send('Extensions.triggerAction', { id, targetId: targetInfo.targetId });
-    await page.waitForSelector('#inklane-web-review');
+    try {
+      await browser.send('Extensions.triggerAction', { id, targetId: targetInfo.targetId });
+      await page.waitForSelector('#inklane-web-review');
+    } catch (error) {
+      const background = await worker.evaluate(async () => ({
+        core: typeof InklaneWeb, listener: chrome.action.onClicked.hasListeners(),
+        tabs: await Promise.all((await chrome.tabs.query({})).map(async tab => ({
+          id: tab.id, url: tab.url, active: tab.active, status: tab.status,
+          badge: await chrome.action.getBadgeText({tabId: tab.id}),
+        }))),
+      })).catch(error => ({error: String(error)}));
+      const diagnostic = {url: page.url(), targetInfo, background, pages: context.pages().map(p => p.url()), errors};
+      await writeFile(join(output, 'activation-failure.json'), JSON.stringify(diagnostic, null, 2));
+      throw new Error(`Installed toolbar activation failed: ${JSON.stringify(diagnostic)}`, {cause: error});
+    }
   }
   await activate();
   let shadowId;

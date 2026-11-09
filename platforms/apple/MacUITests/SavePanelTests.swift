@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import PDFKit
 
 final class SavePanelTests: XCTestCase {
     private func find(_ element: XCUIElement, within timeout: TimeInterval = 12,
@@ -11,12 +12,12 @@ final class SavePanelTests: XCTestCase {
         return element
     }
 
-    private func chooser(_ app: XCUIApplication, button: String) throws -> XCUIElement {
+    private func chooser(_ app: XCUIApplication, button: String, timeout: TimeInterval = 8) throws -> XCUIElement {
         // AppKit exposes the modal sheet immediately, but its remote controls can appear elsewhere
         // in the host application's AX tree. The XPC service is not itself a launchable application.
         let id = button == "Save" ? "save-panel" : "open-panel"
         let explicit = app.descendants(matching: .any).matching(identifier:id).firstMatch
-        if app.sheets.firstMatch.waitForExistence(timeout: 8) { return app }
+        if app.sheets.firstMatch.waitForExistence(timeout: timeout) { return app }
         if explicit.exists || app.dialogs.firstMatch.exists { return app }
         XCTFail("The host application did not present a native \(button) panel.")
         throw CocoaError(.fileReadUnknown)
@@ -53,16 +54,17 @@ final class SavePanelTests: XCTestCase {
         }
     }
 
-    private func save(_ baseName: String, app: XCUIApplication, folder: URL, marker: URL) throws -> Data {
-        try find(app.webViews.buttons["Save"]).click()
-        let panel = try chooser(app,button: "Save")
+    private func save(_ baseName: String, app: XCUIApplication, folder: URL, marker: URL,
+                      fileExtension: String = "inklane", trigger: Bool = true) throws -> Data {
+        if trigger { try find(app.webViews.buttons["Save"]).click() }
+        let panel = try chooser(app,button: "Save",timeout: fileExtension == "pdf" ? 90 : 8)
         // A newly presented macOS Save panel selects the proposed filename. Normal keyboard input
         // goes to that modal responder even if the XPC content is not a child of the sheet node.
         app.typeKey("a",modifierFlags: .command)
-        app.typeText(baseName + ".inklane")
+        app.typeText(baseName + "." + fileExtension)
         go(app,to: folder)
         try identifyFolder(folder,marker: marker,in: panel)
-        let destination = folder.appendingPathComponent(baseName + ".inklane")
+        let destination = folder.appendingPathComponent(baseName + "." + fileExtension)
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         let saveButtons = panel.buttons.matching(identifier:"Save").allElementsBoundByIndex.filter {
             $0.isEnabled && $0.isHittable
@@ -87,7 +89,7 @@ final class SavePanelTests: XCTestCase {
         try Data().write(to: marker,options: .withoutOverwriting)
         let first = "Review-" + id, second = "Reopened-" + id
         defer {
-            for url in [marker,folder.appendingPathComponent(first + ".inklane"),folder.appendingPathComponent(second + ".inklane")] {
+            for url in [marker,folder.appendingPathComponent(first + ".inklane"),folder.appendingPathComponent(second + ".inklane"),folder.appendingPathComponent(first + ".pdf")] {
                 try? manager.removeItem(at: url)
             }
             if (try? manager.contentsOfDirectory(atPath: folder.path).isEmpty) == true {
@@ -135,5 +137,16 @@ final class SavePanelTests: XCTestCase {
         _ = try find(app.webViews.buttons["Check the specimen"])
         let reopened = try save(second,app: app,folder: folder,marker: marker)
         XCTAssertEqual(saved,reopened)
+
+        try find(app.webViews.descendants(matching: .any).matching(NSPredicate(
+            format: "label == 'More actions' OR title == 'More actions'"
+        )).firstMatch).click()
+        try find(app.webViews.buttons["Export review PDF…"]).click()
+        let pdf = try save(first,app: app,folder: folder,marker: marker,fileExtension: "pdf",trigger: false)
+        XCTAssertEqual(pdf.prefix(5), Data("%PDF-".utf8))
+        let review = try XCTUnwrap(PDFDocument(data: pdf))
+        XCTAssertGreaterThanOrEqual(review.pageCount, 2, "A native PDF copy includes the source and complete remarks appendix")
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(first + ".inklane")), saved)
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(second + ".inklane")), reopened)
     }
 }

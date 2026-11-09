@@ -64,6 +64,7 @@
               aria-pressed="false"
             ></button>
             <button id="export-image" disabled data-i="exportImage"></button>
+            <button id="export-pdf" disabled data-i="exportPdf"></button>
             <button id="shortcuts" data-i="guide">
               How to use the workspace</button
             ><button id="language"></button>
@@ -292,6 +293,28 @@
           ></button>
         </div>
       </form>
+    </dialog>
+    <dialog id="pdf-options" aria-labelledby="pdf-heading" aria-describedby="pdf-description">
+      <form id="pdf-form">
+        <h2 id="pdf-heading" data-i="pdfTitle"></h2>
+        <p id="pdf-description" data-i="pdfDescription"></p>
+        <label for="pdf-range" data-i="pages"></label>
+        <select id="pdf-range">
+          <option id="pdf-all" value="all"></option>
+          <option id="pdf-current" value="current"></option>
+        </select>
+        <div class="relink-actions">
+          <button type="button" id="cancel-pdf" data-i="cancel"></button>
+          <button type="submit" class="primary" data-i="pdfExport"></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="pdf-progress" aria-labelledby="pdf-progress-heading">
+      <h2 id="pdf-progress-heading" data-i="preparingPdf"></h2>
+      <p id="pdf-progress-status" role="status" aria-live="polite"></p>
+      <div class="relink-actions">
+        <button id="cancel-pdf-progress" type="button" data-i="cancel"></button>
+      </div>
     </dialog>
     <dialog id="picture-size">
       <form id="size-form">

@@ -1,10 +1,10 @@
 name: Android workspace
 on:
   pull_request:
-    paths: ['platforms/android/**', 'website/**', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', 'src/Inklane/Assets/**', '.github/workflows/android.yml']
+    paths: ['platforms/android/**', 'website/**', 'tests/browser-pdf-host.js', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', 'src/Inklane/Assets/**', '.github/workflows/android.yml']
   push:
     branches: [main]
-    paths: ['platforms/android/**', 'website/**', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', 'src/Inklane/Assets/**', '.github/workflows/android.yml']
+    paths: ['platforms/android/**', 'website/**', 'tests/browser-pdf-host.js', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', 'src/Inklane/Assets/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:

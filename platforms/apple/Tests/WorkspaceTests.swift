@@ -2,6 +2,7 @@ import XCTest
 import WebKit
 import CoreGraphics
 import SwiftUI
+import CryptoKit
 @testable import Inklane
 #if os(iOS)
 import UIKit
@@ -289,9 +290,9 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "!!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
     }
 
-    private func cancelExport(_ host: WorkspaceHost, selector: String = "#portable", minimumSize: Int = 100_000) async throws -> Data {
+    private func cancelExport(_ host: WorkspaceHost, selector: String = "#portable", minimumSize: Int = 100_000, pickerWait: Int = 120) async throws -> Data {
         try await perform(host, "document.querySelector('\(selector)').click()")
-        for _ in 0..<120 {
+        for _ in 0..<pickerWait {
             if host.exporter.picker != nil { break }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
@@ -364,8 +365,54 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "!globalThis.previousRichWorkspace && typeof document.querySelector('#sample-link')?.onclick === 'function'")
         try await openFile(portable, "Rich reopened.inklane", in: host)
         try await wait(host, "document.querySelectorAll('[data-shape]').length === 3 && document.querySelectorAll('.placed .katex').length === 1")
+        try await checkReviewPDF(host)
         try await perform(host, "document.querySelector('#home').click()")
         try await wait(host, "!document.querySelector('#welcome').hidden")
+    }
+
+    private func checkReviewPDF(_ host: WorkspaceHost) async throws {
+        let resources = Bundle(for: WorkspaceTests.self)
+        let fixtureURL = try XCTUnwrap(resources.url(forResource: "rich-host-review", withExtension: "json"))
+        let source = try Data(contentsOf: fixtureURL)
+        let scriptURL = try XCTUnwrap(resources.url(forResource: "browser-pdf-host", withExtension: "js"))
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        func check(_ action: String, _ payload: String = "") async throws -> Any? {
+            try await javascript(host, "return await (\n" + script + "\n)(action,payload);",
+                                 arguments: ["action": action, "payload": payload])
+        }
+        let fixtureValue = try await check("fixture", String(decoding: source, as: UTF8.self))
+        let encoded = try XCTUnwrap(fixtureValue as? String)
+        let fixture = try XCTUnwrap(Data(base64Encoded: encoded))
+        try await openFile(fixture, "Native PDF review.inklane", in: host)
+        try await wait(host, "document.querySelector('#name').textContent === 'Native PDF review'")
+        try await perform(host, """
+          document.querySelector('.marker').click(); const title=document.querySelector('#note-title');
+          title.value='Complete native review'; title.dispatchEvent(new Event('input',{bubbles:true}));
+          document.querySelector('#close-card').click()
+          """)
+        try await wait(host, "document.querySelector('#state').textContent === 'Unsaved changes'")
+        _ = try await check("observe")
+        // This stages the real complete PDF in the native adapter, presents the system picker,
+        // then cancels it. The Mac UI journey separately approves an actual PDF destination.
+        let bytes = try await cancelExport(host, selector: "#export-pdf", minimumSize: 1000, pickerWait: 900)
+        XCTAssertEqual(bytes.prefix(5), Data("%PDF-".utf8))
+        let expectedValue = try await javascript(host, "nativePdfExpected")
+        let expected = try XCTUnwrap(expectedValue as? [String: Any])
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(expected["hash"] as? String, digest)
+        XCTAssertEqual(expected["size"] as? Int, bytes.count)
+        let renderedValue = try await check("inspect", bytes.base64EncodedString())
+        let rendered = try XCTUnwrap(renderedValue as? [String: Any])
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(rendered["pages"] as? Int), 3)
+        XCTAssertGreaterThan(try XCTUnwrap(rendered["green"] as? Int), 40, "The final appendix page retains the continued note body")
+        let pixel = try XCTUnwrap(rendered["pixel"] as? [Int])
+        XCTAssertEqual(pixel.count, 4)
+        for (actual, expected) in zip(pixel, [234,179,8,255]) { XCTAssertLessThanOrEqual(abs(actual-expected), 15) }
+        let state = try await javascript(host, "document.querySelector('#state').textContent")
+        XCTAssertEqual(state as? String, "Unsaved changes")
+        XCTAssertEqual(try Data(contentsOf: fixtureURL), source)
+        _ = try await check("restore")
+        NSLog("Apple native PDF cancellation, exact staged bytes, paginated long notes and source diagram pixels passed.")
     }
 
     private func recoverDraft(_ host: WorkspaceHost) async throws {

@@ -86,6 +86,7 @@ button:focus-visible,
 summary:focus-visible,
 a:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible,
 #viewport:focus-visible {
   outline: 2px solid var(--accent);
@@ -1174,17 +1175,17 @@ body:has(dialog[open]) {
   background: var(--paper);
   color: var(--fg);
 }
-#print-form {
+#print-form, #pdf-form {
   display: grid;
   gap: 12px;
   text-align: left;
 }
-#print-form label {
+#print-form label, #pdf-form label {
   font-size: 13px;
   font-weight: 550;
   color: var(--muted);
 }
-#print-range {
+#print-range, #pdf-range {
   font: inherit;
   padding: 8px;
   background: var(--paper);
@@ -1196,9 +1197,12 @@ body:has(dialog[open]) {
   margin: 0;
   max-width: 32ch;
 }
+#pdf-form p { margin: 0; line-height: 1.5; }
+#pdf-progress { width: min(360px, 90vw); }
+#pdf-progress .relink-actions { justify-content: flex-end; }
 
 /* Keep touch entry readable without zooming the entire workspace when a field receives focus. */
 @media (pointer: coarse) {
   #card input, #card textarea, #search, #paper-form input, #paper-form select,
-  #rename-title, #picture-width, #print-range, #ink-size { font-size: 16px; }
+  #rename-title, #picture-width, #print-range, #pdf-range, #ink-size { font-size: 16px; }
 }

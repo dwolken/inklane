@@ -80,7 +80,7 @@ class Exports:
             if (self.pending or self.presenting or not isinstance(size, int) or not 0 <= size <= MAX_BYTES
                     or not isinstance(name,str) or name in ("",".","..") or Path(name).name != name
                     or len(name)>255 or any(ord(c)<32 for c in name)
-                    or not name.lower().endswith((".inklane", ".inklane.json", ".feedback.json", ".png"))):
+                    or not name.lower().endswith((".inklane", ".inklane.json", ".feedback.json", ".png", ".pdf"))):
                 raise ValueError("Invalid export.")
             self.pending = dict(name=name,size=size,token=secrets.token_hex(24),stream=tempfile.TemporaryFile())
             return self.pending["token"]
@@ -111,7 +111,7 @@ class Exports:
             if destination is None:
                 return "cancelled"
             destination = Path(destination)
-            suffix = next(ext for ext in (".inklane.json",".feedback.json",".inklane",".png") if transfer["name"].lower().endswith(ext))
+            suffix = next(ext for ext in (".inklane.json",".feedback.json",".inklane",".png",".pdf") if transfer["name"].lower().endswith(ext))
             if not destination.name.lower().endswith(suffix):
                 raise ValueError("Unexpected file extension.")
             # Publish an entirely written file. Never replace a source or a newly appeared destination.

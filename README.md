@@ -71,7 +71,7 @@ Tool shortcuts apply outside text entry. Appearance follows Windows by default. 
 
 ## Files and compatibility
 
-**Send a review to someone without Inklane.** In the browser, choose **More actions → Print review**, then save as PDF or print. The copy shows the original page with its marks, followed by each numbered remark in full. For an editable handoff, send a portable workspace instead.
+**Send a review to someone without Inklane.** In the browser or shared native editions, choose **More actions → Export review PDF**. Export all pages or the current page, with each numbered remark in full on a paginated appendix. The PDF is a flattened visible copy; send a portable `.inklane` workspace for editable handoff. The browser also offers **Print review** through its print dialog.
 
 **Review a PDF or Office document on Windows.** Choose **Open file** on Home to open a PDF and mark its pages. Save keeps your work next to the original as `filename.pdf.inklane.json`. Share both files with another Inklane user to continue editing. Export a marked page as PNG or print it to share its visible marks and complete remarks. The development PNG export adds a notes gutter; printing appends paginated notes, including collapsed cards. If all remarks cannot fit safely in one readable PNG, export a PDF or feedback data instead. A general PDF keeps its original pages, forms and annotations in the source file.
 

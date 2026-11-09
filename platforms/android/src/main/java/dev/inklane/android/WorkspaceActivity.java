@@ -183,7 +183,8 @@ public final class WorkspaceActivity extends Activity {
     }
 
     void pickDestination(String name) {
-        String type = name.endsWith(".png") ? "image/png" : name.endsWith(".json") ? "application/json" : "application/octet-stream";
+        String lower = name.toLowerCase(Locale.ROOT);
+        String type = lower.endsWith(".pdf") ? "application/pdf" : lower.endsWith(".png") ? "image/png" : lower.endsWith(".json") ? "application/json" : "application/octet-stream";
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(type);
         intent.putExtra(Intent.EXTRA_TITLE, name);
         startActivityForResult(intent, SAVE);

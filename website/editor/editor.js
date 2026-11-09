@@ -79,6 +79,7 @@ let zoom = 1,
   initializing = true,
   busy = false,
   printing = false,
+  exportingPdf = false,
   revision = 0,
   savedRevision = 0,
   serial = 0,
@@ -154,6 +155,7 @@ function updateStatus() {
         "whole-page",
         "portable",
         "export-image",
+        "export-pdf",
       ].includes(item.id)
     )
       item.hidden = !active;
@@ -176,7 +178,7 @@ function updateStatus() {
   $("#print").hidden = !active || globalThis.inklaneNativePrinting === false;
   $("#print").disabled = busy;
   $("#download").hidden = !active || Boolean(notebook);
-  $("#portable").disabled = $("#export-image").disabled = busy || !active;
+  $("#portable").disabled = $("#export-image").disabled = $("#export-pdf").disabled = busy || !active;
   $("#save .wide").textContent = t(
     notebook || portableMode ? "saveShort" : "save",
   );
@@ -189,7 +191,9 @@ function updateStatus() {
     !active
       ? "newHint"
       : busy
-        ? printing
+        ? exportingPdf
+          ? "preparingPdf"
+          : printing
           ? "preparingPrint"
           : "saving"
         : dirty()
@@ -2887,6 +2891,72 @@ properties = setupProperties({
     render();
   },
 });
+
+let pdfController = null;
+async function exportPdf(selectedPage = null) {
+  if (!data || busy || gesture) return;
+  flush();
+  exportingPdf = busy = true;
+  updateStatus();
+  const controller = pdfController = new AbortController();
+  const progress = $("#pdf-progress");
+  $("#pdf-progress-status").textContent = t("preparingPdf");
+  progress.showModal();
+  try {
+    const { reviewPdf } = await import("./pdf-export.js");
+    const blob = await reviewPdf(data, image, strokeVisual, t, {
+      selectedPage,
+      signal: controller.signal,
+      onProgress: ({ phase, current, total }) => {
+        $("#pdf-progress-status").textContent = t(
+          phase === "notes" ? "pdfNotesProgress" : "pdfPagesProgress",
+        ).replace("{current}", current).replace("{total}", total);
+      },
+    });
+    controller.signal.throwIfAborted();
+    progress.close();
+    const title = data.kind === "Notebook" ? image.name : image.name.replace(/\.[^.]+$/, "");
+    await requestDownload(
+      blob,
+      (title.replace(/[<>:"/\\|?*]/g, "-") || "Inklane") + "-review.pdf",
+      "pdfDownloaded",
+    );
+  } catch (error) {
+    if (error?.name !== "AbortError") errorMessage(error, "pdfExportFailed");
+  } finally {
+    if (progress.open) progress.close();
+    pdfController = null;
+    exportingPdf = busy = false;
+    updateStatus();
+    $("#more summary").focus({ preventScroll: true });
+  }
+}
+$("#export-pdf").onclick = () => {
+  if (!data || busy || gesture) return;
+  closeMenu();
+  if (data.pages.length === 1) {
+    exportPdf();
+    return;
+  }
+  $("#pdf-all").textContent = t("allPages") + " (" + data.pages.length + ")";
+  $("#pdf-current").textContent = t("currentPage") + " (" + (pageIndex + 1) + ")";
+  $("#pdf-range").value = "all";
+  $("#pdf-options").showModal();
+};
+$("#pdf-form").onsubmit = (event) => {
+  event.preventDefault();
+  $("#pdf-options").close();
+  exportPdf($("#pdf-range").value === "current" ? pageIndex : null);
+};
+$("#cancel-pdf").onclick = () => $("#pdf-options").close();
+$("#pdf-options").addEventListener("close", () => {
+  if (!busy) $("#more summary").focus({ preventScroll: true });
+});
+$("#cancel-pdf-progress").onclick = () => pdfController?.abort();
+$("#pdf-progress").oncancel = (event) => {
+  event.preventDefault();
+  pdfController?.abort();
+};
 
 $("#export-image").onclick = async () => {
   if (!data || busy) return;
