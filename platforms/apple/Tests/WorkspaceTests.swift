@@ -186,6 +186,8 @@ final class WorkspaceTests: XCTestCase {
         NSLog("Apple workspace 2. Render two PDF pages and create two notebook pages.")
         try await readPDF(host)
         try await createNotebook(host)
+        NSLog("Apple workspace 2b. Edit rich text and connected shapes; export and reopen schema 4.")
+        try await editRichWorkspace(host)
         NSLog("Apple workspace 3. Edit the example remark and cancel its native export.")
         try await editExample(host)
         let portable = try await cancelExport(host)
@@ -275,8 +277,8 @@ final class WorkspaceTests: XCTestCase {
         try await wait(host, "!!document.querySelector('.marker[aria-label=\"Recheck scale\"]')")
     }
 
-    private func cancelExport(_ host: WorkspaceHost) async throws -> Data {
-        try await perform(host, "document.querySelector('#portable').click()")
+    private func cancelExport(_ host: WorkspaceHost, selector: String = "#portable", minimumSize: Int = 100_000) async throws -> Data {
+        try await perform(host, "document.querySelector('\(selector)').click()")
         for _ in 0..<120 {
             if host.exporter.picker != nil { break }
             try await Task.sleep(nanoseconds: 100_000_000)
@@ -285,7 +287,7 @@ final class WorkspaceTests: XCTestCase {
         host.exporter.discardUnpresentedTransfer()
         XCTAssertEqual(host.exporter.pendingFile, stagedURL, "The native picker still owns this file.")
         let portable = try Data(contentsOf: stagedURL)
-        XCTAssertGreaterThan(portable.count, 100_000)
+        XCTAssertGreaterThan(portable.count, minimumSize)
         let picker = try XCTUnwrap(host.exporter.picker)
         // The OS owns the actual Files/Save panel. Cancellation must preserve the edited document.
         #if os(iOS)
@@ -298,6 +300,60 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertNil(host.exporter.pendingFile)
         XCTAssertFalse(FileManager.default.fileExists(atPath: stagedURL.path))
         return portable
+    }
+
+    private func editRichWorkspace(_ host: WorkspaceHost) async throws {
+        let resources = Bundle(for: WorkspaceTests.self)
+        let fixtureURL = try XCTUnwrap(resources.url(forResource: "rich-host-review", withExtension: "json"))
+        let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL))
+        let metadata = try JSONSerialization.data(withJSONObject: ["format": "inklane.workspace", "version": 1,
+                                                                   "sourceName": "Rich host review", "document": fixture])
+        var count = UInt32(metadata.count).bigEndian
+        var input = Data("INKLANE1".utf8)
+        withUnsafeBytes(of: &count) { input.append(contentsOf: $0) }
+        input.append(metadata)
+        try await openFile(input, "Rich.inklane", in: host)
+        try await wait(host, "document.querySelectorAll('[data-shape]').length === 3 && document.querySelectorAll('.placed .katex').length === 1")
+        let scriptURL = try XCTUnwrap(resources.url(forResource: "browser-rich-host", withExtension: "js"))
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let edited = try await javascript(host, "return await (\n" + script + "\n);", arguments: [:])
+        XCTAssertEqual(edited as? Bool, true)
+
+        let portable = try await cancelExport(host, minimumSize: 1000)
+        let length = portable[8..<12].reduce(0) { $0 * 256 + Int($1) }
+        let envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: portable[12..<12+length]) as? [String:Any])
+        let document = try XCTUnwrap(envelope["document"] as? [String:Any])
+        XCTAssertEqual(document["schemaVersion"] as? Int, 4)
+        let pages = try XCTUnwrap(document["pages"] as? [[String:Any]])
+        let items = try XCTUnwrap(pages[0]["items"] as? [[String:Any]])
+        let text = try XCTUnwrap(items.first { $0["id"] as? String == "host-text" })
+        XCTAssertEqual(text["width"] as? Int, 210)
+        XCTAssertEqual(text["fontSize"] as? Int, 24)
+        XCTAssertEqual(text["color"] as? String, "#F97316")
+        XCTAssertEqual(text["contentFormat"] as? String, "Markdown")
+        XCTAssertEqual(text["bold"] as? Bool, true)
+        let shapes = try XCTUnwrap(pages[0]["shapes"] as? [[String:Any]])
+        XCTAssertEqual(shapes.count, 3)
+        XCTAssertEqual(shapes[2]["startId"] as? String, "host-left")
+        XCTAssertEqual(shapes[2]["endId"] as? String, "host-right")
+        XCTAssertEqual(shapes[2]["groupId"] as? String, "host-diagram")
+
+        let png = try await cancelExport(host, selector: "#export-image", minimumSize: 1000)
+        XCTAssertEqual(Array(png.prefix(8)), [137,80,78,71,13,10,26,10])
+        let sample = try await javascript(host, """
+          const image = new Image(); image.src = 'data:image/png;base64,' + payload; await image.decode();
+          const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+          canvas.getContext('2d').drawImage(image,0,0);return [...canvas.getContext('2d').getImageData(180,760,1,1).data];
+          """, arguments: ["payload": png.base64EncodedString()])
+        XCTAssertEqual(sample as? [Int], [234,179,8,255], "Native PNG export preserves scale and diagram fill")
+        // Reload before reopening: cancelling the real native picker keeps the original dirty.
+        try await perform(host, "globalThis.previousRichWorkspace = true")
+        host.webView.reload()
+        try await wait(host, "!globalThis.previousRichWorkspace && typeof document.querySelector('#sample-link')?.onclick === 'function'")
+        try await openFile(portable, "Rich reopened.inklane", in: host)
+        try await wait(host, "document.querySelectorAll('[data-shape]').length === 3 && document.querySelectorAll('.placed .katex').length === 1")
+        try await perform(host, "document.querySelector('#home').click()")
+        try await wait(host, "!document.querySelector('#welcome').hidden")
     }
 
     private func recoverDraft(_ host: WorkspaceHost) async throws {

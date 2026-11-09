@@ -3,9 +3,9 @@ name: Apple workspaces
 on:
   push:
     branches: [main]
-    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+    paths: ['platforms/apple/**', 'website/**', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
   pull_request:
-    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+    paths: ['platforms/apple/**', 'website/**', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
   workflow_dispatch:
 
 permissions:
