@@ -11,7 +11,7 @@ const require=createRequire(new URL('../../website/package.json',import.meta.url
 const {chromium}=require('playwright-core');
 const previewsOnly=process.argv.includes('--previews');
 const fps=60,frames=Math.round(MOTION.duration*fps);
-const browser=await chromium.launch({channel:'msedge',headless:true});
+const browser=await chromium.launch(process.env.BROWSER_PATH?{executablePath:process.env.BROWSER_PATH,headless:true}:{channel:'msedge',headless:true});
 const preview=join(root,'previews'),temp=await mkdtemp(join(root,'.render-'));
 await mkdir(preview,{recursive:true});
 try{

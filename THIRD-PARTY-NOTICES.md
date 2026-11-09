@@ -67,6 +67,12 @@ The Windows build uses Microsoft's .NET SDK targeting pack to call the PDF rende
 
 ## Fonts
 
+The identity and marketing site use Manrope, Copyright 2018 The Manrope Project Authors,
+under the SIL Open Font License 1.1. The original variable TTF and a WOFF2 format
+conversion are included in `brand/type/`; the complete license is
+[brand/type/OFL.txt](brand/type/OFL.txt). Source: [Google Fonts Manrope](https://github.com/google/fonts/tree/main/ofl/manrope).
+The outlined wordmark adjusts spacing and one letter terminal; it does not alter the bundled font design.
+
 The browser workspace uses Mozilla [PDF.js](https://github.com/mozilla/pdf.js) under Apache-2.0.
 Its local distribution includes the PDF.js license and the supplied notices for character maps,
 standard fonts, ICC profiles and image decoders under `editor/pdf-lib/`. No PDF scripting

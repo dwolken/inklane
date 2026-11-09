@@ -49,6 +49,30 @@ def shape(name,fore=INK,accent='#5633FF',small=False):
         return f'<path d="{frame}" fill="{fore}"/><path d="{line}" fill="{accent}"/><path d="{CONTACT_PEN}" fill="{fore}" transform="translate(39.5 35) rotate(37)"/>'
     raise ValueError('Unknown artwork')
 
+def android_icons():
+    """Use the same filled paths in Android's native vector format."""
+    res=ROOT.parent/'platforms/android/src/main/res'
+    def vector(body):
+        return '<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="64" android:viewportHeight="64">\n'+body+'\n</vector>\n'
+    def artwork(accent):
+        return (f'<path android:pathData="{CONTACT_FRAME}" android:fillColor="{WHITE}"/>\n'
+                f'<path android:pathData="{CONTACT_LINE}" android:fillColor="{accent}"/>\n'
+                '<group android:translateX="39.5" android:translateY="35" android:rotation="37">\n'
+                f'<path android:pathData="{CONTACT_PEN}" android:fillColor="{WHITE}"/>\n</group>')
+    for filename,accent in [('inklane_foreground.xml','#9B87FF'),('inklane_monochrome.xml',WHITE)]:
+        # Android's guaranteed circle is 66/108 of the canvas, smaller than
+        # the web maskable safe area. Keep the nib inside it under every mask.
+        body='<group android:translateX="13.44" android:translateY="13.44" android:scaleX=".58" android:scaleY=".58">\n'+artwork(accent)+'\n</group>'
+        (res/'drawable'/filename).write_text(vector(body),encoding='utf8')
+    tile=f'<path android:pathData="M14 0H50A14 14 0 0 1 64 14V50A14 14 0 0 1 50 64H14A14 14 0 0 1 0 50V14A14 14 0 0 1 14 0Z" android:fillColor="{INK}"/>'
+    body=tile+'\n<group android:translateX="4" android:translateY="4" android:scaleX=".875" android:scaleY=".875">\n'+artwork('#9B87FF')+'\n</group>'
+    (res/'drawable/inklane.xml').write_text(vector(body),encoding='utf8')
+    (res/'values/inklane_brand.xml').write_text(f'<resources>\n    <color name="inklane_icon_background">{INK}</color>\n</resources>\n',encoding='utf8')
+    for version in [26,33]:
+        folder=res/f'mipmap-anydpi-v{version}';folder.mkdir(exist_ok=True)
+        mono='\n    <monochrome android:drawable="@drawable/inklane_monochrome"/>' if version>=33 else ''
+        (folder/'inklane_app.xml').write_text('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@color/inklane_icon_background"/>\n    <foreground android:drawable="@drawable/inklane_foreground"/>'+mono+'\n</adaptive-icon>\n',encoding='utf8')
+
 def build():
     assets=ROOT.parent/'src/Inklane/Assets'
     assets.mkdir(parents=True,exist_ok=True)
@@ -62,10 +86,10 @@ def build():
     (assets/'inklane.svg').write_bytes((assets/'inklane-symbol-light.svg').read_bytes())
     (assets/'inklane-symbol-small.svg').write_text(svg(shape('contact',INK,'#5633FF',True)),encoding='utf8')
     for suffix,small in [('',False),('-small',True)]:
-        body=f'<rect width="64" height="64" rx="14" fill="{INK}"/><g transform="translate(4 4) scale(.875)">{shape('contact',WHITE,'#9B87FF',small)}</g>'
+        body=f'<rect width="64" height="64" rx="14" fill="{INK}"/><g transform="translate(4 4) scale(.875)">{shape("contact",WHITE,"#9B87FF",small)}</g>'
         (assets/f'inklane-app{suffix}.svg').write_text(svg(body),encoding='utf8')
-    (assets/'inklane-app-square.svg').write_text(svg(f'<rect width="64" height="64" fill="{INK}"/><g transform="translate(4 4) scale(.875)">{shape('contact',WHITE,'#9B87FF')}</g>'),encoding='utf8')
-    (assets/'inklane-adaptive-foreground.svg').write_text(svg(f'<g transform="translate(11 11) scale(.65625)">{shape('contact',WHITE,'#9B87FF')}</g>'),encoding='utf8')
+    (assets/'inklane-app-square.svg').write_text(svg(f'<rect width="64" height="64" fill="{INK}"/><g transform="translate(4 4) scale(.875)">{shape("contact",WHITE,"#9B87FF")}</g>'),encoding='utf8')
+    (assets/'inklane-adaptive-foreground.svg').write_text(svg(f'<g transform="translate(11 11) scale(.65625)">{shape("contact",WHITE,"#9B87FF")}</g>'),encoding='utf8')
     (assets/'inklane-adaptive-background.svg').write_text(svg(f'<rect width="64" height="64" fill="{INK}"/>'),encoding='utf8')
     data={'contact':{'accent':'#5633FF','width':lock_width,'letters':parts,'frame':CONTACT_FRAME,'line':CONTACT_LINE,'pen':CONTACT_PEN,'centre':CONTACT_CENTRE}}
     (ROOT/'motion/geometry.json').write_text(json.dumps(data,indent=2),encoding='utf8')
@@ -73,6 +97,7 @@ def build():
     module=(ROOT/'motion/motion.mjs').read_text(encoding='utf8').replace('export function mountFilm','function mountFilm')
     template=template.replace("import {mountFilm} from './motion.mjs';",module).replace("const data=await(await fetch('./geometry.json')).json(),svg=document.querySelector('svg');",'const data='+json.dumps(data)+",svg=document.querySelector('svg');")
     (ROOT/'motion/inklane-sting.html').write_text(template,encoding='utf8')
+    android_icons()
     print(json.dumps({'lockupWidth':lock_width}))
 
 if __name__=='__main__':build()

@@ -16,4 +16,4 @@ Render locally with the website's locked `playwright-core`, Microsoft Edge and F
 node brand/motion/render.mjs
 ```
 
-`--previews` renders the chronological stills and contact sheet without encoding a video. No network services are used.
+`--previews` renders the chronological stills and contact sheet without encoding a video. Set `BROWSER_PATH` to use another installed Chromium browser. The documented and verified render environment is Windows with Microsoft Edge. No network services are used.
