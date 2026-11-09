@@ -7,6 +7,41 @@ namespace Inklane.Core;
 
 public static partial class DocumentStore
 {
+    private static void AddPicture(PdfDocument pdf, PdfPage page, ImageItem picture)
+    {
+        var bounds = new RotateTransform(picture.Rotation,picture.X+picture.Width/2,picture.Y+picture.Height/2).TransformBounds(new System.Windows.Rect(picture.X,picture.Y,picture.Width,picture.Height));
+        var left = Units.DipToPoint(bounds.X); var top = Units.DipToPoint(bounds.Y);
+        var width = Units.DipToPoint(bounds.Width); var height = Units.DipToPoint(bounds.Height);
+        var imageWidth = Units.DipToPoint(picture.Width); var imageHeight = Units.DipToPoint(picture.Height);
+        var annotation = new StandardAnnotation(pdf, "/Stamp")
+        {
+            Rectangle = new PdfRectangle(new XRect(left, page.Height.Point - top - height, width, height)), Title = "Inklane"
+        };
+        annotation.Elements.SetString("/NM", picture.Id); annotation.Elements.SetInteger("/F", 4);
+        annotation.Elements.SetReal("/CA", picture.Opacity);
+        SetAppearance(pdf, annotation, width, height, graphics =>
+        {
+            using var bytes = new System.IO.MemoryStream(picture.PngData, 0, picture.PngData.Length, false, true);
+            using var image = XImage.FromStream(bytes);
+            graphics.TranslateTransform(Units.DipToPoint(picture.X)-left,Units.DipToPoint(picture.Y)-top);
+            graphics.RotateAtTransform(picture.Rotation, new XPoint(imageWidth / 2, imageHeight / 2));
+            graphics.DrawImage(image, 0, 0, imageWidth, imageHeight);
+        });
+        page.Annotations.Add(annotation);
+    }
+
+    private static void AddObjects(PdfDocument pdf, PdfPage page, PageData model, bool includeImages)
+    {
+        foreach (var item in PageObjects.InPaintOrder(model))
+            switch (item)
+            {
+                case ImageItem image when includeImages: AddPicture(pdf, page, image); break;
+                case InkData ink: AddInk(pdf, page, ink); break;
+                case ShapeItem shape: AddShape(pdf, page, shape, model); break;
+                case TextItem text: AddText(pdf, page, text); break;
+            }
+    }
+
     private static void DrawRichText(XGraphics graphics, Drawing drawing, Matrix parent)
     {
         if (drawing is DrawingGroup group)
@@ -59,6 +94,7 @@ public static partial class DocumentStore
     {
         var geometry = ShapeGeometry.Create(model, shape).GetFlattenedPathGeometry();
         var bounds = ShapeGeometry.Bounds(model, shape);
+        if (shape.Label.Length != 0) bounds.Union(new System.Windows.Rect(shape.X,shape.Y,shape.Width,shape.Height));
         bounds.Inflate(shape.StrokeWidth + 1, shape.StrokeWidth + 1);
         var left = Units.DipToPoint(bounds.Left); var top = Units.DipToPoint(bounds.Top);
         var width = Units.DipToPoint(Math.Max(1, bounds.Width)); var height = Units.DipToPoint(Math.Max(1, bounds.Height));

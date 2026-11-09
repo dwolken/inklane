@@ -151,7 +151,7 @@ public static partial class DocumentStore
                     if (sourceImage is not null)
                         graphics.DrawImage(sourceImage, 0, 0, page.Width.Point, page.Height.Point);
                     else DrawPaper(graphics, model);
-                    foreach (var item in model.Images)
+                    foreach (var item in data.SchemaVersion < 4 ? model.Images : [])
                     {
                         using var stream = new MemoryStream(item.PngData, 0, item.PngData.Length, writable: false, publiclyVisible: true);
                         using var image = XImage.FromStream(stream);
@@ -159,9 +159,7 @@ public static partial class DocumentStore
                             Units.DipToPoint(item.Width), Units.DipToPoint(item.Height));
                     }
                 }
-                foreach (var shape in model.Shapes.OrderBy(s => s.Layer)) AddShape(pdf, page, shape, model);
-                foreach (var stroke in model.Ink.OrderBy(s => s.Layer)) AddInk(pdf, page, stroke);
-                foreach (var item in model.Items.OrderBy(s => s.Layer)) AddText(pdf, page, item);
+                AddObjects(pdf, page, model, includeImages: data.SchemaVersion >= 4);
             }
             AtomicWrite(path, temporary =>
             {
@@ -319,11 +317,21 @@ public static partial class DocumentStore
 
     private static void AddText(PdfDocument pdf, PdfPage page, TextItem item)
     {
-        var left = Units.DipToPoint(item.X);
-        var top = Units.DipToPoint(item.Y);
-        var width = Units.DipToPoint(item.IsNote ? 26 : item.Width);
         var rich = !item.IsNote && item.ContentFormat == "Markdown" ? StructuredText.CreateDrawing(item) : null;
-        var height = Units.DipToPoint(item.IsNote ? 26 : Math.Max(item.Height, rich?.Bounds.Bottom ?? 0));
+        double layoutHeight = item.Height;
+        if (!item.IsNote)
+        {
+            var measured = new System.Windows.Media.FormattedText(item.Text,CultureInfo.CurrentCulture,System.Windows.FlowDirection.LeftToRight,
+                new System.Windows.Media.Typeface(new System.Windows.Media.FontFamily(item.FontFamily), item.Italic ? System.Windows.FontStyles.Italic : System.Windows.FontStyles.Normal,
+                    item.Bold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal,System.Windows.FontStretches.Normal), item.FontSize,System.Windows.Media.Brushes.Black,1)
+                { MaxTextWidth = item.Width };
+            layoutHeight = Math.Max(item.Height,rich?.Bounds.Bottom ?? measured.Height + item.FontSize * .3);
+        }
+        var area = new System.Windows.Rect(item.X,item.Y,item.IsNote ? 26 : item.Width,item.IsNote ? 26 : layoutHeight);
+        if (!item.IsNote && item.Rotation != 0) area = new System.Windows.Media.RotateTransform(item.Rotation,item.X+item.Width/2,item.Y+item.Height/2).TransformBounds(area);
+        var left = Units.DipToPoint(area.X); var top = Units.DipToPoint(area.Y);
+        var width = Units.DipToPoint(area.Width); var height = Units.DipToPoint(area.Height);
+        var textWidth = Units.DipToPoint(item.Width); var textHeight = Units.DipToPoint(layoutHeight);
         var annotation = new StandardAnnotation(pdf, item.IsNote ? "/Text" : "/FreeText")
         {
             Rectangle = new PdfRectangle(new XRect(left, page.Height.Point - top - height, width, height)),
@@ -354,21 +362,18 @@ public static partial class DocumentStore
                 var pen = new XPen(XColor.FromArgb(114, 75, 10), .9);
                 for (var y = 6d; y < height - 4; y += 3.5) graphics.DrawLine(pen, 5, y, width - 5, y);
             }
-            else if (rich != null)
-            {
-                var rotation = new System.Windows.Media.Matrix(); rotation.RotateAt(item.Rotation,item.Width/2,item.Height/2);
-                DrawRichText(graphics, rich, rotation);
-            }
             else
             {
-                graphics.RotateAtTransform(item.Rotation, new XPoint(width / 2,height / 2));
+                graphics.TranslateTransform(Units.DipToPoint(item.X)-left,Units.DipToPoint(item.Y)-top);
+                graphics.RotateAtTransform(item.Rotation, new XPoint(textWidth / 2,Units.DipToPoint(item.Height) / 2));
+                if (rich != null) { DrawRichText(graphics,rich,System.Windows.Media.Matrix.Identity); return; }
                 var style = (item.Bold ? XFontStyleEx.Bold : XFontStyleEx.Regular) | (item.Italic ? XFontStyleEx.Italic : XFontStyleEx.Regular) | (item.Underline ? XFontStyleEx.Underline : XFontStyleEx.Regular);
                 XFont font;
                 try { font = new XFont(item.FontFamily, Units.DipToPoint(item.FontSize), style); }
                 catch (InvalidOperationException) { font = new XFont("Segoe UI", Units.DipToPoint(item.FontSize), style); }
                 var formatter = new XTextFormatter(graphics) { Alignment = item.Alignment switch { "Center" => XParagraphAlignment.Center, "Right" => XParagraphAlignment.Right, "Justify" => XParagraphAlignment.Justify, _ => XParagraphAlignment.Left } };
                 formatter.DrawString(item.Text, font, new XSolidBrush(WithOpacity(item.Color, item.Opacity)),
-                    new XRect(0, 0, width, height), XStringFormats.TopLeft);
+                    new XRect(0, 0, textWidth, textHeight), XStringFormats.TopLeft);
             }
         });
         page.Annotations.Add(annotation);

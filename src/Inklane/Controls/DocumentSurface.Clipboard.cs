@@ -31,7 +31,7 @@ public sealed partial class DocumentSurface
         if (selected.Ink.Count > 0)
         {
             var isf = new MemoryStream();
-            _ink.GetSelectedStrokes().Save(isf);
+            new StrokeCollection(selected.Ink.Select(ToStroke)).Save(isf);
             isf.Position = 0;
             data.SetData(StrokeCollection.InkSerializedFormat, isf, false);
         }
@@ -155,7 +155,7 @@ public sealed partial class DocumentSurface
                 position = new Point(Math.Max(16, visible.Left + 24), Math.Max(16, visible.Top + 24));
         }
         PositionPastedObjects(content, _page, bounds, position ?? bounds.TopLeft + new Vector(16,16));
-        var strokes = new StrokeCollection(content.Ink.Select(ToStroke));
+        var strokes = new StrokeCollection(content.Ink.Select(ToLiveStroke));
         // Check the combined destination, including its other pages, before modifying the visual tree.
         _page.Items.AddRange(content.Items);
         _page.Ink.AddRange(content.Ink);

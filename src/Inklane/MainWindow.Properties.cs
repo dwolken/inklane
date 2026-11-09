@@ -42,7 +42,7 @@ public sealed partial class MainWindow
         var dialog = new Window { Owner = this, Title = L.T("ObjectProperties"), Width = 380, SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false };
         dialog.SetResourceReference(BackgroundProperty, "SurfaceBrush"); dialog.SetResourceReference(ForegroundProperty, "TextBrush");
-        var panel = new StackPanel { Margin = new Thickness(22) }; dialog.Content = panel;
+        var panel = new StackPanel { Margin = new Thickness(22) }; dialog.MaxHeight = SystemParameters.WorkArea.Height - 48; dialog.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         TextBox Field(string key, string value)
         {
             panel.Children.Add(Studio.Label(L.T(key)));

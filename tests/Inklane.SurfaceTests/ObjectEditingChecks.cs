@@ -12,6 +12,31 @@ namespace Inklane.SurfaceTests;
 
 internal static partial class Program
 {
+    private static void LayerLifecycle()
+    {
+        var pixels = new byte[] { 0,180,0,255 }; var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(1,1,96,96,PixelFormats.Bgra32,null,pixels,4);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder(); encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var bytes = new MemoryStream(); encoder.Save(bytes);
+        var image = new ImageItem { X=100,Y=100,Width=200,Height=100,PngData=bytes.ToArray() };
+        var ink = new InkData { Color="#0000FF",Width=30,Points=[new(){X=100,Y=150},new(){X=300,Y=150}] };
+        var shape = new ShapeItem { X=100,Y=100,Width=200,Height=100,Color="#FF0000",FillColor="#FF0000" };
+        var page = new PageData { Images=[image],Ink=[ink],Shapes=[shape] }; var surface = Surface(page);
+        void AssertLayer(byte red, byte green, byte blue)
+        {
+            Layout(surface); var exported=surface.RenderPage(); Pixel(Pixels(exported),exported.PixelWidth,180,150,red,green,blue);
+            var position=((Grid)Field(surface,"_pageHost")!).TranslatePoint(new Point(180,150),surface);
+            var target=new System.Windows.Media.Imaging.RenderTargetBitmap(1100,800,96,96,PixelFormats.Pbgra32); target.Render(surface);
+            Pixel(Pixels(target),1100,(int)position.X,(int)position.Y,red,green,blue);
+        }
+        AssertLayer(255,0,0);
+        surface.Tool=EditorTool.Select; Call(surface,"SelectObject",shape.Id); Call(surface,"ChangeLayer",false); Call(surface,"ClearObjectSelection"); AssertLayer(0,0,255);
+        Call(surface,"SelectObject",image.Id); Call(surface,"ChangeLayer",true); Call(surface,"ClearObjectSelection"); AssertLayer(0,180,0);
+        var path=Path.Combine(_fixtures,"mixed-layers.pdf"); DocumentStore.SavePdf(new DocumentData{Pages=[page]},path);
+        using var pdf=PdfSharp.Pdf.IO.PdfReader.Open(path,PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+        Equal(image.Id,pdf.Pages[0].Annotations[pdf.Pages[0].Annotations.Count-1].Elements.GetString("/NM"));
+        Save(surface.RenderPage(),"mixed-layers.png");
+    }
+
     private static void RichTextLifecycle()
     {
         var text = new TextItem { X = 70, Y = 90, Width = 440, Height = 650, ContentFormat = "Markdown", FontSize = 18,

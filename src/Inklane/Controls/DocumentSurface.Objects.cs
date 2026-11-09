@@ -87,7 +87,7 @@ public sealed partial class DocumentSurface
             var bounds = ShapeGeometry.Bounds(_page, visual.Item);
             Canvas.SetLeft(visual.Controls, bounds.Left); Canvas.SetTop(visual.Controls, bounds.Top);
             visual.Controls.Width = Math.Max(12, bounds.Width); visual.Controls.Height = Math.Max(12, bounds.Height);
-            Panel.SetZIndex(visual.Drawing, visual.Item.Layer); Panel.SetZIndex(visual.Controls, visual.Item.Layer + 1);
+            Panel.SetZIndex(visual.Drawing, Z(visual.Item.Layer, 2)); Panel.SetZIndex(visual.Controls, Z(visual.Item.Layer, 2));
             visual.Drawing.InvalidateVisual();
             var selected = IncludesObject(visual.Item.Id);
             visual.Controls.Visibility = _tool == EditorTool.Select && !_spacePan ? Visibility.Visible : Visibility.Collapsed;
@@ -139,7 +139,7 @@ public sealed partial class DocumentSurface
         if (fill) ShapeFill = color;
         foreach (var text in SelectedTexts) { text.Color = color; text.Opacity = opacity; ApplyTextStyle(_items[text.Id]); }
         foreach (var shape in SelectedShapes) { if (fill) shape.FillColor = color; else shape.Color = color; shape.Opacity = opacity; }
-        foreach (var stroke in _ink.GetSelectedStrokes()) { stroke.DrawingAttributes.Color = ColorWithOpacity(color, opacity); if (stroke.ContainsPropertyData(StrokeOpacity)) stroke.RemovePropertyData(StrokeOpacity); stroke.AddPropertyData(StrokeOpacity, opacity); }
+        foreach (var stroke in _ink.GetSelectedStrokes()) { if (stroke.ContainsPropertyData(StrokeColor)) stroke.RemovePropertyData(StrokeColor); stroke.AddPropertyData(StrokeColor, color); if (stroke.ContainsPropertyData(StrokeOpacity)) stroke.RemovePropertyData(StrokeOpacity); stroke.AddPropertyData(StrokeOpacity, opacity); }
         foreach (var picture in _pictures.Values.Where(v => IncludesObject(v.Item.Id))) { picture.Item.Opacity = opacity; PositionPicture(picture); }
         RefreshShapes(); if (HasSelection) SyncInkAndNotify();
     }
@@ -198,7 +198,7 @@ public sealed partial class DocumentSurface
         {
             visual.Root.Width = item.Width + 8; editor.MinHeight = 24; editor.Height = Math.Max(24, item.Height);
             visual.Root.RenderTransformOrigin = new Point(.5, .5); visual.Root.RenderTransform = new RotateTransform(item.Rotation);
-            Panel.SetZIndex(visual.Root, item.Layer);
+            Panel.SetZIndex(visual.Root, Z(item.Layer, 3));
         }
     }
 
@@ -263,7 +263,7 @@ public sealed partial class DocumentSurface
         foreach (var i in SelectedTexts) { i.Layer = layer; ApplyTextStyle(_items[i.Id]); }
         foreach (var i in SelectedShapes) i.Layer = layer;
         foreach (var i in _page.Images.Where(i => IncludesObject(i.Id))) { i.Layer = layer; PositionPicture(_pictures[i.Id]); }
-        foreach (var i in _ink.GetSelectedStrokes()) { if (i.ContainsPropertyData(StrokeLayer)) i.RemovePropertyData(StrokeLayer); i.AddPropertyData(StrokeLayer, layer); }
+        foreach (var i in _ink.GetSelectedStrokes()) { if (i.ContainsPropertyData(StrokeLayer)) i.RemovePropertyData(StrokeLayer); i.AddPropertyData(StrokeLayer, layer); UpdateInkLayer(i); }
         RefreshShapes(); SyncInkAndNotify();
     }
 }

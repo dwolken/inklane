@@ -131,11 +131,12 @@ public sealed partial class DocumentSurface : UserControl
             PositionNotes();
             QueueContinuousRefresh();
         };
-        _ink.StrokeCollected += (_, e) => { e.Stroke.AddPropertyData(StrokeOpacity, InkOpacity); SyncInkAndNotify(); };
+        _ink.StrokeCollected += (_, e) => { if (e.Stroke.ContainsPropertyData(StrokeOpacity)) e.Stroke.RemovePropertyData(StrokeOpacity); e.Stroke.AddPropertyData(StrokeOpacity, InkOpacity); SyncInkAndNotify(); };
         _ink.StrokeErased += (_, _) => SyncInkAndNotify();
         _ink.SelectionMoved += (_, _) => SyncInkAndNotify();
         _ink.SelectionResized += (_, _) => SyncInkAndNotify();
         InitializeSelection();
+        InitializeLayerInput();
         _ink.PreviewMouseLeftButtonDown += CanvasPressed;
         PreviewMouseDown += BeginPan;
         PreviewMouseMove += ContinuePan;
@@ -178,11 +179,12 @@ public sealed partial class DocumentSurface : UserControl
             _paper.Page = page;
             _paper.Image = image;
             _paper.InvalidateVisual();
-            _ink.Strokes = new StrokeCollection(page.Ink.Select(ToStroke));
+            _ink.Strokes = new StrokeCollection(page.Ink.Select(ToLiveStroke));
             _objects.Children.Clear();
             _items.Clear();
             _shapes.Clear();
             LoadPictures();
+            LoadInkLayers();
             foreach (var shape in page.Shapes.OrderBy(s => s.Layer)) AddShapeVisual(shape);
             foreach (var item in page.Items.OrderBy(s => s.Layer)) AddItemVisual(item);
             NumberNotes();
@@ -918,8 +920,8 @@ public sealed partial class DocumentSurface : UserControl
         Canvas.SetLeft(visual.Root, position.X);
         Canvas.SetTop(visual.Root, position.Y);
         visual.Root.Visibility = item.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
-        Panel.SetZIndex(visual.Root, item.IsExpanded ? 10 : 0);
-        Panel.SetZIndex(visual.Marker!, 11);
+        Panel.SetZIndex(visual.Root, int.MaxValue - 2);
+        Panel.SetZIndex(visual.Marker!, int.MaxValue - 1);
     }
 
     private void UpdateItemStates()
@@ -993,21 +995,24 @@ public sealed partial class DocumentSurface : UserControl
     private static void DrawPage(DrawingContext dc, PageData page, ImageSource? image, DocumentSurface? live = null, bool includeNoteCards = false)
     {
         PaperLayer.Draw(dc, page, image);
-        foreach (var picture in page.Images)
-            dc.DrawImage(live == null ? EmbeddedPng.Decode(picture.PngData) : live._pictures[picture.Id].Source,
-                new Rect(picture.X, picture.Y, picture.Width, picture.Height));
-        var strokes = live?._ink.Strokes ?? new StrokeCollection(page.Ink.Select(ToStroke));
-        strokes.Draw(dc);
-        foreach (var shape in page.Shapes.OrderBy(s => s.Layer)) DrawShape(dc, page, shape);
-        var noteNumber = 0;
-        foreach (var item in page.Items)
+        foreach (var entry in PageObjects.InPaintOrder(page))
         {
+            if (entry is ImageItem picture)
+            {
+                dc.PushOpacity(picture.Opacity);
+                dc.PushTransform(new RotateTransform(picture.Rotation,picture.X+picture.Width/2,picture.Y+picture.Height/2));
+                dc.DrawImage(live == null ? EmbeddedPng.Decode(picture.PngData) : live._pictures[picture.Id].Source, new Rect(picture.X,picture.Y,picture.Width,picture.Height));
+                dc.Pop(); dc.Pop(); continue;
+            }
+            if (entry is InkData ink) { ToStroke(ink).Draw(dc); continue; }
+            if (entry is ShapeItem shape) { DrawShape(dc,page,shape); continue; }
+            var item = (TextItem)entry;
             if (item.IsNote)
             {
                 var marker = new Rect(item.X, item.Y, 26, 26);
                 dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(250, 218, 150)),
                     new Pen(new SolidColorBrush(Color.FromRgb(167, 127, 54)), 1), marker, 7, 7);
-                var number = (++noteNumber).ToString(CultureInfo.CurrentCulture);
+                var number = (page.Items.Where(i => i.IsNote).ToList().IndexOf(item)+1).ToString(CultureInfo.CurrentCulture);
                 var label = new FormattedText(number, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                     new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
                     number.Length > 2 ? 10 : 13, new SolidColorBrush(Color.FromRgb(79, 52, 16)), 1);
@@ -1067,7 +1072,7 @@ public sealed partial class DocumentSurface : UserControl
         return new InkData
         {
             Id = stroke.GetPropertyData(StrokeId) as string ?? Guid.NewGuid().ToString("N"),
-            Color = $"#{stroke.DrawingAttributes.Color.R:X2}{stroke.DrawingAttributes.Color.G:X2}{stroke.DrawingAttributes.Color.B:X2}",
+            Color = stroke.ContainsPropertyData(StrokeColor) ? (string)stroke.GetPropertyData(StrokeColor) : $"#{stroke.DrawingAttributes.Color.R:X2}{stroke.DrawingAttributes.Color.G:X2}{stroke.DrawingAttributes.Color.B:X2}",
             Opacity = stroke.ContainsPropertyData(StrokeOpacity) ? (double)stroke.GetPropertyData(StrokeOpacity) : stroke.DrawingAttributes.Color.A / 255d,
             GroupId = stroke.ContainsPropertyData(StrokeGroup) ? (string)stroke.GetPropertyData(StrokeGroup) : "",
             Layer = stroke.ContainsPropertyData(StrokeLayer) ? (int)stroke.GetPropertyData(StrokeLayer) : 0,

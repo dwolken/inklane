@@ -45,6 +45,7 @@ internal static partial class Program
         Settings.Current.Appearance = "Light";
         Appearance.Apply();
         Run("Windows clipboard between independent editor processes", () => ClipboardChecks.Run(run));
+        Run("Mixed image, ink and shape layers agree in live view, raster and PDF", LayerLifecycle);
         Run("Markdown, tables, code and vector LaTeX render and retain editable source", RichTextLifecycle);
         Run("Text handles resize layout without scaling fonts and retain formatting after PDF reopen", TextResizeAndStyle);
         Run("Diagram connections follow nodes and duplicated groups retain internal identities", DiagramLifecycle);

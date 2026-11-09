@@ -180,7 +180,7 @@ public static class L
         ["Start"] = ("Home", "Start"),
         ["HomeTitle"] = ("Your workspace", "Ihr Arbeitsbereich"),
         ["OpenFile"] = ("Open file", "Datei öffnen"),
-        ["FileEntryDetail"] = ("Annotate PDFs, images and Office PDF copies.", "PDFs, Bilder und Office-PDF-Kopien kommentieren."),
+        ["FileEntryDetail"] = ("Annotate PDFs, images, Word files and presentations.", "PDFs, Bilder, Word-Dateien und Präsentationen kommentieren."),
         ["BookEntryDetail"] = ("Start with blank, lined or squared paper.", "Mit leerem, liniertem oder kariertem Papier beginnen."),
         ["PageLayout"] = ("Page view", "Seitenansicht"),
         ["FocusedPages"] = ("Single page", "Einzelseite"),

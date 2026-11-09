@@ -31,6 +31,17 @@ public sealed partial class DocumentSurface
             if (_selectingStrokes || _loading || _ink.GetSelectedStrokes().Count == 0) return;
             _otherObjects.Clear();
             _selectedItem = null;
+            var groups = _ink.GetSelectedStrokes().Where(s => s.ContainsPropertyData(StrokeGroup)).Select(s => (string)s.GetPropertyData(StrokeGroup)).Where(g => g.Length > 0).ToHashSet();
+            if (_page != null && groups.Count > 0)
+            {
+                foreach (var id in _page.Items.Where(i => groups.Contains(i.GroupId)).Select(i => i.Id)
+                    .Concat(_page.Shapes.Where(i => groups.Contains(i.GroupId)).Select(i => i.Id)).Concat(_page.Images.Where(i => groups.Contains(i.GroupId)).Select(i => i.Id)))
+                { if (_selectedItem != null) _otherObjects.Add(_selectedItem); _selectedItem = id; }
+                var selected = new StrokeCollection(_ink.GetSelectedStrokes());
+                foreach (var stroke in _ink.Strokes.Where(s => s.ContainsPropertyData(StrokeGroup) && groups.Contains((string)s.GetPropertyData(StrokeGroup))))
+                    if (!selected.Contains(stroke)) selected.Add(stroke);
+                SelectStrokes(selected);
+            }
             UpdateItemStates();
         };
         _ink.SelectionMoving += (_, e) =>
