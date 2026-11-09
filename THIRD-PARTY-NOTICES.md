@@ -287,10 +287,9 @@ Rendering uses these local copies; no text is sent to a hosted rendering service
 The shared workspace's review PDF exporter uses the official jsPDF 4.2.1 browser
 bundle, published under the MIT license. The unchanged bundle and its package
 LICENSE are distributed under `editor/pdf-write/`. The bundle retains its upstream
-component notices, including Adobe's BSD notice, MIT notices and pako's MIT/Zlib
-notice. The package-level license declaration does not independently establish a
-license for each historical component: the bundled MD5 helper retains its upstream
-comment that its original author did not specify a particular license.
+component notices, including Adobe's BSD notice, MIT notices, pako's MIT/Zlib
+notice and the original MD5 helper attribution. These upstream comments are
+preserved as published rather than replaced with a blanket component license.
 
 Sources: https://github.com/parallax/jsPDF/releases/tag/v4.2.1 and
 https://github.com/parallax/jsPDF/blob/v4.2.1/LICENSE
