@@ -99,7 +99,7 @@ def build(output):
         copyfile(SOURCE / name, assets / name)
     build_workspace(output)
     copyfile(ROOT / "brand/motion/inklane-sting.mp4", assets / "inklane-sting.mp4")
-    for name in ("inklane.svg", "inklane.ico", "inklane-lockup-light.svg", "inklane-lockup-dark.svg"):
+    for name in ("inklane.svg", "inklane.ico", "inklane-app.svg", "inklane-lockup-light.svg", "inklane-lockup-dark.svg"):
         copyfile(ROOT / "src/Inklane/Assets" / name, assets / name)
     for name in ("Manrope-wght.woff2", "OFL.txt"):
         copyfile(ROOT / "brand/type" / name, assets / name)
