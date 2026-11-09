@@ -69,7 +69,10 @@ async function tap(sel, fx=.5, fy=.5) {
     const r=e.getBoundingClientRect(), x=r.left+r.width*${fx}, y=r.top+r.height*${fy};
     const click=e.matches('button,summary,a');
     window.__lastTap={selector:${JSON.stringify(sel)},x,y,click,received:false};
-    const observed=event=>{if(e.contains(event.target)){__lastTap.received=true;document.removeEventListener('click',observed,true);}};
+    // Selecting a canvas marker replaces its DOM node before the physical click.
+    // Match the same document object, while ordinary toolbar controls retain identity.
+    const objectId=e.dataset.id;
+    const observed=event=>{if(e.contains(event.target)||(objectId&&event.target.closest?.('[data-id]')?.dataset.id===objectId)){__lastTap.received=true;document.removeEventListener('click',observed,true);}};
     window.__stopTapObservation=()=>document.removeEventListener('click',observed,true);
     if(click)document.addEventListener('click',observed,true);
     return {x,y,click};
