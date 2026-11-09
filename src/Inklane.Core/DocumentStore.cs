@@ -13,6 +13,13 @@ using PdfSharp.Pdf.IO;
 
 namespace Inklane.Core;
 
+public enum PdfReadProblem { Encrypted, NotebookChanged, NotebookFormat }
+
+public sealed class PdfReadException(PdfReadProblem problem, string message) : NotSupportedException(message)
+{
+    public PdfReadProblem Problem { get; } = problem;
+}
+
 /// <summary>Versioned, bounded persistence. Writes are committed by a same-directory atomic rename.</summary>
 public static class DocumentStore
 {
@@ -194,16 +201,16 @@ public static class DocumentStore
 
     private static DocumentData? LoadPdfCore(Stream input)
     {
-        using var pdf = PdfReader.Open(input, PdfDocumentOpenMode.Import);
+        using var pdf = PdfReader.Open(input, PdfDocumentOpenMode.Import, _ => throw EncryptedPdf());
         // PDFsharp decrypts imported objects and then reports IsEncrypted=false. The parsed
         // security-handler object still identifies an encrypted source, including an empty user password.
         if (pdf.SecuritySettings.IsEncrypted || pdf.Internals.GetAllObjects().Any(o => o is PdfSharp.Pdf.Security.PdfStandardSecurityHandler))
-            throw new NotSupportedException("Encrypted PDFs cannot be edited by Inklane without losing their security settings.");
+            throw EncryptedPdf();
         var catalog = pdf.Internals.Catalog;
         if (catalog.Elements.GetString("/InklaneFormat") != Format)
         {
             if (catalog.Elements.Keys.Any(k => k.StartsWith("/Inklane", StringComparison.Ordinal)) || pdf.Info.Creator == "Inklane")
-                throw new NotSupportedException("The Inklane notebook format cannot be verified.");
+                throw new PdfReadException(PdfReadProblem.NotebookFormat,"The Inklane notebook format cannot be verified.");
             return null;
         }
         var metadata = catalog.Elements.GetDictionary("/InklaneData");
@@ -211,7 +218,7 @@ public static class DocumentStore
             throw new InvalidDataException("The editable Inklane data is missing from this PDF.");
         // Our stream is intentionally uncompressed. Reject compressed replacements before decompression.
         if (metadata.Elements.ContainsKey("/Filter"))
-            throw new NotSupportedException("The editable data has been transformed by another PDF application.");
+            throw new PdfReadException(PdfReadProblem.NotebookChanged,"The editable data has been transformed by another PDF application.");
         var bytes = metadata.Stream.Value;
         if (bytes.Length > MaxJsonBytes) throw new InvalidDataException("The editable data exceeds the size limit.");
         DocumentData data;
@@ -219,7 +226,7 @@ public static class DocumentStore
         catch (DecoderFallbackException ex) { throw new InvalidDataException("The embedded annotation text is not valid UTF-8.", ex); }
         if (data.Kind == DocumentKind.Pdf) throw new InvalidDataException("A notebook cannot contain an external PDF sidecar.");
         if (!string.IsNullOrWhiteSpace(data.Title) && pdf.Info.Title != data.Title)
-            throw new NotSupportedException("The PDF title was changed outside Inklane.");
+            throw new PdfReadException(PdfReadProblem.NotebookChanged,"The PDF title was changed outside Inklane.");
         if (data.Pages.Count != pdf.PageCount)
             throw new InvalidDataException("The PDF pages no longer match the editable Inklane data.");
         for (var i = 0; i < data.Pages.Count; i++)
@@ -229,11 +236,14 @@ public static class DocumentStore
                 throw new InvalidDataException("The PDF page dimensions no longer match the editable data.");
         }
         if (catalog.Elements.GetInteger("/InklaneContentHashVersion") != 2)
-            throw new NotSupportedException("This PDF uses an earlier development format that cannot be safely verified.");
+            throw new PdfReadException(PdfReadProblem.NotebookFormat,"This PDF uses a development format that cannot be safely verified.");
         if (catalog.Elements.GetString("/InklaneContentHash") != ContentHash(pdf))
-            throw new NotSupportedException("This PDF was modified outside Inklane. Reopening it for editing could discard those changes.");
+            throw new PdfReadException(PdfReadProblem.NotebookChanged,"This PDF was modified outside Inklane. Reopening it for editing could discard those changes.");
         return data;
     }
+
+    private static PdfReadException EncryptedPdf() =>
+        new(PdfReadProblem.Encrypted,"Encrypted PDFs cannot be edited by Inklane without losing their security settings.");
 
     private static string ContentHash(PdfDocument pdf)
         => PdfContentFingerprint.Compute(pdf);

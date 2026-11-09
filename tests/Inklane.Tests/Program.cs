@@ -344,7 +344,7 @@ internal static class Program
             pdf.SecuritySettings.OwnerPassword = "test-only-owner-password";
             pdf.Save(encrypted);
         }
-        Throws<InvalidDataException>(() => DocumentStore.LoadPdf(encrypted));
+        Throws<PdfReadException>(() => DocumentStore.LoadPdf(encrypted));
         var ownerOnly = Path.Combine(output, "owner-encrypted.pdf");
         DocumentStore.SavePdf(Sample(), ownerOnly);
         using (var pdf = PdfReader.Open(ownerOnly, PdfDocumentOpenMode.Modify))

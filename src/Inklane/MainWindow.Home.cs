@@ -37,13 +37,11 @@ public sealed partial class MainWindow
         _resume = Studio.Action("Resume","Arrow",ShowEditor,true);
         DockPanel.SetDock(_resume,Dock.Right); titleRow.Children.Add(_resume);
         titleRow.Children.Add(Studio.Label(L.T("HomeTitle"),32,strong:true)); page.Children.Add(titleRow);
-        var entries = new Grid();
+        var entries = new Grid { Margin = new Thickness(0,0,0,24) };
         entries.ColumnDefinitions.Add(new ColumnDefinition()); entries.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) }); entries.ColumnDefinitions.Add(new ColumnDefinition());
-        entries.Children.Add(EntryCard("OpenImage","ImageEntryDetail","Image",() => PickFile("ImageFilter")));
+        entries.Children.Add(EntryCard("OpenFile","FileEntryDetail","Open",OpenDialog));
         var book = EntryCard("NewNotebook","BookEntryDetail","Notebook",NewNotebook); Grid.SetColumn(book,2); entries.Children.Add(book);
         page.Children.Add(entries);
-        var open = Studio.Action("OpenExisting","Open",OpenDialog,true);
-        open.Margin = new Thickness(0,12,0,24); open.HorizontalAlignment = HorizontalAlignment.Left; page.Children.Add(open);
         page.Children.Add(Studio.Rule());
         var recentHeader = new DockPanel { Margin = new Thickness(0,19,0,6) };
         _clearRecent = new Button { Content = L.T("ClearRecents"), Height = 30, FontSize = 12 };
@@ -56,7 +54,7 @@ public sealed partial class MainWindow
 
     private static Button EntryCard(string key, string description, string icon, Action action)
     {
-        var button = new Button { MinHeight = 145 };
+        var button = new Button { MinHeight = 145, VerticalAlignment = VerticalAlignment.Stretch };
         button.SetResourceReference(StyleProperty,"CardButton");
         AutomationProperties.SetName(button,L.T(key));
         var content = new StackPanel();

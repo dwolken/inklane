@@ -324,17 +324,23 @@ internal static class Program
 
     private static void FreshDocumentLifecycle()
     {
-        var window = new MainWindow();
-        Assert(!(bool)Property(window, "IsDirty")!, "Fresh notebook is dirty.");
-        Assert((bool)Call(window, "CanLeave")!, "Unchanged document cannot be left.");
-        var content = (FrameworkElement)window.Content;
-        Layout(content);
-        var imageEntry = Named<Button>(content, "OpenImage");
-        var bookEntry = Named<Button>(content, "NewNotebook");
-        Assert(IsVisibleWithin(imageEntry, content) && IsVisibleWithin(bookEntry, content), "Home is missing a workspace entry.");
-        Near(imageEntry.ActualWidth, bookEntry.ActualWidth);
-        RenderContent(content, window.Background, "home.png");
-        StopTimers(window);
+        foreach (var language in new[] { "en", "de" })
+        {
+            L.Initialize(language);
+            var window = new MainWindow();
+            Assert(!(bool)Property(window, "IsDirty")!, "Fresh notebook is dirty.");
+            Assert((bool)Call(window, "CanLeave")!, "Unchanged document cannot be left.");
+            var content = (FrameworkElement)window.Content;
+            Layout(content);
+            var fileEntry = Named<Button>(content, "OpenFile");
+            var bookEntry = Named<Button>(content, "NewNotebook");
+            Assert(IsVisibleWithin(fileEntry, content) && IsVisibleWithin(bookEntry, content), "Home is missing a workspace entry.");
+            Near(fileEntry.ActualWidth, bookEntry.ActualWidth);
+            Near(fileEntry.ActualHeight, bookEntry.ActualHeight);
+            RenderContent(content, window.Background, $"home-{language}.png");
+            StopTimers(window);
+        }
+        L.Initialize("en");
     }
 
     private static void PageHistory()
@@ -373,7 +379,11 @@ internal static class Program
         foreach (var language in new[] { "en", "de" })
         {
             L.Initialize(language);
-            foreach (var key in new[] { "PageCanvas", "CollapseNote", "ExpandNote", "MoveItem", "SaveFailed", "OpenFailed", "RecoveryFailed" })
+            Equal(language == "de" ? "Datei öffnen" : "Open file", L.T("OpenFile"));
+            var formats = L.T("OpenFilter").Split('|')[1].Split(';');
+            foreach (var format in new[] { "*.pdf", "*.png", "*.jpg", "*.jpeg", "*.docx", "*.pptx", "*.json", "*.inklane" })
+                Assert(formats.Contains(format), $"Open file is missing {format} in {language}.");
+            foreach (var key in new[] { "PageCanvas", "CollapseNote", "ExpandNote", "MoveItem", "SaveFailed", "OpenFailed", "RecoveryFailed", "FileEntryDetail", "BookEntryDetail" })
                 Assert(L.T(key) != key, $"Missing {language} translation: {key}");
         }
         L.Initialize("en");

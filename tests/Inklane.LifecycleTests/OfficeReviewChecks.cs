@@ -38,7 +38,9 @@ internal static partial class Program
             Equal(DocumentKind.Pdf,Document(w).Kind); Equal(2,Document(w).Pages.Count);
             AddText(w,"Observe the threshold."); Assert(Call<bool>(w,"Save",false),"Failed to save review.");
             Equal(office,Settings.Current.RecentFiles[0]);
-            Settings.Load(); w.OpenFile(office); Equal("Observe the threshold.",Document(w).Pages[0].Items.Single().Text);
+            var savedReview = State(w);
+            Settings.Load(); w.OpenFile(office);
+            Equal(savedReview,State(w));
             Equal(officeHash,DocumentStore.GetFileHash(office)); Equal(pdfHash,DocumentStore.GetFileHash(pdf));
             using (var edit = ZipFile.Open(office,ZipArchiveMode.Update)) edit.CreateEntry("revision.xml");
             var before = State(w);
@@ -115,7 +117,8 @@ internal static partial class Program
             Assert(ext == ".docx" ? firstPage.Height > firstPage.Width : firstPage.Width > firstPage.Height,
                 "Page orientation changed during conversion.");
             AddText(w,"Check the east entrance."); Assert(Call<bool>(w,"Save",false),"Converted PDF failed to save markup.");
-            w.OpenFile(source); Equal("Check the east entrance.",Document(w).Pages[0].Items.Single().Text);
+            var savedReview = State(w);
+            w.OpenFile(source); Equal(savedReview,State(w));
             Equal(hash,DocumentStore.GetFileHash(source)); Equal(DocumentStore.GetFileHash(target),Document(w).SourcePdfSha256);
         }
     }

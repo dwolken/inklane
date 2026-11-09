@@ -217,11 +217,7 @@ public sealed partial class MainWindow : Window
     }
     private void OpenDialog()
     {
-        PickFile("OpenFilter");
-    }
-    private void PickFile(string filter)
-    {
-        var dialog = new OpenFileDialog { Filter = L.T(filter), CheckFileExists = true, Multiselect = false };
+        var dialog = new OpenFileDialog { Title = L.T("OpenFile"), Filter = L.T("OpenFilter"), CheckFileExists = true, Multiselect = false };
         if (dialog.ShowDialog(this) == true) OpenFile(dialog.FileName);
     }
     public void OpenFile(string path)
@@ -250,7 +246,7 @@ public sealed partial class MainWindow : Window
                 if (nextPdf != null && hasLayer)
                 {
                     savePath = path + ".inklane.json";
-                    candidate = DocumentStore.LoadJson(savePath,out hash);
+                    candidate = ReadAnnotationData(savePath,out hash,DocumentKind.Pdf);
                 }
                 if (savePath == null) hash = null;
             }
@@ -279,17 +275,28 @@ public sealed partial class MainWindow : Window
                     hash = copy.LayerHash;
                 }
             }
-            else if (extension == ".json") { candidate = DocumentStore.LoadJson(path,out hash); savePath = candidate.Kind != DocumentKind.Notebook ? path : null; if (savePath == null) hash = null; }
-            else if (extension is ".png" or ".jpg" or ".jpeg")
+            else if (extension == ".json")
             {
-                image = LoadImage(path);
-                var sidecar = path + ".inklane.json";
-                candidate = File.Exists(sidecar) ? DocumentStore.LoadJson(sidecar) : new DocumentData { Kind = DocumentKind.Image, SourceImagePath = path, SourceImageSha256 = DocumentStore.GetFileHash(path), Pages = [new PageData { Width = ((BitmapSource)image).PixelWidth, Height = ((BitmapSource)image).PixelHeight }] };
-                if (candidate.Kind != DocumentKind.Image || !string.Equals(candidate.SourceImageSha256, DocumentStore.GetFileHash(path), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException(L.T("ImageChanged"));
-                candidate.SourceImagePath = path;
-                savePath = File.Exists(sidecar) ? sidecar : null; hash = File.Exists(sidecar) ? DocumentStore.GetFileHash(sidecar) : null;
+                candidate = ReadAnnotationData(path,out hash);
+                savePath = candidate.Kind != DocumentKind.Notebook ? path : null;
+                if (savePath == null) hash = null;
             }
-            else throw new NotSupportedException();
+            else if (IsImageFile(path))
+            {
+                var bitmap = LoadImage(path,out var sourceHash);
+                image = bitmap;
+                var sidecar = path + ".inklane.json";
+                savePath = File.Exists(sidecar) ? sidecar : null;
+                hash = null;
+                candidate = savePath != null ? ReadAnnotationData(savePath,out hash,DocumentKind.Image) : new DocumentData
+                {
+                    Kind = DocumentKind.Image, SourceImageSha256 = sourceHash,
+                    Pages = [new PageData { Width = bitmap.PixelWidth, Height = bitmap.PixelHeight }]
+                };
+                VerifyImage(candidate,bitmap,sourceHash);
+                candidate.SourceImagePath = path;
+            }
+            else throw new NotSupportedException(L.T("OpenUnsupportedFormat"));
             if (candidate.Kind == DocumentKind.Pdf || nextPdf != null)
             {
                 if (nextPdf == null)
@@ -311,7 +318,9 @@ public sealed partial class MainWindow : Window
             if (candidate.Kind == DocumentKind.Image && image == null)
             {
                 var source = ResolveImageSource(path,candidate);
-                candidate.SourceImagePath = source; image = LoadImage(source);
+                var bitmap = LoadImage(source,out var sourceHash);
+                VerifyImage(candidate,bitmap,sourceHash);
+                candidate.SourceImagePath = source; image = bitmap;
             }
             ClearRecovery(); _pdf?.Dispose(); _pdf = nextPdf; nextPdf = null;
             _document = candidate; _filePath = savePath; _diskHash = hash; _image = image; _pageIndex = 0;
@@ -322,12 +331,27 @@ public sealed partial class MainWindow : Window
             if (office != null) RememberOfficeReview(office);
             RememberRecent(office?.OfficePath ?? path);
         }
-        catch (InvalidDataException ex) when (path.EndsWith(".feedback.json",StringComparison.OrdinalIgnoreCase)) { Error(L.T("ReviewExportOnly"),ex); }
         catch (Exception ex) when (IsExpected(ex) && L.IsOpenProblem(ex.Message)) { Error(ex.Message,ex); }
         catch (NotSupportedException ex) when (path.EndsWith(".inklane",StringComparison.OrdinalIgnoreCase)) { Error(L.T("UnsupportedPortable"),ex); }
-        catch (NotSupportedException) { Error(L.T("UnsupportedPdf")); }
+        catch (FileNotFoundException ex) { Error(L.T("OpenMissing"),ex); }
+        catch (DirectoryNotFoundException ex) { Error(L.T("OpenMissing"),ex); }
+        catch (UnauthorizedAccessException ex) { Error(L.T("OpenAccessDenied"),ex); }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("OpenFailed"), ex); }
         finally { nextPdf?.Dispose(); }
+    }
+
+    private static DocumentData ReadAnnotationData(string path, out string hash, DocumentKind? sourceKind = null)
+    {
+        DocumentData model;
+        try { model = DocumentStore.LoadJson(path,out hash); }
+        catch (InvalidDataException ex)
+        {
+            throw new InvalidDataException(L.T(path.EndsWith(".feedback.json",StringComparison.OrdinalIgnoreCase)
+                ? "ReviewExportOnly" : "AnnotationDataInvalid"),ex);
+        }
+        if (sourceKind != null && model.Kind != sourceKind)
+            throw new InvalidDataException(L.T("AnnotationDataInvalid"));
+        return model;
     }
 
     private bool PreparePdfPage(int index)
@@ -360,11 +384,26 @@ public sealed partial class MainWindow : Window
         throw new InvalidDataException(L.T("ImageChanged"));
     }
 
-    private static BitmapSource LoadImage(string path)
+    private static BitmapSource LoadImage(string path, out string hash)
     {
-        var info = new FileInfo(path); if (info.Length > 256 * 1024 * 1024) throw new InvalidDataException("Image exceeds 256 MB.");
         using var input = File.OpenRead(path);
-        return LoadImage(input);
+        if (input.Length > 256L * 1024 * 1024) throw new InvalidDataException(L.T("ImageTooLarge"));
+        BitmapSource bitmap;
+        try { bitmap = LoadImage(input); }
+        catch (Exception ex) when (ex is NotSupportedException or FormatException or System.Runtime.InteropServices.COMException)
+        { throw new InvalidDataException(L.T("ImageUnreadable"),ex); }
+        input.Position = 0;
+        hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(input));
+        return bitmap;
+    }
+
+    private static void VerifyImage(DocumentData model, BitmapSource image, string hash)
+    {
+        if (!string.Equals(model.SourceImageSha256,hash,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(L.T("ImageChanged"));
+        var page = model.Pages[0];
+        if (Math.Abs(page.Width - image.PixelWidth) > .01 || Math.Abs(page.Height - image.PixelHeight) > .01)
+            throw new InvalidDataException(L.T("ImageGeometry"));
     }
 
     private static BitmapSource DecodePortableImage(PortableWorkspace bundle)
@@ -388,7 +427,7 @@ public sealed partial class MainWindow : Window
     private static BitmapSource LoadImage(Stream input)
     {
         var frame = BitmapFrame.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        if ((long)frame.PixelWidth * frame.PixelHeight > 100_000_000) throw new InvalidDataException("Image exceeds 100 megapixels.");
+        if ((long)frame.PixelWidth * frame.PixelHeight > 100_000_000) throw new InvalidDataException(L.T("ImageTooLarge"));
         BitmapSource source = frame;
         if (frame.Metadata is BitmapMetadata metadata)
         {
@@ -645,8 +684,12 @@ public sealed partial class MainWindow : Window
                 var choice = _interaction.Choose(this, L.T("Recovery"), L.F("RecoveryPrompt", state.SavedAt.LocalDateTime.ToString("g")), L.T("Restore"), L.T("Discard"), L.T("Cancel"));
                 if (choice == 0)
                 {
-                    var image = state.Document.Kind == DocumentKind.Image ? LoadImage(state.Document.SourceImagePath!) : null;
-                    if (image != null && state.Document.SourceImageSha256 != DocumentStore.GetFileHash(state.Document.SourceImagePath!)) throw new InvalidDataException(L.T("ImageChanged"));
+                    BitmapSource? image = null;
+                    if (state.Document.Kind == DocumentKind.Image)
+                    {
+                        image = LoadImage(state.Document.SourceImagePath!,out var sourceHash);
+                        VerifyImage(state.Document,image,sourceHash);
+                    }
                     var snapshot = DocumentStore.SerializeForHistory(state.Document);
                     int page = Math.Clamp(state.PageIndex,0,state.Document.Pages.Count-1);
                     PdfBackdrop? source = null;
