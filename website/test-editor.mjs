@@ -50,6 +50,9 @@ page.on("request", (req) => {
 });
 const msg = (text) => page.getByRole("status").filter({ hasText: text }).waitFor();
 async function open(files) {
+  // The bootstrap imports the editor asynchronously after the page load event.
+  // Match the enabled file action before injecting a file-input change.
+  await page.waitForFunction(() => !document.querySelector("#open").disabled);
   await page.locator("#files").setInputFiles(files);
   await page.waitForFunction(() => !document.querySelector("#open").disabled);
 }
