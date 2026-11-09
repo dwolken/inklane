@@ -7,6 +7,10 @@ import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 30000 }).trim();
+// `adb shell` rejoins arguments before the remote shell parses them. Enumerate
+// the fixed test directory, then match locally so names with spaces stay intact.
+const findDownload = (name, minimum = 12) => adb('shell','find','/sdcard/Download','-type','f','-size','+'+minimum+'c')
+  .split('\n').find(path => path.endsWith('/'+name));
 const app = 'dev.inklane.android';
 const output = 'platforms/android/build/outputs/apk/debug';
 const apk = readdirSync(output).find(f => f.endsWith('.apk'));
@@ -116,7 +120,7 @@ try {
   // DocumentsUI creates an empty entry before our activity receives its URI.
   // Wait for the editor to confirm the native write before inspecting that entry.
   await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled && document.querySelector("#state").textContent.toLowerCase().includes("saved")'), 'editor confirmation of native write');
-  const deviceFile=await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name',title+'.inklane'), 'committed notebook');
+  const deviceFile=await waitFor(async()=>findDownload(title+'.inklane'), 'committed notebook');
   adb('pull',deviceFile,join(fresh,'saved.inklane'));
   const bytes=readFileSync(join(fresh,'saved.inklane'));
   const meta=JSON.parse(bytes.subarray(12,12+bytes.readUInt32BE(8)).toString('utf8'));
@@ -222,7 +226,7 @@ try {
   await tap('#more summary');
   await tap('#feedback');
   await systemTap(saveButton,'system feedback Save');
-  const feedbackPath = await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name','review-pages.pdf.feedback.json'),'written feedback report');
+  const feedbackPath = await waitFor(async()=>findDownload('review-pages.pdf.feedback.json'),'written feedback report');
   adb('pull',feedbackPath,join(fresh,'feedback.json'));
   const report = JSON.parse(readFileSync(join(fresh,'feedback.json'),'utf8'));
   assert.equal(report.source.sha256,createHash('sha256').update(pdf).digest('hex'));
@@ -239,7 +243,7 @@ try {
   assert.equal(await js(readFileSync('tests/browser-rich-host.js','utf8')),true);
   await tap('#save'); await systemTap(saveButton,'system rich workspace Save');
   await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled && document.querySelector("#state").textContent.toLowerCase().includes("saved")'),'rich native save');
-  const richDevicePath = await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name','Rich host review.inklane'),'saved rich notebook');
+  const richDevicePath = await waitFor(async()=>findDownload('Rich host review.inklane'),'saved rich notebook');
   const richSaved = join(fresh,'Rich saved.inklane'); adb('pull',richDevicePath,richSaved);
   const richBytes = readFileSync(richSaved), richModel = JSON.parse(richBytes.subarray(12,12+richBytes.readUInt32BE(8))).document;
   assert.equal(richModel.schemaVersion,4);
@@ -249,7 +253,7 @@ try {
   assert.deepEqual([richArrow.startId,richArrow.endId,richArrow.groupId],['host-left','host-right','host-diagram']);
   await tap('#more summary'); await tap('#export-image'); await systemTap(saveButton,'system annotated PNG Save');
   await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled'),'PNG native completion');
-  const pngDevicePath = await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+1000c','-name','Rich host review-1-annotated.png'),'annotated PNG');
+  const pngDevicePath = await waitFor(async()=>findDownload('Rich host review-1-annotated.png',1000),'annotated PNG');
   const pngPath = join(fresh,'Rich.png'); adb('pull',pngDevicePath,pngPath);
   const png = readFileSync(pngPath); assert.equal(png.subarray(1,4).toString(),'PNG');
   assert.deepEqual(await js(`(async()=>{const i=new Image();i.src='data:image/png;base64,${png.toString('base64')}';await i.decode();const c=document.createElement('canvas');c.width=i.width;c.height=i.height;c.getContext('2d').drawImage(i,0,0);return [...c.getContext('2d').getImageData(180,760,1,1).data];})()`),[234,179,8,255]);
