@@ -266,6 +266,12 @@ export async function verifyEditingFreedom(browser, base, output) {
       pngBytes.readUInt32BE(16) > 1500,
       "Image export includes the page and full remark gutter",
     );
+    const firstShape=result.document.pages[0].shapes[0];
+    const exportedPixel=await page.evaluate(async({bytes,x,y,logicalWidth})=>{
+      const image=new Image();const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:"image/png"}));
+      try{image.src=url;await image.decode();const canvas=document.createElement("canvas");canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const ctx=canvas.getContext("2d");ctx.drawImage(image,0,0);const scale=canvas.width/logicalWidth;return [...ctx.getImageData(Math.floor(x*scale),Math.floor(y*scale),1,1).data];}finally{URL.revokeObjectURL(url);}
+    },{bytes:[...pngBytes],x:firstShape.x+firstShape.width*.25,y:firstShape.y+firstShape.height*.25,logicalWidth:result.document.pages[0].width+388});
+    assert.deepEqual(exportedPixel,[234,179,8,255],"The PNG must draw at its requested resolution in every browser");
     if (process.env.CROSS_NATIVE_WORKSPACE) {
       await page
         .locator("#files")
