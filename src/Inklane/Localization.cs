@@ -177,7 +177,7 @@ public static class L
         ["TextHint"] = ("Click the page to add text · Click existing text to edit", "Auf die Seite klicken für neuen Text · Bestehenden Text anklicken zum Bearbeiten"),
         ["NoteHint"] = ("Click to anchor a note · Use its marker to expand or collapse", "Klicken, um eine Notiz zu verankern · Über die Markierung ein- und ausklappen"),
         ["EraserHint"] = ("Touch an ink stroke to erase it", "Einen Tintenstrich berühren, um ihn zu löschen"), ["PanHint"] = ("Drag the page to pan · Ctrl+wheel to zoom", "Seite zum Verschieben ziehen · Strg+Mausrad zum Zoomen"),
-        ["AboutText"] = ("Local image annotation and printable PDF notebooks.", "Lokale Bildanmerkungen und druckbare PDF-Notizbücher."),
+        ["AboutText"] = ("Annotate documents with ink, text and contextual remarks.", "Dokumente mit Zeichnungen, Text und verankerten Anmerkungen kommentieren."),
         ["Start"] = ("Home", "Start"),
         ["HomeTitle"] = ("Your workspace", "Ihr Arbeitsbereich"),
         ["OpenFile"] = ("Open file", "Datei öffnen"),
