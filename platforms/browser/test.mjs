@@ -122,6 +122,7 @@ try {
   const reportPromise = context.waitForEvent('page'); await click('summary'); await click('[data-action=print]');
   const report = await reportPromise; await report.waitForSelector('article');
   assert.equal(await report.locator('article .body').first().textContent(), explanation);
+  await report.emulateMedia({media:'print'});assert.equal(await report.evaluate(()=>getComputedStyle(document.documentElement).backgroundColor),'rgb(255, 255, 255)');
   await report.pdf({ path: join(output, 'report.pdf'), format: 'A4', printBackground: true });
   assert.equal(await report.locator('article').count(), 3);
   results.push('Full JSON export and complete printable report rendered to PDF');
