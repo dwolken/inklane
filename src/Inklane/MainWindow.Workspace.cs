@@ -106,7 +106,7 @@ public sealed partial class MainWindow
         history.Children.Add(Studio.Rule()); history.Children.Add(undo); history.Children.Add(redo);
         DockPanel.SetDock(history, Dock.Bottom); rail.Children.Add(history);
         var stack = new StackPanel();
-        foreach (var tool in new[] { EditorTool.Select, EditorTool.Pen, EditorTool.Eraser, EditorTool.Text, EditorTool.Note, EditorTool.Pan })
+        foreach (var tool in new[] { EditorTool.Select, EditorTool.Pen, EditorTool.Eraser, EditorTool.Text, EditorTool.Note, EditorTool.Shape, EditorTool.Pan })
         {
             var name = tool.ToString();
             var caption = L.T(tool == EditorTool.Select ? "SelectShort" : tool == EditorTool.Pan ? "PanShort" : name);
@@ -116,10 +116,13 @@ public sealed partial class MainWindow
             var button = new ToggleButton { Content = content, Height = 46, Margin = new Thickness(6,1,6,1), ToolTip = L.T(name + "Hint") };
             button.SetResourceReference(StyleProperty, "ToolButton");
             AutomationProperties.SetName(button, L.T(name));
-            button.Click += (_, _) => SetTool(tool);
+            button.Click += (_, _) =>
+            {
+                if (tool == EditorTool.Shape) { button.IsChecked = _surface.Tool == tool; var menu = ShapeMenu(); menu.PlacementTarget = button; menu.Placement = PlacementMode.Right; menu.IsOpen = true; }
+                else SetTool(tool);
+            };
             _tools.Add(tool, button); stack.Children.Add(button);
         }
-        stack.Children.Add(MenuButton("Shape", "Shape", ShapeMenu));
         rail.Children.Add(new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false });
         return Edges(rail, new Thickness(0,0,1,0));
@@ -161,7 +164,11 @@ public sealed partial class MainWindow
         _inkProperties = ink; properties.Children.Add(ink);
         _textProperties = SizeChoice("TextSize", new[] {12,18,24,32,48}, "pt", 1, v => { _surface.TextSize = v * 96d / 72; _surface.ApplyTextFormatting(t => t.FontSize = v * 96d / 72); });
         _surface.TextSize = 24; properties.Children.Add(_textProperties);
-        properties.Children.Add(MenuButton("ObjectProperties", "More", () => { var menu = new ContextMenu(); AddVisualObjectCommands(menu); return menu; }));
+        var objectMenu = MenuButton("ObjectProperties", "More", () => { var menu = new ContextMenu(); AddVisualObjectCommands(menu); return menu; });
+        var propertyLabel = Studio.Label(L.T("PropertiesShort"),12); propertyLabel.Margin = new Thickness(4,0,0,0);
+        objectMenu.Content = Studio.Line(Studio.Icon("More",16),propertyLabel); objectMenu.Padding = new Thickness(6,0,6,0);
+        bar.SizeChanged += (_,_) => propertyLabel.Visibility = bar.ActualWidth >= 780 ? Visibility.Visible : Visibility.Collapsed;
+        properties.Children.Add(objectMenu);
         bar.Children.Add(properties);
         return Edges(bar, new Thickness(0,1,0,0));
     }

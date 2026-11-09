@@ -57,5 +57,9 @@ internal static partial class Program
         text.Alignment = "Unknown"; Throws<InvalidDataException>(() => DocumentStore.Serialize(data)); text.Alignment = "Center";
         data.SchemaVersion = 99; Throws<NotSupportedException>(() => DocumentStore.Serialize(data));
         var legacy = new DocumentData { Pages = [new PageData()] }; Equal(1, legacy.SchemaVersion);
+        var opacityPath = Path.Combine(output,"single-opacity.pdf");
+        DocumentStore.SavePdf(new DocumentData { Pages=[new PageData { Shapes=[new ShapeItem { X=40,Y=40,Width=100,Height=100,FillColor="#FF0000",Color="#FF0000",Opacity=.5 }] }] },opacityPath);
+        using var opacityPdf = PdfReader.Open(opacityPath,PdfDocumentOpenMode.Import);
+        Assert(!opacityPdf.Pages[0].Annotations[0].Elements.ContainsKey("/CA"),"Opacity was applied a second time outside the appearance.");
     }
 }

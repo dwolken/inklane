@@ -42,12 +42,12 @@ public static partial class DocumentStore
             }
     }
 
-    private static void DrawRichText(XGraphics graphics, Drawing drawing, Matrix parent)
+    private static void DrawRichText(XGraphics graphics, Drawing drawing, Matrix parent, double opacity = 1)
     {
         if (drawing is DrawingGroup group)
         {
             var matrix = group.Transform?.Value ?? Matrix.Identity; matrix.Append(parent);
-            foreach (var child in group.Children) DrawRichText(graphics, child, matrix);
+            foreach (var child in group.Children) DrawRichText(graphics, child, matrix, opacity * group.Opacity);
             return;
         }
         if (drawing is ImageDrawing { ImageSource: DrawingImage image } placed)
@@ -57,7 +57,7 @@ public static partial class DocumentStore
             var matrix = Matrix.Identity; matrix.Translate(-bounds.X, -bounds.Y);
             matrix.Scale(placed.Rect.Width / bounds.Width, placed.Rect.Height / bounds.Height);
             matrix.Translate(placed.Rect.X, placed.Rect.Y); matrix.Append(parent);
-            DrawRichText(graphics, image.Drawing, matrix); return;
+            DrawRichText(graphics, image.Drawing, matrix, opacity); return;
         }
         Geometry? geometry = null; Brush? fill = null; System.Windows.Media.Pen? stroke = null;
         if (drawing is GeometryDrawing shape) { geometry = shape.Geometry; fill = shape.Brush; stroke = shape.Pen; }
@@ -77,8 +77,8 @@ public static partial class DocumentStore
             if (figure.IsClosed && points.Count > 2) path.AddPolygon(points.ToArray());
             else if (points.Count > 1) path.AddLines(points.ToArray());
         }
-        XSolidBrush? brush = fill is SolidColorBrush solid ? new XSolidBrush(XColor.FromArgb(solid.Color.A, solid.Color.R, solid.Color.G, solid.Color.B)) : null;
-        XPen? pen = stroke?.Brush is SolidColorBrush edge ? new XPen(XColor.FromArgb(edge.Color.A, edge.Color.R, edge.Color.G, edge.Color.B), Units.DipToPoint(stroke.Thickness)) : null;
+        XSolidBrush? brush = fill is SolidColorBrush solid ? new XSolidBrush(XColor.FromArgb((int)Math.Round(solid.Color.A * solid.Opacity * opacity), solid.Color.R, solid.Color.G, solid.Color.B)) : null;
+        XPen? pen = stroke?.Brush is SolidColorBrush edge ? new XPen(XColor.FromArgb((int)Math.Round(edge.Color.A * edge.Opacity * opacity), edge.Color.R, edge.Color.G, edge.Color.B), Units.DipToPoint(stroke.Thickness)) : null;
         if (brush != null && pen != null) graphics.DrawPath(pen, brush, path);
         else if (brush != null) graphics.DrawPath(brush, path);
         else if (pen != null) graphics.DrawPath(pen, path);
@@ -105,7 +105,6 @@ public static partial class DocumentStore
         };
         annotation.Elements.SetString("/NM", shape.Id);
         annotation.Elements.SetInteger("/F", 4);
-        annotation.Elements.SetReal("/CA", shape.Opacity);
         SetAppearance(pdf, annotation, width, height, g =>
         {
             var path = new XGraphicsPath();

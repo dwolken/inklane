@@ -102,6 +102,10 @@ public sealed partial class DocumentSurface : UserControl
         _ink = new InkCanvas { Background = Brushes.Transparent, ClipToBounds = true };
         AutomationProperties.SetName(_ink, "Document canvas");
         _objects = new Canvas { ClipToBounds = false };
+        // A tall focused object must not pull the page away from the pointer.
+        // Nested text viewers still scroll their own caret; explicit navigation
+        // uses the outer viewport offsets directly.
+        _objects.AddHandler(FrameworkElement.RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler((_, e) => e.Handled = true));
         _pageHost = new Grid
         {
             Margin = new Thickness(32),
@@ -902,6 +906,7 @@ public sealed partial class DocumentSurface : UserControl
         visual.Root.Width = Math.Min(item.Width, Math.Max(40, viewportWidth - 16));
         var headerHeight = visual.Header.Height + 2;
         visual.Editor.Height = Math.Min(Math.Max(64, item.Height), Math.Max(32, viewportHeight - 16 - headerHeight));
+        if (visual.Preview != null) visual.Preview.Height = visual.Editor.Height;
         var cardWidth = visual.Root.Width / _zoom;
         var cardHeight = (visual.Editor.Height + headerHeight) / _zoom;
         var gap = 8 / _zoom;

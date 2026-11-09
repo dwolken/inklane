@@ -72,6 +72,11 @@ internal static partial class Program
         var reopened = DocumentStore.LoadPdf(path).Pages[0]; surface.LoadPage(reopened); surface.Tool = EditorTool.Select; Call(surface, "SelectObject", reopened.Items[0].Id);
         Call(surface, "ApplyTextFormatting", (Action<TextItem>)(t => t.FontSize = 31)); Equal(31d, reopened.Items[0].FontSize); Equal("Georgia", reopened.Items[0].FontFamily); Equal("#F28C28", reopened.Items[0].Color);
         Layout(surface); Save(surface.RenderPage(), "resized-styled-text.png");
+        reopened.Items[0].Height=1200; surface.LoadPage(reopened); surface.Zoom=1; surface.Tool=EditorTool.Select; Layout(surface);
+        var scroll=(ScrollViewer)Field(surface,"_scroll")!; scroll.ScrollToVerticalOffset(0); Layout(surface);
+        var beforeScroll=scroll.VerticalOffset;
+        var move=Descendants(surface).OfType<Thumb>().Single(t=>AutomationProperties.GetAutomationId(t)=="TextMove:"+text.Id);
+        move.BringIntoView(); Layout(surface); Near(beforeScroll,scroll.VerticalOffset);
         var before = State(reopened); handle = Descendants(surface).OfType<Thumb>().Single(t => AutomationProperties.GetAutomationId(t) == $"TextResize:{text.Id}:-1:0");
         handle.RaiseEvent(new DragStartedEventArgs(0, 0)); handle.RaiseEvent(new DragDeltaEventArgs(20, 0)); handle.RaiseEvent(new DragCompletedEventArgs(20, 0, true)); Equal(before, State(reopened));
     }
@@ -85,6 +90,21 @@ internal static partial class Program
         var connector = page.Shapes.Single(s => s.Kind == ShapeKind.Arrow); var before = ShapeGeometry.Endpoints(page, connector);
         Call(surface, "SelectObject", first.Id); Call(surface, "NudgeSelection", Key.Right, true);
         Assert(ShapeGeometry.Endpoints(page, connector).Start.X > before.Start.X, "Connector lost its source relation.");
+        Call(surface, "SelectObject", connector.Id); Layout(surface);
+        var connected = State(page);
+        var handle = Descendants(surface).OfType<Thumb>().Single(t => AutomationProperties.GetAutomationId(t) == "ShapeMove:" + connector.Id);
+        handle.RaiseEvent(new DragStartedEventArgs(0,0)); handle.RaiseEvent(new DragDeltaEventArgs(15,20));
+        Equal(null,connector.StartId); Equal(null,connector.EndId);
+        handle.RaiseEvent(new DragCompletedEventArgs(15,20,true)); Equal(connected,State(page));
+        handle = Descendants(surface).OfType<Thumb>().Single(t => AutomationProperties.GetAutomationId(t) == "ShapeResize:" + connector.Id);
+        handle.RaiseEvent(new DragStartedEventArgs(0,0)); handle.RaiseEvent(new DragDeltaEventArgs(20,10));
+        Equal(null,connector.StartId); Equal(null,connector.EndId);
+        handle.RaiseEvent(new DragCompletedEventArgs(20,10,true)); Equal(connected,State(page));
+        before = ShapeGeometry.Endpoints(page,connector);
+        Call(surface,"NudgeSelection",Key.Down,true);
+        Equal(null,connector.StartId); Equal(null,connector.EndId);
+        Near(before.Start.Y+10,ShapeGeometry.Endpoints(page,connector).Start.Y);
+        connector.StartId=first.Id; connector.EndId=second.Id;
         Call(surface, "SelectAllObjects"); Call(surface, "GroupSelection", false); Call(surface, "DuplicateObjects"); Equal(6, page.Shapes.Count);
         var copy = page.Shapes.Last(); Assert(copy.StartId != first.Id && copy.EndId != second.Id, "Duplication retained original node IDs.");
         Assert(page.Shapes.Any(s => s.Id == copy.StartId && s.GroupId == copy.GroupId), "Duplicate group cannot resolve connector.");

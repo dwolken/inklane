@@ -177,9 +177,7 @@ public sealed partial class MainWindow
     {
         if (_document.Pages.Count >= 1000 || !BeginPageChange()) return;
         var page = DocumentStore.Clone(new DocumentData { Pages = [_document.Pages[_pageIndex]] }).Pages[0];
-        foreach (var ink in page.Ink) ink.Id = Guid.NewGuid().ToString();
-        foreach (var item in page.Items) item.Id = Guid.NewGuid().ToString();
-        foreach (var image in page.Images) image.Id = Guid.NewGuid().ToString();
+        PageObjects.RegenerateIds(page);
         ShiftPageViews(_pageIndex + 1, 1);
         _document.Pages.Insert(++_pageIndex, page); FinishPageChange(_pageIndex - 1);
     }

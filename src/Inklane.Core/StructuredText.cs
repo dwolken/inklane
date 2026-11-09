@@ -27,7 +27,7 @@ public static class StructuredText
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder().UsePipeTables().UseMathematics().UseEmphasisExtras().Build();
     public static FlowDocument CreateDocument(TextItem item)
     {
-        var color = (Color)ColorConverter.ConvertFromString(item.Color); color.A = (byte)Math.Round(item.Opacity * 255);
+        var color = (Color)ColorConverter.ConvertFromString(item.Color);
         var doc = new FlowDocument { FontFamily = new FontFamily(item.FontFamily), FontSize = item.FontSize,
             Foreground = new SolidColorBrush(color), Background = Brushes.Transparent, PagePadding = new Thickness(0),
             TextAlignment = Enum.Parse<TextAlignment>(item.Alignment), FontWeight = item.Bold ? FontWeights.Bold : FontWeights.Normal,
@@ -173,7 +173,7 @@ public static class StructuredText
         var paginator = ((IDocumentPaginatorSource)document).DocumentPaginator;
         paginator.PageSize = new Size(Math.Max(40, item.Width), 100000);
         var page = paginator.GetPage(0);
-        var group = new DrawingGroup();
+        var group = new DrawingGroup { Opacity = item.Opacity };
         void Visit(Visual visual, DrawingGroup parent)
         {
             var branch = new DrawingGroup();

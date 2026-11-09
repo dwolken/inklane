@@ -5,6 +5,15 @@ namespace Inklane.Core;
 
 public static class ShapeGeometry
 {
+    public static void Detach(PageData page, ShapeItem shape)
+    {
+        var (start,end) = Endpoints(page,shape);
+        shape.X = Math.Min(start.X,end.X); shape.Y = Math.Min(start.Y,end.Y);
+        shape.Width = Math.Max(1,Math.Abs(end.X-start.X)); shape.Height = Math.Max(1,Math.Abs(end.Y-start.Y));
+        shape.FlipX = start.X > end.X; shape.FlipY = start.Y > end.Y;
+        shape.StartId = shape.EndId = null; shape.Rotation = 0;
+    }
+
     public static (Point Start, Point End) Endpoints(PageData page, ShapeItem shape)
     {
         var start = new Point(shape.X + (shape.FlipX ? shape.Width : 0), shape.Y + (shape.FlipY ? shape.Height : 0));

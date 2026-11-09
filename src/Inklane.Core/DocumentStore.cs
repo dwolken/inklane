@@ -291,7 +291,6 @@ public static partial class DocumentStore
         };
         annotation.Elements.SetString("/NM", ink.Id);
         annotation.Elements.SetInteger("/F", 4); // Print
-        annotation.Elements.SetReal("/CA", ink.Opacity);
         annotation.Elements["/C"] = ColorArray(pdf, ink.Color);
         var border = new PdfDictionary(pdf);
         border.Elements.SetReal("/W", Units.DipToPoint(ink.Width));
@@ -355,7 +354,6 @@ public static partial class DocumentStore
         };
         annotation.Elements.SetString("/NM", item.Id);
         annotation.Elements.SetInteger("/F", 4);
-        annotation.Elements.SetReal("/CA", item.Opacity);
         annotation.Elements["/C"] = ColorArray(pdf, item.IsNote ? "#E7AA32" : item.Color);
         if (item.IsNote)
         {

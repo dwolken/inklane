@@ -193,21 +193,13 @@ public sealed partial class DocumentSurface
         var delta = topLeft - bounds.TopLeft;
         var dx = Constrain(delta.X, bounds.Left, bounds.Right, destination.Width);
         var dy = Constrain(delta.Y, bounds.Top, bounds.Bottom, destination.Height);
-        var ids = content.Items.Select(i => i.Id).Concat(content.Images.Select(i => i.Id)).Concat(content.Shapes.Select(i => i.Id)).Concat(content.Ink.Select(i => i.Id)).ToDictionary(i => i, _ => Guid.NewGuid().ToString("N"));
-        var groups = content.Items.Select(i => i.GroupId).Concat(content.Images.Select(i => i.GroupId)).Concat(content.Shapes.Select(i => i.GroupId)).Concat(content.Ink.Select(i => i.GroupId)).Where(g => g.Length > 0).Distinct().ToDictionary(g => g, _ => Guid.NewGuid().ToString("N"));
-        string Group(string group) => group.Length == 0 ? "" : groups[group];
-        foreach (var shape in content.Shapes)
-        {
-            shape.Id = ids[shape.Id]; shape.X += dx; shape.Y += dy; shape.GroupId = Group(shape.GroupId);
-            shape.StartId = shape.StartId != null && ids.TryGetValue(shape.StartId, out var start) ? start : null;
-            shape.EndId = shape.EndId != null && ids.TryGetValue(shape.EndId, out var end) ? end : null;
-        }
+        PageObjects.RegenerateIds(content);
+        foreach (var shape in content.Shapes) { shape.X += dx; shape.Y += dy; }
         foreach (var ink in content.Ink)
         {
-            ink.Id = ids[ink.Id]; ink.GroupId = Group(ink.GroupId);
             foreach (var point in ink.Points) { point.X += dx; point.Y += dy; }
         }
-        foreach (var item in content.Items) { item.Id = ids[item.Id]; item.X += dx; item.Y += dy; item.GroupId = Group(item.GroupId); }
-        foreach (var item in content.Images) { item.Id = ids[item.Id]; item.X += dx; item.Y += dy; item.GroupId = Group(item.GroupId); }
+        foreach (var item in content.Items) { item.X += dx; item.Y += dy; }
+        foreach (var item in content.Images) { item.X += dx; item.Y += dy; }
     }
 }

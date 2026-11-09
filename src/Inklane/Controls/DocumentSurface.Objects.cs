@@ -22,6 +22,7 @@ public sealed partial class DocumentSurface
     public double InkOpacity { get => _opacity; set { _opacity = Math.Clamp(value, 0, 1); ApplyInkAttributes(); } }
     public event EventHandler? SelectionChanged;
     internal IReadOnlyList<TextItem> SelectedTexts => _page?.Items.Where(i => IncludesObject(i.Id)).ToList() ?? [];
+    internal IReadOnlyList<ImageItem> SelectedPictures => _page?.Images.Where(i => IncludesObject(i.Id)).ToList() ?? [];
     internal IReadOnlyList<ShapeItem> SelectedShapes => _page?.Shapes.Where(i => IncludesObject(i.Id)).ToList() ?? [];
 
     private sealed record ShapeVisual(ShapeItem Item, ShapeDrawing Drawing, Grid Controls, Border Outline, Thumb Resize);
@@ -64,18 +65,41 @@ public sealed partial class DocumentSurface
         _objects.Children.Add(drawing); _objects.Children.Add(controls);
         var visual = new ShapeVisual(item, drawing, controls, outline, resize); _shapes.Add(item.Id, visual);
         var moved = new Vector();
+        (string? Start,string? End,double X,double Y,double Width,double Height,bool FlipX,bool FlipY,double Rotation) beforeMove = default;
         move.PreviewMouseLeftButtonDown += (_, e) =>
         {
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) { ToggleObject(item.Id); e.Handled = true; }
         };
-        move.DragStarted += (_, _) => { if (!IncludesObject(item.Id)) SelectObject(item.Id); moved = default; };
+        move.DragStarted += (_, _) => { if (!IncludesObject(item.Id)) SelectObject(item.Id); moved = default;
+            beforeMove = (item.StartId,item.EndId,item.X,item.Y,item.Width,item.Height,item.FlipX,item.FlipY,item.Rotation); };
         move.DragDelta += (_, e) => moved += MoveSelection(e.HorizontalChange, e.VerticalChange);
-        move.DragCompleted += (_, e) => { if (e.Canceled) MoveSelection(-moved.X, -moved.Y); else if (moved.LengthSquared > 0) SyncInkAndNotify(); };
+        move.DragCompleted += (_, e) =>
+        {
+            if (e.Canceled)
+            {
+                MoveSelection(-moved.X,-moved.Y);
+                if (beforeMove.Start != null || beforeMove.End != null)
+                {
+                    (item.StartId,item.EndId,item.X,item.Y,item.Width,item.Height,item.FlipX,item.FlipY,item.Rotation) = beforeMove;
+                    RefreshShapes();
+                }
+            }
+            else if (moved.LengthSquared > 0 || item.StartId != beforeMove.Start || item.EndId != beforeMove.End) SyncInkAndNotify();
+        };
         move.KeyDown += (_, e) => e.Handled = NudgeSelection(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
-        Size original = default;
-        resize.DragStarted += (_, _) => original = new Size(item.Width, item.Height);
-        resize.DragDelta += (_, e) => { item.Width = Math.Clamp(item.Width + e.HorizontalChange, 8, 100000); item.Height = Math.Clamp(item.Height + e.VerticalChange, 8, 100000); RefreshShapes(); };
-        resize.DragCompleted += (_, e) => { if (e.Canceled) { item.Width = original.Width; item.Height = original.Height; RefreshShapes(); } else NotifyChanged(); };
+        (string? Start,string? End,double X,double Y,double Width,double Height,bool FlipX,bool FlipY,double Rotation) beforeResize = default;
+        resize.DragStarted += (_, _) => beforeResize = (item.StartId,item.EndId,item.X,item.Y,item.Width,item.Height,item.FlipX,item.FlipY,item.Rotation);
+        resize.DragDelta += (_, e) =>
+        {
+            if (e.HorizontalChange == 0 && e.VerticalChange == 0) return;
+            if (item.StartId != null || item.EndId != null) ShapeGeometry.Detach(_page!,item);
+            item.Width = Math.Clamp(item.Width + e.HorizontalChange, 8, 100000); item.Height = Math.Clamp(item.Height + e.VerticalChange, 8, 100000); RefreshShapes();
+        };
+        resize.DragCompleted += (_, e) =>
+        {
+            if (e.Canceled) { (item.StartId,item.EndId,item.X,item.Y,item.Width,item.Height,item.FlipX,item.FlipY,item.Rotation) = beforeResize; RefreshShapes(); }
+            else NotifyChanged();
+        };
         RefreshShapes();
     }
 
@@ -92,7 +116,7 @@ public sealed partial class DocumentSurface
             var selected = IncludesObject(visual.Item.Id);
             visual.Controls.Visibility = _tool == EditorTool.Select && !_spacePan ? Visibility.Visible : Visibility.Collapsed;
             visual.Outline.Visibility = selected ? Visibility.Visible : Visibility.Hidden;
-            visual.Resize.Visibility = selected && HasSingleObject && visual.Item.StartId == null && visual.Item.EndId == null ? Visibility.Visible : Visibility.Hidden;
+            visual.Resize.Visibility = selected && HasSingleObject ? Visibility.Visible : Visibility.Hidden;
         }
     }
 
@@ -139,7 +163,7 @@ public sealed partial class DocumentSurface
         if (fill) ShapeFill = color;
         foreach (var text in SelectedTexts) { text.Color = color; text.Opacity = opacity; ApplyTextStyle(_items[text.Id]); }
         foreach (var shape in SelectedShapes) { if (fill) shape.FillColor = color; else shape.Color = color; shape.Opacity = opacity; }
-        foreach (var stroke in _ink.GetSelectedStrokes()) { if (stroke.ContainsPropertyData(StrokeColor)) stroke.RemovePropertyData(StrokeColor); stroke.AddPropertyData(StrokeColor, color); if (stroke.ContainsPropertyData(StrokeOpacity)) stroke.RemovePropertyData(StrokeOpacity); stroke.AddPropertyData(StrokeOpacity, opacity); }
+        foreach (var stroke in _ink.GetSelectedStrokes()) { if (stroke.ContainsPropertyData(StrokeColor)) stroke.RemovePropertyData(StrokeColor); stroke.AddPropertyData(StrokeColor, color); if (stroke.ContainsPropertyData(StrokeOpacity)) stroke.RemovePropertyData(StrokeOpacity); stroke.AddPropertyData(StrokeOpacity, opacity); UpdateInkLayer(stroke); }
         foreach (var picture in _pictures.Values.Where(v => IncludesObject(v.Item.Id))) { picture.Item.Opacity = opacity; PositionPicture(picture); }
         RefreshShapes(); if (HasSelection) SyncInkAndNotify();
     }
@@ -160,9 +184,23 @@ public sealed partial class DocumentSurface
         RefreshShapes(); if (_ink.GetSelectedStrokes().Count > 0 || SelectedShapes.Count > 0) SyncInkAndNotify();
     }
 
+    internal void ApplyPictureFormatting(Action<ImageItem> change)
+    {
+        foreach (var item in SelectedPictures) { change(item); PositionPicture(_pictures[item.Id]); }
+        if (SelectedPictures.Count > 0) NotifyChanged();
+    }
+
     internal void ApplyShapeFormatting(Action<ShapeItem> change)
     {
-        foreach (var item in SelectedShapes) change(item);
+        foreach (var item in SelectedShapes)
+        {
+            var dimensions = (item.Width,item.Height,item.Rotation); change(item);
+            if ((item.StartId != null || item.EndId != null) && dimensions != (item.Width,item.Height,item.Rotation))
+            {
+                var edited = (item.Width,item.Height,item.Rotation); ShapeGeometry.Detach(_page!,item);
+                (item.Width,item.Height,item.Rotation) = edited;
+            }
+        }
         RefreshShapes(); if (SelectedShapes.Count > 0) NotifyChanged();
     }
 
@@ -179,9 +217,9 @@ public sealed partial class DocumentSurface
     private static void UpdateRichPreview(ItemVisual visual)
     {
         var item = visual.Item;
-        var key = $"{item.Text}|{item.FontFamily}|{item.FontSize}|{item.Color}|{item.Opacity}|{item.Bold}|{item.Italic}|{item.Underline}|{item.Alignment}";
+        var key = $"{item.Text}|{item.Width}|{item.FontFamily}|{item.FontSize}|{item.Color}|{item.Opacity}|{item.Bold}|{item.Italic}|{item.Underline}|{item.Alignment}";
         if (visual.PreviewKey == key) return;
-        visual.Preview!.Document = StructuredText.CreateDocument(item); visual.PreviewKey = key;
+        visual.Preview!.Document = StructuredText.CreateDocument(item); visual.Preview.Opacity = item.Opacity; visual.PreviewKey = key;
     }
 
     private static void ApplyTextStyle(ItemVisual visual)

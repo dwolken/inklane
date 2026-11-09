@@ -231,6 +231,8 @@ public sealed partial class DocumentSurface
     private Vector MoveSelection(double dx, double dy, bool moveInk = true)
     {
         if (_page == null) return default;
+        if ((dx != 0 || dy != 0) && HasSingleObject && SelectedShapes.FirstOrDefault() is { } connector && (connector.StartId != null || connector.EndId != null))
+            ShapeGeometry.Detach(_page,connector);
         var bounds = _ink.GetSelectedStrokes().GetBounds();
         foreach (var item in _page.Items.Where(i => IncludesObject(i.Id)))
             bounds.Union(new Rect(item.X, item.Y, item.IsNote ? 28 / _zoom : item.Width, item.IsNote ? 28 / _zoom : item.Height));

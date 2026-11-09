@@ -37,15 +37,15 @@ public sealed partial class MainWindow
 
     private void ObjectProperties()
     {
-        var text = _surface.SelectedTexts.FirstOrDefault(); var shape = _surface.SelectedShapes.FirstOrDefault();
-        if (text == null && shape == null) { ChooseColor(); return; }
+        var text = _surface.SelectedTexts.FirstOrDefault(); var shape = _surface.SelectedShapes.FirstOrDefault(); var image = _surface.SelectedPictures.FirstOrDefault();
+        if (text == null && shape == null && image == null) { ChooseColor(); return; }
         var dialog = new Window { Owner = this, Title = L.T("ObjectProperties"), Width = 380, SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false };
         dialog.SetResourceReference(BackgroundProperty, "SurfaceBrush"); dialog.SetResourceReference(ForegroundProperty, "TextBrush");
         var panel = new StackPanel { Margin = new Thickness(22) }; dialog.MaxHeight = SystemParameters.WorkArea.Height - 48; dialog.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         TextBox Field(string key, string value)
         {
-            panel.Children.Add(Studio.Label(L.T(key)));
+            panel.Children.Add(Studio.Label(L.T(key)+(key == "TextSize" ? " (pt)" : "")));
             var box = new TextBox { Text = value, Margin = new Thickness(0, 4, 0, 12) }; panel.Children.Add(box);
             System.Windows.Automation.AutomationProperties.SetName(box, L.T(key)); return box;
         }
@@ -62,16 +62,17 @@ public sealed partial class MainWindow
             bold = new CheckBox { Content = L.T("Bold"), IsChecked = text.Bold, Margin = new Thickness(0, 0, 12, 0) };
             italic = new CheckBox { Content = L.T("Italic"), IsChecked = text.Italic, Margin = new Thickness(0, 0, 12, 0) };
             underline = new CheckBox { Content = L.T("Underline"), IsChecked = text.Underline };
-            panel.Children.Add(Studio.Line(bold, italic, underline));
+            var emphasis = new WrapPanel(); foreach (var choice in new[] { bold,italic,underline }) { choice.Margin = new Thickness(0,0,12,8); emphasis.Children.Add(choice); }
+            panel.Children.Add(emphasis);
             align = new ComboBox { ItemsSource = new[] { L.T("Left"), L.T("Center"), L.T("Right"), L.T("Justify") },
                 SelectedIndex = Array.IndexOf(new[] { "Left", "Center", "Right", "Justify" }, text.Alignment), Margin = new Thickness(0, 12, 0, 12) };
             System.Windows.Automation.AutomationProperties.SetName(align, L.T("Alignment")); panel.Children.Add(align);
         }
         var label = shape == null ? null : Field("ShapeLabel", shape.Label);
         var stroke = shape == null ? null : Field("Width", shape.StrokeWidth.ToString(CultureInfo.CurrentCulture));
-        var width = Field("ObjectWidth", (text?.Width ?? shape!.Width).ToString("0.##", CultureInfo.CurrentCulture));
-        var height = Field("ObjectHeight", (text?.Height ?? shape!.Height).ToString("0.##", CultureInfo.CurrentCulture));
-        var rotation = text?.IsNote == true || shape?.StartId != null || shape?.EndId != null ? null : Field("Rotation", (text?.Rotation ?? shape!.Rotation).ToString("0.##", CultureInfo.CurrentCulture));
+        var width = Field("ObjectWidth", (text?.Width ?? shape?.Width ?? image!.Width).ToString("0.##", CultureInfo.CurrentCulture));
+        var height = Field("ObjectHeight", (text?.Height ?? shape?.Height ?? image!.Height).ToString("0.##", CultureInfo.CurrentCulture));
+        var rotation = text?.IsNote == true || shape?.StartId != null || shape?.EndId != null ? null : Field("Rotation", (text?.Rotation ?? shape?.Rotation ?? image!.Rotation).ToString("0.##", CultureInfo.CurrentCulture));
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap }; error.SetResourceReference(TextBlock.ForegroundProperty, "ErrorBrush"); panel.Children.Add(error);
         var apply = new Button { Content = L.T("Apply"), IsDefault = true, MinWidth = 90 };
         var cancel = new Button { Content = L.T("Cancel"), IsCancel = true, MinWidth = 90, Margin = new Thickness(8, 0, 0, 0) };
@@ -92,6 +93,7 @@ public sealed partial class MainWindow
                     i.Bold = bold!.IsChecked == true; i.Italic = italic!.IsChecked == true; i.Underline = underline!.IsChecked == true;
                     i.ContentFormat = format!.SelectedIndex == 1 ? "Markdown" : "Plain"; i.Alignment = new[] { "Left", "Center", "Right", "Justify" }[Math.Max(0, align!.SelectedIndex)]; i.Rotation = angle; });
             if (shape != null) _surface.ApplyShapeFormatting(i => { i.Width = w; i.Height = h; i.Rotation = angle; i.StrokeWidth = sw; i.Label = label!.Text; });
+            if (image != null) _surface.ApplyPictureFormatting(i => { i.Width = w; i.Height = h; i.Rotation = angle; });
             CaptureHistory(); dialog.DialogResult = true;
         };
         dialog.ShowDialog();
@@ -101,7 +103,7 @@ public sealed partial class MainWindow
     {
         var selected = _surface.HasSelection;
         if (_surface.SelectedTexts.Count != 0) Command(menu, "EditContent", _surface.EditSelectedContent);
-        if (_surface.SelectedTexts.Count != 0 || _surface.SelectedShapes.Count != 0) Command(menu, "ObjectProperties", ObjectProperties);
+        if (_surface.SelectedTexts.Count != 0 || _surface.SelectedShapes.Count != 0 || _surface.SelectedPictures.Count != 0) Command(menu, "ObjectProperties", ObjectProperties);
         Command(menu, "Color", () => ChooseColor()).IsEnabled = selected;
         if (_surface.SelectedShapes.Count != 0)
         {

@@ -35,6 +35,7 @@ public static class L
         ["Line"] = ("Line", "Linie"),
         ["Arrow"] = ("Arrow", "Pfeil"),
         ["Diamond"] = ("Diamond", "Raute"),
+        ["PropertiesShort"] = ("Properties", "Eigenschaften"),
         ["ObjectProperties"] = ("Object properties…", "Objekteigenschaften …"),
         ["Font"] = ("Font", "Schriftart"),
         ["Bold"] = ("Bold", "Fett"),
