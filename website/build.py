@@ -99,8 +99,10 @@ def build(output):
         copyfile(SOURCE / name, assets / name)
     build_workspace(output)
     copyfile(ROOT / "brand/motion/inklane-sting.mp4", assets / "inklane-sting.mp4")
-    for name in ("inklane.svg", "inklane.ico"):
+    for name in ("inklane.svg", "inklane.ico", "inklane-lockup-light.svg", "inklane-lockup-dark.svg"):
         copyfile(ROOT / "src/Inklane/Assets" / name, assets / name)
+    for name in ("Manrope-wght.woff2", "OFL.txt"):
+        copyfile(ROOT / "brand/type" / name, assets / name)
     for name in ("notebook.png", "paper.png", "image.png"):
         copyfile(ROOT / "docs/screenshots" / name, assets / name)
     template = Template((SOURCE / "page.html").read_text(encoding="utf-8"))

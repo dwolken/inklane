@@ -3,9 +3,9 @@ name: Product website
 on:
   push:
     branches: [main]
-    paths: ['website/**', 'brand/motion/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
+    paths: ['website/**', 'brand/motion/**', 'brand/type/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
   pull_request:
-    paths: ['website/**', 'brand/motion/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
+    paths: ['website/**', 'brand/motion/**', 'brand/type/**', '.github/workflows/pages.yml', 'docs/screenshots/**', 'src/Inklane/Assets/**']
   # A release published with GITHUB_TOKEN does not trigger another release event.
   # Completing a tagged Windows build refreshes the download from trusted main.
   workflow_run:
