@@ -125,7 +125,12 @@ public sealed partial class DocumentSurface : UserControl
             Focusable = false
         };
         Content = _scroll;
-        _scroll.ScrollChanged += (_, e) => { if (e.OriginalSource == _scroll) PositionNotes(); };
+        _scroll.ScrollChanged += (_, e) =>
+        {
+            if (e.OriginalSource != _scroll) return;
+            PositionNotes();
+            QueueContinuousRefresh();
+        };
         _ink.StrokeCollected += (_, _) => SyncInkAndNotify();
         _ink.StrokeErased += (_, _) => SyncInkAndNotify();
         _ink.SelectionMoved += (_, _) => SyncInkAndNotify();
@@ -136,6 +141,7 @@ public sealed partial class DocumentSurface : UserControl
         PreviewMouseMove += ContinuePan;
         PreviewMouseUp += EndPan;
         LostMouseCapture += (_, _) => { _panning = false; ApplyCursor(); };
+        AddHandler(Mouse.LostMouseCaptureEvent, new MouseEventHandler((_, _) => QueueContinuousRefresh()), true);
         PreviewMouseWheel += OnMouseWheel;
         PreviewKeyDown += OnKeyDown;
         PreviewKeyUp += (_, e) =>
@@ -183,7 +189,17 @@ public sealed partial class DocumentSurface : UserControl
             ApplyTool();
         }
         finally { _loading = false; }
-        RestoreView(view ?? new PageViewport(image == null ? PageViewMode.Editing : PageViewMode.FitPage, 1, 0, 0));
+        if (_pageSequence == null)
+            RestoreView(view ?? new PageViewport(image == null ? PageViewMode.Editing : PageViewMode.FitPage, 1, 0, 0));
+        else
+        {
+            if (_resetSequenceView)
+            {
+                _resetSequenceView = false;
+                RestoreView((view ?? new PageViewport(PageViewMode.Editing,1,0,0)).AtTop());
+            }
+            QueueContinuousRefresh();
+        }
     }
 
     public void CommitEdits()
@@ -195,9 +211,14 @@ public sealed partial class DocumentSurface : UserControl
         }
     }
 
-    public void FitToPage() => RestoreView(new PageViewport(PageViewMode.FitPage, 1, 0, 0));
-    public void FitToWidth() => RestoreView(new PageViewport(PageViewMode.FitWidth, 1, 0, 0));
-    public void FitForEditing() => RestoreView(new PageViewport(PageViewMode.Editing, 1, 0, 0));
+    public void FitToPage() => Fit(PageViewMode.FitPage);
+    public void FitToWidth() => Fit(PageViewMode.FitWidth);
+    public void FitForEditing() => Fit(PageViewMode.Editing);
+    private void Fit(PageViewMode mode)
+    {
+        RestoreView(IsContinuous ? CaptureView() with { Mode = mode } : new PageViewport(mode, 1, 0, 0));
+        if (IsContinuous && mode == PageViewMode.FitPage) RevealActivePage();
+    }
     public PageViewport CaptureView() => _pendingView ?? new PageViewport(ViewMode, _zoom, _scroll.HorizontalOffset, _scroll.VerticalOffset);
 
     public void RestoreView(PageViewport view)
@@ -214,7 +235,8 @@ public sealed partial class DocumentSurface : UserControl
         _applyingView = true;
         try
         {
-            var widthFit = (_scroll.ActualWidth - 68) / _page.Width;
+            var width = _pageSequence == null ? _page.Width : _sequenceWidth;
+            var widthFit = (_scroll.ActualWidth - 68) / width;
             var zoom = view.Mode switch
             {
                 PageViewMode.FitPage => Math.Min(widthFit, (_scroll.ActualHeight - 68) / _page.Height),
@@ -227,7 +249,7 @@ public sealed partial class DocumentSurface : UserControl
             // viewport width instead of assuming a theme-specific scrollbar size.
             if (view.Mode is PageViewMode.FitWidth or PageViewMode.Editing && _scroll.ViewportWidth > 68)
             {
-                var available = (_scroll.ViewportWidth - 68) / _page.Width;
+                var available = (_scroll.ViewportWidth - 68) / width;
                 ApplyScale(view.Mode == PageViewMode.Editing ? Math.Min(1.4, available) : available);
             }
             var ratio = view.Zoom > 0 ? _zoom / view.Zoom : 1;
@@ -263,6 +285,7 @@ public sealed partial class DocumentSurface : UserControl
         _zoom = scale;
         _scale.ScaleX = scale;
         _scale.ScaleY = scale;
+        if (IsContinuous) LayoutPageSequence();
         _scroll.UpdateLayout();
     }
 
@@ -926,51 +949,55 @@ public sealed partial class DocumentSurface : UserControl
         if (width <= 0 || height <= 0 || (long)width * height > 120_000_000)
             throw new InvalidOperationException("The requested image is too large.");
         var drawing = new DrawingVisual();
-        using (var dc = drawing.RenderOpen())
-        {
-            PaperLayer.Draw(dc, _page, _image);
-            foreach (var picture in _page.Images)
-                dc.DrawImage(_pictures[picture.Id].Source, new Rect(picture.X, picture.Y, picture.Width, picture.Height));
-            _ink.Strokes.Draw(dc);
-            var noteNumber = 0;
-            foreach (var item in _page.Items)
-            {
-                if (item.IsNote)
-                {
-                    var marker = new Rect(item.X, item.Y, 26, 26);
-                    dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(250, 218, 150)),
-                        new Pen(new SolidColorBrush(Color.FromRgb(167, 127, 54)), 1), marker, 7, 7);
-                    var number = (++noteNumber).ToString(CultureInfo.CurrentCulture);
-                    var label = new FormattedText(number, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                        new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-                        number.Length > 2 ? 10 : 13, new SolidColorBrush(Color.FromRgb(79, 52, 16)), 1);
-                    dc.DrawText(label, new Point(marker.X + (marker.Width - label.Width) / 2, marker.Y + (marker.Height - label.Height) / 2));
-                    if (includeNoteCards && item.IsExpanded && _items.TryGetValue(item.Id, out var visual))
-                    {
-                        dc.PushTransform(new TranslateTransform(Canvas.GetLeft(visual.Root), Canvas.GetTop(visual.Root)));
-                        dc.PushTransform(new ScaleTransform(1 / _zoom, 1 / _zoom));
-                        dc.DrawRectangle(new VisualBrush(visual.Root), null, new Rect(visual.Root.RenderSize));
-                        dc.Pop();
-                        dc.Pop();
-                    }
-                }
-                else
-                {
-                    var text = new FormattedText(item.Text, System.Globalization.CultureInfo.CurrentUICulture,
-                        FlowDirection.LeftToRight, new Typeface("Segoe UI"), item.FontSize,
-                        new SolidColorBrush(ParseColor(item.Color)), 1)
-                    {
-                        MaxTextWidth = Math.Max(1, item.Width),
-                        Trimming = TextTrimming.None
-                    };
-                    dc.DrawText(text, new Point(item.X, item.Y));
-                }
-            }
-        }
+        using (var dc = drawing.RenderOpen()) DrawPage(dc,_page,_image,this,includeNoteCards);
         var result = new RenderTargetBitmap(width, height, dpi, dpi, PixelFormats.Pbgra32);
         result.Render(drawing);
         result.Freeze();
         return result;
+    }
+
+    private static void DrawPage(DrawingContext dc, PageData page, ImageSource? image, DocumentSurface? live = null, bool includeNoteCards = false)
+    {
+        PaperLayer.Draw(dc, page, image);
+        foreach (var picture in page.Images)
+            dc.DrawImage(live == null ? EmbeddedPng.Decode(picture.PngData) : live._pictures[picture.Id].Source,
+                new Rect(picture.X, picture.Y, picture.Width, picture.Height));
+        var strokes = live?._ink.Strokes ?? new StrokeCollection(page.Ink.Select(ToStroke));
+        strokes.Draw(dc);
+        var noteNumber = 0;
+        foreach (var item in page.Items)
+        {
+            if (item.IsNote)
+            {
+                var marker = new Rect(item.X, item.Y, 26, 26);
+                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(250, 218, 150)),
+                    new Pen(new SolidColorBrush(Color.FromRgb(167, 127, 54)), 1), marker, 7, 7);
+                var number = (++noteNumber).ToString(CultureInfo.CurrentCulture);
+                var label = new FormattedText(number, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                    new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+                    number.Length > 2 ? 10 : 13, new SolidColorBrush(Color.FromRgb(79, 52, 16)), 1);
+                dc.DrawText(label, new Point(marker.X + (marker.Width - label.Width) / 2, marker.Y + (marker.Height - label.Height) / 2));
+                if (includeNoteCards && item.IsExpanded && live != null && live._items.TryGetValue(item.Id, out var visual))
+                {
+                    dc.PushTransform(new TranslateTransform(Canvas.GetLeft(visual.Root), Canvas.GetTop(visual.Root)));
+                    dc.PushTransform(new ScaleTransform(1 / live._zoom, 1 / live._zoom));
+                    dc.DrawRectangle(new VisualBrush(visual.Root), null, new Rect(visual.Root.RenderSize));
+                    dc.Pop();
+                    dc.Pop();
+                }
+            }
+            else
+            {
+                var text = new FormattedText(item.Text, System.Globalization.CultureInfo.CurrentUICulture,
+                    FlowDirection.LeftToRight, new Typeface("Segoe UI"), item.FontSize,
+                    new SolidColorBrush(ParseColor(item.Color)), 1)
+                {
+                    MaxTextWidth = Math.Max(1, item.Width),
+                    Trimming = TextTrimming.None
+                };
+                dc.DrawText(text, new Point(item.X, item.Y));
+            }
+        }
     }
 
     private static Stroke ToStroke(InkData ink)

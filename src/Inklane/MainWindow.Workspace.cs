@@ -15,6 +15,7 @@ public sealed partial class MainWindow
     private readonly Grid _editor = new();
     private readonly Grid _home = new();
     private bool _onHome, _hasDocument;
+    private bool _continuousPages;
     private Button _notesButton = null!;
     private readonly TextBlock _noteCount = Studio.Label("", 12, "MutedBrush");
     private readonly Border _noteBadge = new() { CornerRadius = new CornerRadius(8), Padding = new Thickness(5,0,5,1), Margin = new Thickness(2,0,0,0) };
@@ -210,6 +211,15 @@ public sealed partial class MainWindow
         return menu;
     }
 
+    private void SetContinuousPages(bool continuous)
+    {
+        if (continuous == _continuousPages) return;
+        _surface.CommitEdits();
+        if (!CaptureHistory()) return;
+        _continuousPages = continuous;
+        ShowPage();
+    }
+
     private ContextMenu EditorMenu()
     {
         var menu = new ContextMenu();
@@ -224,6 +234,16 @@ public sealed partial class MainWindow
             var pages = new MenuItem { Header = L.T("ManagePages") }; PageCommands(pages); menu.Items.Add(pages);
         }
         else Command(menu,_document.Kind == DocumentKind.Pdf ? "BrowsePages" : "BrowseFolder",BrowsePositions);
+        if (_document.Kind != DocumentKind.Image)
+        {
+            var layout = new MenuItem { Header = L.T("PageLayout") };
+            menu.Items.Add(layout);
+            var focused = Command(layout,"FocusedPages",() => SetContinuousPages(false));
+            var continuous = Command(layout,"ContinuousPages",() => SetContinuousPages(true));
+            focused.IsCheckable = continuous.IsCheckable = true;
+            focused.IsChecked = !_continuousPages;
+            continuous.IsChecked = _continuousPages;
+        }
         menu.Items.Add(new Separator());
         Command(menu,_document.Kind == DocumentKind.Notebook ? "ExportPortable" : "ExportPortableReview",ExportPortableWorkspace);
         Command(menu,"ExportFeedback",ExportFeedback).ToolTip = L.T("FeedbackHint");
@@ -291,11 +311,11 @@ public sealed partial class MainWindow
         if (direction < 0) _displayedKey = null;
     }
 
-    private void LoadCurrentPage(bool switchPage)
+    private void LoadCurrentPage(bool switchPage, bool reveal)
     {
         var key = $"{_sessionId}|{_pageIndex}";
         PageViewport? previous = null;
-        if (_displayedKey != null)
+        if (_displayedKey != null && !_surface.IsContinuous)
         {
             previous = _surface.CaptureView();
             _views[_displayedKey] = previous.Value;
@@ -305,7 +325,11 @@ public sealed partial class MainWindow
         if (!switchPage) next = previous;
         else if (next == null && _displayedSession == _sessionId) next = previous?.AtTop();
         if (next == null && _document.Kind == DocumentKind.Pdf) next = new PageViewport(PageViewMode.Editing,1,0,0);
+        bool continuous = _continuousPages && _document.Kind != DocumentKind.Image;
+        _surface.SetPageSequence(continuous ? _document.Pages : null, _pageIndex,
+            _pdf == null ? null : _pdf.RenderPreviewAsync, _displayedSession != _sessionId);
         _surface.LoadPage(_document.Pages[_pageIndex], _image, next);
+        if (reveal && continuous) _surface.RevealActivePage();
         _displayedKey = key; _displayedSession = _sessionId;
         var image = _document.Kind == DocumentKind.Image;
         AutomationProperties.SetName(_previous,L.T(image ? "PreviousImage" : "PreviousPage"));

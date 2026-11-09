@@ -111,32 +111,48 @@ internal sealed class PdfBackdrop : IDisposable
     public BitmapSource Render(Window owner, int index)
     {
         foreach (var entry in _cache) if (entry.Index == index) return entry.Image;
-        var image = ReadWithProgress(owner, Path,async () =>
-        {
-            using var page = _pdf.GetPage((uint)index);
-            var size = _sizes[index];
-            var scale = Math.Min(2, Math.Min(4096/Math.Max(size.Width,size.Height), Math.Sqrt(8_000_000/(size.Width*size.Height))));
-            using var output = new InMemoryRandomAccessStream();
-            try
-            {
-                await page.RenderToStreamAsync(output,new PdfPageRenderOptions
-                {
-                    DestinationWidth = (uint)Math.Max(1,Math.Round(size.Width*scale)),
-                    DestinationHeight = (uint)Math.Max(1,Math.Round(size.Height*scale)),
-                    BackgroundColor = Windows.UI.Color.FromArgb(255,255,255,255)
-                });
-            }
-            catch (System.Runtime.InteropServices.COMException ex)
-            { throw new InvalidDataException(L.T("PdfRenderFailed"),ex); }
-            output.Seek(0);
-            using var input = output.AsStreamForRead();
-            var bitmap = BitmapFrame.Create(input,BitmapCreateOptions.IgnoreColorProfile,BitmapCacheOption.OnLoad);
-            bitmap.Freeze();
-            return bitmap;
-        });
+        var image = ReadWithProgress(owner, Path, () => RenderPageAsync(index,4096,8_000_000));
         if (_cache.Count == 2) _cache.Dequeue();
         _cache.Enqueue((index,image));
         return image;
+    }
+
+    public Task<BitmapSource> RenderPreviewAsync(int index) => Task.Run(async () =>
+    {
+        var decoded = await RenderPageAsync(index,1200,1_000_000);
+        int stride = (decoded.PixelWidth * decoded.Format.BitsPerPixel + 7) / 8;
+        var pixels = new byte[stride * decoded.PixelHeight];
+        decoded.CopyPixels(pixels,stride,0);
+        // A DrawingGroup may refreeze its sources on the UI thread. A decoded
+        // frame still retains the decoder from the rendering thread.
+        var preview = BitmapSource.Create(decoded.PixelWidth,decoded.PixelHeight,96,96,
+            decoded.Format,decoded.Palette,pixels,stride);
+        preview.Freeze();
+        return preview;
+    });
+
+    private async Task<BitmapSource> RenderPageAsync(int index, int maxSide, int maxPixels)
+    {
+        using var page = _pdf.GetPage((uint)index);
+        var size = _sizes[index];
+        var scale = Math.Min(2, Math.Min(maxSide / Math.Max(size.Width,size.Height), Math.Sqrt(maxPixels / (size.Width*size.Height))));
+        using var output = new InMemoryRandomAccessStream();
+        try
+        {
+            await page.RenderToStreamAsync(output,new PdfPageRenderOptions
+            {
+                DestinationWidth = (uint)Math.Max(1,Math.Round(size.Width*scale)),
+                DestinationHeight = (uint)Math.Max(1,Math.Round(size.Height*scale)),
+                BackgroundColor = Windows.UI.Color.FromArgb(255,255,255,255)
+            });
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        { throw new InvalidDataException(L.T("PdfRenderFailed"),ex); }
+        output.Seek(0);
+        using var input = output.AsStreamForRead();
+        var bitmap = BitmapFrame.Create(input,BitmapCreateOptions.IgnoreColorProfile,BitmapCacheOption.OnLoad);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     private static T ReadWithProgress<T>(Window owner, string path, Func<Task<T>> read)

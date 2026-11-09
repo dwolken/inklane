@@ -19,6 +19,7 @@ public sealed partial class MainWindow
     private FileSystemWatcher? _folderWatcher;
     private Button _browseButton = null!;
     private int _missingImagePosition;
+    private bool _changingPage;
 
     [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int StrCmpLogicalW(string first, string second);
@@ -99,12 +100,19 @@ public sealed partial class MainWindow
         _folderRefresh.Stop();
     }
 
-    private void GoToPage(int index)
+    private void GoToPage(int index) => SwitchToPage(index, reveal: true);
+
+    private void SwitchToPage(int index, bool reveal)
     {
-        if (index == _pageIndex || index < 0 || index >= _document.Pages.Count) return;
-        _surface.CommitEdits();
-        if (!CaptureHistory() || !PreparePdfPage(index)) return;
-        _pageIndex = index; ShowPage();
+        if (_loading || _changingPage || index == _pageIndex || index < 0 || index >= _document.Pages.Count) return;
+        _changingPage = true;
+        try
+        {
+            _surface.CommitEdits();
+            if (!CaptureHistory() || !PreparePdfPage(index)) return;
+            _pageIndex = index; DisplayPage(true,reveal);
+        }
+        finally { _changingPage = false; }
     }
 
     private IEnumerable<string> BrowseLabels() => _document.Kind != DocumentKind.Image
@@ -189,7 +197,7 @@ public sealed partial class MainWindow
 
     private void SwapPageViews(int first, int second)
     {
-        if (_displayedKey != null) _views[_displayedKey] = _surface.CaptureView();
+        if (_displayedKey != null && !_surface.IsContinuous) _views[_displayedKey] = _surface.CaptureView();
         var a = $"{_sessionId}|{first}"; var b = $"{_sessionId}|{second}";
         bool hadA = _views.Remove(a, out var viewA);
         if (_views.Remove(b, out var viewB)) _views[a] = viewB;
