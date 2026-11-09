@@ -8,7 +8,8 @@ export async function verifyTouchActions(browser, base) {
       await page.goto(base + "editor/?lang=en");
       await page.locator("#new-notebook").click();
       await page.locator("#paper-form button.primary").click();
-      await page.locator("[data-tool=note]").click();
+      await page.locator("button[data-tool=note]").tap();
+      assert.equal(await page.locator("button[data-tool=note]").getAttribute("aria-pressed"), "true");
       const sheet = await page.locator("#sheet").boundingBox();
       await page.touchscreen.tap(sheet.x + sheet.width * .48, sheet.y + sheet.height * .19);
       await page.locator("#note-body").fill("Keep this text when the keyboard closes.");

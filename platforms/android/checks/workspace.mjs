@@ -63,9 +63,24 @@ const find = selector => 'document.querySelector('+JSON.stringify(selector)+')';
 const visible = s => js('!!'+find(s)+'?.getClientRects().length');
 async function tap(sel, fx=.5, fy=.5) {
   await waitFor(()=>visible(sel),sel);
-  const {x,y}=await js('(()=>{const e='+find(sel)+';e.scrollIntoView({block:"nearest"});const r=e.getBoundingClientRect();return {x:r.left+r.width*'+fx+',y:r.top+r.height*'+fy+'}})()');
-  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1,radiusX:1,radiusY:1,force:1}]});
-  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  const {x,y,click}=await js(`(async()=>{
+    const e=${find(sel)}; e.scrollIntoView({block:'nearest'});
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const r=e.getBoundingClientRect(), x=r.left+r.width*${fx}, y=r.top+r.height*${fy};
+    const click=e.matches('button,summary,a');
+    window.__lastTap={selector:${JSON.stringify(sel)},x,y,click,received:false};
+    const observed=event=>{if(e.contains(event.target)){__lastTap.received=true;document.removeEventListener('click',observed,true);}};
+    window.__stopTapObservation=()=>document.removeEventListener('click',observed,true);
+    if(click)document.addEventListener('click',observed,true);
+    return {x,y,click};
+  })()`);
+  try {
+    await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1,radiusX:1,radiusY:1,force:1}]});
+    await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    // A native WebView may deliver its compatibility click after touchEnd returns.
+    // Observe that actual event before starting another gesture; never replay a tap.
+    if(click) await waitFor(()=>js('window.__lastTap?.received === true'),'touch activation of '+sel);
+  } finally { await js('window.__stopTapObservation?.()').catch(()=>{}); }
 }
 async function type(sel,value) {
   await waitFor(()=>visible(sel),'visible text field '+sel);
@@ -119,7 +134,7 @@ try {
     window.__reviewInputs = [];
     for (const type of ['pointerdown','pointerup','pointercancel','click','focusout']) {
       document.addEventListener(type, event => {
-        __reviewInputs.push({type,target:event.target.id || event.target.tagName,pointer:event.pointerType,
+        __reviewInputs.push({type,target:event.target.id || event.target.tagName,tool:event.target.closest?.('[data-tool]')?.dataset.tool,pointer:event.pointerType,
           x:event.clientX,y:event.clientY,focus:document.activeElement?.id,width:innerWidth,height:innerHeight});
         if (__reviewInputs.length > 30) __reviewInputs.shift();
       }, true);
@@ -288,6 +303,7 @@ try {
 } catch (error) {
   console.error('WebView startup diagnostics:', JSON.stringify(startupDiagnostics));
   console.error('Recent input events:', await js('JSON.stringify(window.__reviewInputs || [])').catch(()=>'unavailable'));
+  console.error('Last touch activation:', await js('JSON.stringify(window.__lastTap)').catch(()=>'unavailable'));
   console.error('Module startup state:', await js('JSON.stringify({ready:document.readyState,busy:document.body.getAttribute("aria-busy"),handler:typeof document.querySelector("#new-notebook")?.onclick,error:document.querySelector("#startup-error")?.textContent,resources:performance.getEntriesByType("resource").filter(r=>/\\.m?js(?:$|\\?)/.test(r.name)).map(r=>({url:r.name,duration:r.duration,size:r.decodedBodySize}))})').catch(()=>'unavailable'));
   try { mkdirSync('.scratch',{recursive:true}); writeFileSync('.scratch/android-failure.png',execFileSync('adb',['exec-out','screencap','-p'],{timeout:15000})); }
   catch (captureError) { console.error('Failure screenshot unavailable:',captureError.message); }

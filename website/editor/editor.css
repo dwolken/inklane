@@ -71,6 +71,7 @@ summary {
   border-radius: 7px;
   padding: 7px 11px;
   cursor: pointer;
+  touch-action: manipulation;
   font-weight: 550;
 }
 button:hover:enabled,
