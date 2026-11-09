@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -43,6 +44,26 @@ internal static partial class Program
         var immediateMark=(FrameworkElement)Field(immediate,"_startupBrand")!;
         Assert(immediateMark.RenderTransform.Value.IsIdentity && immediateMark.Opacity==1,"Entering the editor left a startup animation running.");
         StopTimers(immediate);
+        foreach(var preference in new[]{nameof(SystemParameters.ClientAreaAnimation),nameof(SystemParameters.HighContrast)})
+        {
+            var changing=new MainWindow();Call(changing,"BeginStartupBrandMotion",true);
+            var changingMark=(FrameworkElement)Field(changing,"_startupBrand")!;
+            var changingOffset=(TranslateTransform)changingMark.RenderTransform;
+            Assert((bool)Field(changing,"_startupBrandWatchingPreferences")!,"Running motion did not watch accessibility preferences.");
+            // Dispatch the same notification used by WPF without changing the user's OS settings.
+            Call(changing,"StartupPreferenceChanged",changing,new PropertyChangedEventArgs(preference));
+            Assert(!changingOffset.HasAnimatedProperties && changingMark.RenderTransform.Value.IsIdentity && changingMark.Opacity==1,
+                $"Changing {preference} did not immediately cancel the reveal.");
+            Assert(!(bool)Field(changing,"_startupBrandWatchingPreferences")!,"Cancelled motion retained its static event subscription.");
+            Call(changing,"ShowEditor");Call(changing,"ShowHome");Call(changing,"BeginStartupBrandMotion",true);
+            Assert(changingMark.RenderTransform.Value.IsIdentity,"A preference-cancelled reveal replayed on Home.");
+            StopTimers(changing);
+        }
+        var closing=new MainWindow();Call(closing,"BeginStartupBrandMotion",true);
+        var closingOffset=(TranslateTransform)((FrameworkElement)Field(closing,"_startupBrand")!).RenderTransform;
+        StopTimers(closing);
+        Assert(!(bool)Field(closing,"_startupBrandWatchingPreferences")! && !closingOffset.HasAnimatedProperties,
+            "Closing during motion left an animation or a static event subscription alive.");
         Settings.Current.Appearance="Light";Appearance.Apply();
     }
 }
