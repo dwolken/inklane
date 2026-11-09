@@ -18,6 +18,16 @@ The candidate is unsigned. Windows may display the publisher as unknown. A porta
 
 The shared workspace can also be built as an offline [Android app](platforms/android/README.md), [macOS or iOS app](platforms/apple/README.md), or [Linux desktop package](platforms/linux/README.md). Each bundles the editor and renderer and uses the system file picker. These are development builds. There are no mobile store releases or published native installers for these platforms; the [web workspace](https://dwolken.github.io/inklane/editor/) is the immediately available option.
 
+## Development editor
+
+The source build extends the published RC.3. New formatting, shapes, connectors, grouping and layers use schema 4; older releases refuse these documents rather than discard unfamiliar objects. Documents using only older features retain their earlier schema. Keep a copy before moving between different app versions.
+
+Select an object to change its properties after creation or reopening. Drag a text box or remark card's edge or corner handles to change wrapping without changing the font size. **Object properties** provides font, size, emphasis, alignment, dimensions and applicable rotation. The color picker includes presets, a full color field, HEX, opacity, recent colors and saved colors. Stroke and fill are separate for shapes.
+
+Choose **Shapes** for rectangles, ellipses, diamonds, lines and arrows. Select two nodes and **Connect with arrow** to keep the connection attached when they move. Selection commands duplicate, group, ungroup and change layer order across ink, images, text and shapes. **Save as element** stores an editable selection with a name and category; **Element library** inserts a fresh independent copy into another document.
+
+Text and remarks support a **Markdown** source/preview mode with headings, emphasis, lists, links, tables, fenced code and LaTeX math between `$` or `$$`. `++underlined text++` adds inline underline. The source remains editable; rendering uses bundled libraries and fonts, without loading remote document images. Native font availability can affect line breaks across devices.
+
 ## Windows workspace
 
 ![A Windows notebook showing a section drawing and its cross-page notes index](docs/screenshots/notebook.png)
@@ -61,7 +71,7 @@ Tool shortcuts apply outside text entry. Appearance follows Windows by default. 
 
 **Send a review to someone without Inklane.** In the browser, choose **More actions → Print review**, then save as PDF or print. The copy shows the original page with its marks, followed by each numbered remark in full. For an editable handoff, send a portable workspace instead.
 
-**Review a PDF or Office document on Windows.** Choose **Open file** on Home to open a PDF and mark its pages. Save keeps your work next to the original as `filename.pdf.inklane.json`. Share both files with another Inklane user to continue editing. Export a marked page as PNG or print it to share its visible marks. A general PDF keeps its original pages, forms and annotations in the source file.
+**Review a PDF or Office document on Windows.** Choose **Open file** on Home to open a PDF and mark its pages. Save keeps your work next to the original as `filename.pdf.inklane.json`. Share both files with another Inklane user to continue editing. Export a marked page as PNG or print it to share its visible marks and complete remarks. The development PNG export adds a notes gutter; printing appends paginated notes, including collapsed cards. If all remarks cannot fit safely in one readable PNG, export a PDF or feedback data instead. A general PDF keeps its original pages, forms and annotations in the source file.
 
 In the current development build, opening DOCX or PPTX prepares its pages automatically when LibreOffice is installed in a standard Windows installation folder. The original stays intact; Inklane keeps a local, revision-specific rendering and editable annotations. Reopening the same source returns to that review, including after it leaves the recent-file list. If the renderer is missing, the app offers its official installation page or an existing PDF export. Files with unsupported active content, external links or fields still need an export from the authoring application. The published RC.3 retains the earlier manual PDF-copy workflow.
 
@@ -75,7 +85,7 @@ In the current development build, opening DOCX or PPTX prepares its pages automa
 
 **Pass an editable review between editions.** Windows RC.3 opens portable `.inklane` notebooks, image reviews and PDF reviews. For an image or PDF, choose a parent folder. Inklane creates a new working folder containing the exact original and its editable sidecar. Saving changes updates the layer in that folder. To send the edited result back, choose **More actions → Export portable review**. For a notebook, use **Export portable notebook** or save as an editable notebook PDF.
 
-A notebook PDF contains standard Ink, FreeText and Text annotations, vector paper, placed pictures, and an attached JSON model for editable reopening in Inklane. Other PDF readers can display the page and may expose annotation contents. Their note presentation varies. Editable notebook reopening includes the original alpha format released in November 2026. A title or placed image needs RC.2 or newer. General PDF markup uses a separate schema 3 sidecar and needs RC.3 or newer on Windows. Inklane rejects detected external changes to protected notebook content. Keep third-party edits in a separate copy.
+A notebook PDF contains standard Ink, FreeText and Text annotations, vector paper, placed pictures, and an attached JSON model for editable reopening in Inklane. Other PDF readers can display the page and may expose annotation contents. Their note presentation varies. Editable notebook reopening includes the original alpha format released in November 2026. A title or placed image needs RC.2 or newer. Basic general PDF markup uses a separate schema 3 sidecar and needs RC.3 or newer on Windows. The development editor uses schema 4 when extended objects or styles are present. Inklane rejects detected external changes to protected notebook content. Keep third-party edits in a separate copy.
 
 Normal saves use atomic replacement. Inklane checks image identity and detects conflicting file changes. Local recovery snapshots follow editing pauses. Documents, recovery files and recent paths stay on this computer. Settings and recovery live in `%LOCALAPPDATA%\Inklane`. Print uses the selected Windows driver with a 150 DPI raster at the document's physical dimensions.
 

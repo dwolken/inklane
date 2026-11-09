@@ -14,7 +14,7 @@ internal static class ReviewPresentation
     internal static FlowDocument Notes(IEnumerable<(int Number, PageData Page)> pages, Size size)
     {
         var document = new FlowDocument { FontFamily = new FontFamily("Segoe UI"), FontSize = 16,
-            Foreground = Brushes.Black, Background = Brushes.White, PagePadding = new Thickness(0),
+            Foreground = Brushes.Black, Background = Brushes.Transparent, PagePadding = new Thickness(0),
             ColumnWidth = size.Width, ColumnGap = 0, PageWidth = size.Width, PageHeight = size.Height };
         foreach (var (number, page) in pages)
         {
@@ -86,10 +86,23 @@ internal static class ReviewPresentation
         if (VisualTreeHelper.GetTransform(visual) is { } own) transform.Children.Add(own);
         var offset = VisualTreeHelper.GetOffset(visual); transform.Children.Add(new TranslateTransform(offset.X, offset.Y));
         result.Transform = transform;
-        if (VisualTreeHelper.GetDrawing(visual) is { } drawing) result.Children.Add(drawing);
+        if (VisualTreeHelper.GetDrawing(visual) is { } drawing && Visible(drawing) is { } visible) result.Children.Add(visible);
         for (int index = 0; index < VisualTreeHelper.GetChildrenCount(visual); index++)
             if (VisualTreeHelper.GetChild(visual, index) is Visual child) result.Children.Add(Snapshot(child));
         return result;
+    }
+
+    private static Drawing? Visible(Drawing drawing)
+    {
+        if (drawing is DrawingGroup group)
+        {
+            var copy = new DrawingGroup { Transform = group.Transform, Opacity = group.Opacity, ClipGeometry = group.ClipGeometry };
+            foreach (var child in group.Children) if (Visible(child) is { } kept) copy.Children.Add(kept);
+            return copy.Children.Count == 0 ? null : copy;
+        }
+        if (drawing is GeometryDrawing geometry && geometry.Pen == null &&
+            (geometry.Brush == null || geometry.Brush.Opacity == 0 || geometry.Brush is SolidColorBrush { Color.A: 0 })) return null;
+        return drawing;
     }
 
     internal static DocumentPaginator AppendNotes(DocumentPaginator pages, IEnumerable<(int Number, PageData Page)> model, Size sheet, Rect printable)
@@ -118,8 +131,14 @@ internal static class ReviewPresentation
         {
             if (!dispatcher.CheckAccess()) return dispatcher.Invoke(() => GetPage(pageNumber));
             if (pageNumber < 0 || pageNumber >= PageCount) return DocumentPage.Missing;
-            if (pageNumber < source.PageCount) return source.GetPage(pageNumber);
-            var note = notes.GetPage(pageNumber - source.PageCount);
+            if (pageNumber < source.PageCount)
+            {
+                using var original = source.GetPage(pageNumber);
+                var copy = new DrawingVisual();
+                using (var context = copy.RenderOpen()) context.DrawDrawing(Snapshot(original.Visual));
+                return new DocumentPage(copy, original.Size, original.BleedBox, original.ContentBox);
+            }
+            using var note = notes.GetPage(pageNumber - source.PageCount);
             var visual = new DrawingVisual();
             using (var context = visual.RenderOpen())
             {
