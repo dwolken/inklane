@@ -12,6 +12,7 @@ namespace Inklane;
 // change a page underneath the user's handwriting. Only two rendered pages are cached.
 internal sealed class PdfBackdrop : IDisposable
 {
+    private const int WrongPassword = unchecked((int)0x8007052B); // HRESULT_FROM_WIN32(ERROR_WRONG_PASSWORD)
     private readonly IRandomAccessStream _stream;
     private readonly PdfDocument _pdf;
     private readonly Queue<(int Index, BitmapSource Image)> _cache = new();
@@ -22,8 +23,9 @@ internal sealed class PdfBackdrop : IDisposable
     private PdfBackdrop(string path, string hash, IRandomAccessStream stream, PdfDocument pdf)
     {
         Path = path; _hash = hash; _stream = stream; _pdf = pdf;
-        if (pdf.IsPasswordProtected || pdf.PageCount is 0 or > 1000)
-            throw new NotSupportedException(L.T("UnsupportedPdf"));
+        if (pdf.IsPasswordProtected) throw new NotSupportedException(L.T("PdfEncrypted"));
+        if (pdf.PageCount == 0) throw new InvalidDataException(L.T("PdfUnreadable"));
+        if (pdf.PageCount > 1000) throw new NotSupportedException(L.T("PdfTooManyPages"));
         _sizes = new Size[pdf.PageCount];
         for (int i = 0; i < _sizes.Length; i++)
         {
@@ -31,7 +33,7 @@ internal sealed class PdfBackdrop : IDisposable
             var size = page.Size; // Windows resolves the displayed crop box and page rotation.
             if (!double.IsFinite(size.Width) || !double.IsFinite(size.Height) ||
                 size.Width is < 1 or > 100000 || size.Height is < 1 or > 100000)
-                throw new InvalidDataException(L.T("PdfGeometry"));
+                throw new InvalidDataException(L.T("PdfGeometryUnsupported"));
             _sizes[i] = new Size(size.Width,size.Height);
         }
     }
@@ -51,13 +53,18 @@ internal sealed class PdfBackdrop : IDisposable
             else bytes = snapshot;
             string hash = Convert.ToHexString(SHA256.HashData(bytes));
             using var check = new MemoryStream(bytes,false);
-            var notebook = asSource ? null : DocumentStore.ReadNotebook(check);
+            var notebook = asSource ? null : ReadNotebook(check);
             if (notebook != null) return (notebook, (PdfBackdrop?)null, hash);
 
             var stream = new MemoryStream(bytes,false).AsRandomAccessStream();
             try
             {
-                var pdf = await PdfDocument.LoadFromStreamAsync(stream);
+                PdfDocument pdf;
+                try { pdf = await PdfDocument.LoadFromStreamAsync(stream); }
+                catch (Exception ex) when (ex.HResult == WrongPassword)
+                { throw new NotSupportedException(L.T("PdfEncrypted"),ex); }
+                catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or ArgumentException)
+                { throw new InvalidDataException(L.T("PdfUnreadable"),ex); }
                 var source = new PdfBackdrop(path,hash,stream,pdf);
                 return (new DocumentData
                 {
@@ -67,6 +74,22 @@ internal sealed class PdfBackdrop : IDisposable
             }
             catch { stream.Dispose(); throw; }
         });
+    }
+
+    private static DocumentData? ReadNotebook(Stream input)
+    {
+        try { return DocumentStore.ReadNotebook(input); }
+        catch (PdfReadException ex)
+        {
+            throw new NotSupportedException(L.T(ex.Problem switch
+            {
+                PdfReadProblem.Encrypted => "PdfEncrypted",
+                PdfReadProblem.NotebookChanged => "NotebookPdfChanged",
+                _ => "NotebookPdfUnsupported"
+            }),ex);
+        }
+        catch (NotSupportedException ex) { throw new NotSupportedException(L.T("PdfUnsupportedFeature"),ex); }
+        catch (InvalidDataException ex) { throw new InvalidDataException(L.T("PdfUnreadable"),ex); }
     }
 
     public void AttachWorkingCopy(string path)
@@ -94,12 +117,17 @@ internal sealed class PdfBackdrop : IDisposable
             var size = _sizes[index];
             var scale = Math.Min(2, Math.Min(4096/Math.Max(size.Width,size.Height), Math.Sqrt(8_000_000/(size.Width*size.Height))));
             using var output = new InMemoryRandomAccessStream();
-            await page.RenderToStreamAsync(output,new PdfPageRenderOptions
+            try
             {
-                DestinationWidth = (uint)Math.Max(1,Math.Round(size.Width*scale)),
-                DestinationHeight = (uint)Math.Max(1,Math.Round(size.Height*scale)),
-                BackgroundColor = Windows.UI.Color.FromArgb(255,255,255,255)
-            });
+                await page.RenderToStreamAsync(output,new PdfPageRenderOptions
+                {
+                    DestinationWidth = (uint)Math.Max(1,Math.Round(size.Width*scale)),
+                    DestinationHeight = (uint)Math.Max(1,Math.Round(size.Height*scale)),
+                    BackgroundColor = Windows.UI.Color.FromArgb(255,255,255,255)
+                });
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            { throw new InvalidDataException(L.T("PdfRenderFailed"),ex); }
             output.Seek(0);
             using var input = output.AsStreamForRead();
             var bitmap = BitmapFrame.Create(input,BitmapCreateOptions.IgnoreColorProfile,BitmapCacheOption.OnLoad);

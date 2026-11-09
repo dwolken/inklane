@@ -132,9 +132,16 @@ internal static partial class Program
         var wrong = DocumentStore.LoadJson(sidecar); wrong.Pages[1].Height += 10; DocumentStore.SaveJson(wrong,sidecar);
         int errors = state.Interaction.Messages.Count;
         w.OpenFile(file);
-        Assert(state.Interaction.Messages.Count > errors && Math.Abs(Document(w).Pages[1].Height-wrong.Pages[1].Height)>5,"Incorrect page geometry was accepted.");
+        Equal(errors+1,state.Interaction.Messages.Count);
+        Equal(L.T("PdfGeometry"),state.Interaction.Messages.Last().Text);
+        Assert(Math.Abs(Document(w).Pages[1].Height-wrong.Pages[1].Height)>5,"Incorrect page geometry was accepted.");
+        File.WriteAllText(sidecar,"not annotation data");
+        w.OpenFile(file);
+        Equal(L.T("AnnotationDataInvalid"),state.Interaction.Messages.Last().Text);
         File.WriteAllBytes(sidecar,good);
         File.AppendAllText(file,"\n% external edit");
+        w.OpenFile(file);
+        Equal(L.T("PdfChanged"),state.Interaction.Messages.Last().Text);
         AddText(w,"new unsaved observation");
         Assert(!Call<bool>(w,"Save",false) && good.SequenceEqual(File.ReadAllBytes(sidecar)) && Dirty(w),"Changed PDF source allowed destructive save.");
         var native = state.Path("native.pdf"); DocumentStore.SavePdf(Notebook("Protected"),native);
@@ -144,6 +151,35 @@ internal static partial class Program
         state.Interaction.Choices.Enqueue(1);
         errors = state.Interaction.Messages.Count; w.OpenFile(damaged);
         Assert(state.Interaction.Messages.Count > errors && Document(w).SourcePdfName=="letter.pdf" && Dirty(w),"Damaged notebook was opened as a new source.");
+        Equal(L.T("NotebookPdfUnsupported"),state.Interaction.Messages.Last().Text);
+    }
+
+    private static void OpenFailureMessages()
+    {
+        using var state = new WindowCase("open-diagnostics");
+        var baseline = State(state.Window);
+        var encrypted = state.Path("protected.pdf");
+        using (var pdf = new PdfDocument())
+        {
+            pdf.AddPage();
+            pdf.SecuritySettings.UserPassword = "test-only-password";
+            pdf.Save(encrypted);
+        }
+        foreach (var (file,key) in new[]
+        {
+            ("protected.pdf","PdfEncrypted"), ("broken.pdf","PdfUnreadable"),
+            ("broken.png","ImageUnreadable"), ("broken.docx","OfficeInvalid"),
+            ("unsupported.txt","OpenUnsupportedFormat"), ("missing.pdf","OpenMissing")
+        })
+        {
+            var path = state.Path(file);
+            if (file.StartsWith("broken") || file == "unsupported.txt") File.WriteAllText(path,"invalid fixture");
+            var count = state.Interaction.Messages.Count;
+            state.Window.OpenFile(path);
+            Equal(count+1,state.Interaction.Messages.Count);
+            Equal(L.T(key),state.Interaction.Messages.Last().Text);
+            Equal(baseline,State(state.Window));
+        }
     }
 
     private static void DetachedPdfSidecar()

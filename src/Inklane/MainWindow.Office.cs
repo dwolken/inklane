@@ -23,13 +23,15 @@ public sealed partial class MainWindow
         if (!source.Exists) throw new FileNotFoundException(null, officePath);
         if (source.Length > 256L * 1024 * 1024) throw new InvalidDataException(L.T("OfficeSizeLimit"));
         // Read only the ZIP directory. Never execute document code or resolve Office links.
-        using (var package = ZipFile.OpenRead(officePath))
+        try
         {
+            using var package = ZipFile.OpenRead(officePath);
             var mainPart = source.Extension.Equals(".docx", StringComparison.OrdinalIgnoreCase)
                 ? "word/document.xml" : "ppt/presentation.xml";
             if (package.GetEntry("[Content_Types].xml") == null || package.GetEntry(mainPart) == null)
-                throw new InvalidDataException(L.T("OfficeInvalid"));
+                throw new InvalidDataException("Required Office package entries are missing.");
         }
+        catch (InvalidDataException ex) { throw new InvalidDataException(L.T("OfficeInvalid"),ex); }
         var sourceHash = DocumentStore.GetFileHash(officePath);
         var previous = Settings.Current.OfficeReviews.FirstOrDefault(link => SamePath(link.OfficePath, officePath));
         var sourceChanged = previous != null && previous.OfficeHash != sourceHash;

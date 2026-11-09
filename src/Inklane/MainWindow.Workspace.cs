@@ -213,7 +213,7 @@ public sealed partial class MainWindow
     private ContextMenu EditorMenu()
     {
         var menu = new ContextMenu();
-        Command(menu, "OpenImage", () => PickFile("ImageFilter"));
+        Command(menu, "OpenFile", OpenDialog, "Ctrl+O");
         Command(menu, "NewNotebook", NewNotebook, "Ctrl+N");
         Command(menu, "SaveAs", () => Save(true), "Ctrl+Shift+S");
         menu.Items.Add(new Separator());

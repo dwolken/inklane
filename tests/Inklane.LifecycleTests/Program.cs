@@ -66,6 +66,7 @@ internal static partial class Program
         Run("Notebook feedback requires a saved matching PDF and honors cancellation", NotebookFeedback);
         Run("PDF recovery verifies original identity before restoring unsaved markup", PdfMarkupRecovery);
         Run("Corrupt notebook markers, sidecar dimensions and source changes never fall back silently", PdfMarkupGuards);
+        Run("Open distinguishes protected, unreadable, unsupported and missing files", OpenFailureMessages);
         Run("A separately saved PDF sidecar locates a matching source and respects cancellation", DetachedPdfSidecar);
         Console.WriteLine($"{checks - failures}/{checks} checks passed. Artifacts: {output}");
         app.Shutdown();
