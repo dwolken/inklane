@@ -1492,6 +1492,13 @@ $("#fit").onclick = () => {
   resize();
 };
 $("#close-card").onclick = closeCard;
+// Keep the field focused until click commits the collapse. Blurring it on press
+// can dismiss a phone keyboard and move this button before the finger releases.
+// Cancel only the focus-producing mouse event; canceling touch pointerdown also
+// suppresses the eventual click in WebKit.
+$("#close-card").onmousedown = (event) => {
+  if (event.button === 0) event.preventDefault();
+};
 const closeMenu = () => ($("#more").open = false);
 $("#shortcuts").onclick = () => {
   closeMenu();

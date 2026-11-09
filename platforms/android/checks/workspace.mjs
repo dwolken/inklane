@@ -64,8 +64,8 @@ const visible = s => js('!!'+find(s)+'?.getClientRects().length');
 async function tap(sel, fx=.5, fy=.5) {
   await waitFor(()=>visible(sel),sel);
   const {x,y}=await js('(()=>{const e='+find(sel)+';e.scrollIntoView({block:"nearest"});const r=e.getBoundingClientRect();return {x:r.left+r.width*'+fx+',y:r.top+r.height*'+fy+'}})()');
-  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x,y});
-  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x,y});
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1,radiusX:1,radiusY:1,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
 }
 async function type(sel,value) {
   await waitFor(()=>visible(sel),'visible text field '+sel);
@@ -115,6 +115,16 @@ try {
   assert.equal(await js('globalThis.inklaneLaunchMotion === false && !document.querySelector(".brand").classList.contains("launch")'),true,
     'Android keeps the OS-native static launch and opens the usable workspace immediately');
   await waitFor(()=>js('document.querySelector(".brand img").complete && document.querySelector(".brand img").naturalWidth > 0'),'bundled brand asset');
+  await js(`(() => {
+    window.__reviewInputs = [];
+    for (const type of ['pointerdown','pointerup','pointercancel','click','focusout']) {
+      document.addEventListener(type, event => {
+        __reviewInputs.push({type,target:event.target.id || event.target.tagName,pointer:event.pointerType,
+          x:event.clientX,y:event.clientY,focus:document.activeElement?.id,width:innerWidth,height:innerHeight});
+        if (__reviewInputs.length > 30) __reviewInputs.shift();
+      }, true);
+    }
+  })()`);
   await tap('#new-notebook');
   await type('#book-title',title);
   await js('document.querySelector("#paper-form").requestSubmit()');
@@ -277,6 +287,7 @@ try {
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
   console.error('WebView startup diagnostics:', JSON.stringify(startupDiagnostics));
+  console.error('Recent input events:', await js('JSON.stringify(window.__reviewInputs || [])').catch(()=>'unavailable'));
   console.error('Module startup state:', await js('JSON.stringify({ready:document.readyState,busy:document.body.getAttribute("aria-busy"),handler:typeof document.querySelector("#new-notebook")?.onclick,error:document.querySelector("#startup-error")?.textContent,resources:performance.getEntriesByType("resource").filter(r=>/\\.m?js(?:$|\\?)/.test(r.name)).map(r=>({url:r.name,duration:r.duration,size:r.decodedBodySize}))})').catch(()=>'unavailable'));
   try { mkdirSync('.scratch',{recursive:true}); writeFileSync('.scratch/android-failure.png',execFileSync('adb',['exec-out','screencap','-p'],{timeout:15000})); }
   catch (captureError) { console.error('Failure screenshot unavailable:',captureError.message); }
