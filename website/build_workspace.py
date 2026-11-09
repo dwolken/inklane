@@ -20,7 +20,7 @@ def build_workspace(output):
         copyfile(src, target)
         files.append(path)
 
-    for name in ("index.html", "editor.js", "editor.css", "language.js", "model.js", "pdf-source.js",
+    for name in ("index.html", "boot.js", "editor.js", "editor.css", "language.js", "model.js", "pdf-source.js",
                  "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "continuous.js", "startup.js", "register-offline.js", "manifest.webmanifest"):
         stage(SOURCE / "editor" / name, name)
     for size in [180, 192, 512]:

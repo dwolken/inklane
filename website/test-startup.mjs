@@ -2,6 +2,42 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
 export async function verifyStartup(browser, base, output) {
+  // Hold the editor module to reproduce visible markup before its handlers exist.
+  const pending = await browser.newContext({ viewport: { width: 900, height: 720 } });
+  try {
+    let resume, observed;
+    const held = new Promise(resolve => { resume = resolve; });
+    const requested = new Promise(resolve => { observed = resolve; });
+    await pending.route("**/editor/editor.js", async route => { observed(); await held; await route.continue(); });
+    const page = await pending.newPage();
+    await page.goto(base + "editor/?lang=en", { waitUntil: "domcontentloaded" });
+    await requested;
+    for (const id of ["start", "new-notebook", "sample-link"]) assert.equal(await page.locator("#" + id).isDisabled(), true);
+    assert.equal(await page.locator("body").getAttribute("aria-busy"), "true");
+    const bounds = await page.locator("#new-notebook").boundingBox();
+    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    assert.equal(await page.locator("#new-document").isVisible(), false);
+    resume();
+    await page.locator("#new-notebook").click();
+    await page.locator("#book-title").waitFor();
+  } finally { await pending.close(); }
+
+  for (const language of ["en", "de"]) {
+    const context = await browser.newContext({ viewport: { width: 900, height: 720 } });
+    try {
+      await context.route("**/editor/editor.js", route => route.abort("failed"));
+      const page = await context.newPage();
+      await page.goto(base + "editor/?lang=" + language);
+      await page.locator("#startup-error").waitFor();
+      assert.equal(await page.locator("#new-notebook").isDisabled(), true);
+      const retry = page.getByRole("button", { name: language === "de" ? "Erneut laden" : "Reload", exact: true });
+      await page.screenshot({ path: resolve(output, "startup-recovery-" + language + ".png") });
+      await context.unroute("**/editor/editor.js");
+      await retry.click();
+      await page.locator("#new-notebook").click();
+      await page.locator("#book-title").waitFor();
+    } finally { await context.close(); }
+  }
   for (const scenario of [
     { name: "desktop-light", width: 1200, scheme: "light", motion: true },
     { name: "desktop-dark", width: 1200, scheme: "dark", motion: true },
@@ -40,6 +76,7 @@ export async function verifyStartup(browser, base, output) {
       const page = await context.newPage();
       await page.goto(base + "editor/?lang=en");
       await page.locator("#start").waitFor();
+      await page.waitForFunction(() => !document.querySelector("#start").disabled);
       if (scenario.motion) await page.waitForFunction(() => launchObservations.length > 0);
       await page.waitForFunction(() => !document.querySelector(".brand").classList.contains("launch"));
       const observations = await page.evaluate(() => launchObservations);

@@ -35,8 +35,14 @@ const socket = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve,reject) => {socket.onopen=resolve;socket.onerror=reject;});
 let sequence = 0;
 const pending = new Map();
+const startupDiagnostics = [];
 socket.onmessage = ({data}) => {
   const msg = JSON.parse(data);
+  if (msg.method === 'Runtime.exceptionThrown') startupDiagnostics.push(msg.params.exceptionDetails);
+  if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
+    startupDiagnostics.push(msg.params.args.map(arg => arg.description || arg.value));
+  if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') startupDiagnostics.push(msg.params.entry);
+  if (msg.method === 'Network.loadingFailed') startupDiagnostics.push(msg.params);
   const call = pending.get(msg.id);
   if (!call) return;
   pending.delete(msg.id);
@@ -99,7 +105,12 @@ const saveButton = n => /^save$/i.test(n.text) && n.enabled==='true';
 const fresh = mkdtempSync(join(tmpdir(),'inklane-android-'));
 const title = 'AndroidReview';
 try {
+  await command('Runtime.enable',{});
+  await command('Log.enable',{});
+  await command('Network.enable',{});
   await waitFor(()=>visible('#new-notebook'), 'document home');
+  await waitFor(()=>js('document.body.getAttribute("aria-busy") !== "true" && typeof document.querySelector("#new-notebook")?.onclick === "function" && !document.querySelector("#new-notebook").disabled'),
+    'initialized document controls');
   assert.equal(await js('isSecureContext && typeof inklaneSaveCopy === "function"'),true);
   assert.equal(await js('globalThis.inklaneLaunchMotion === false && !document.querySelector(".brand").classList.contains("launch")'),true,
     'Android keeps the OS-native static launch and opens the usable workspace immediately');
@@ -265,6 +276,10 @@ try {
   console.log('Android schema4 rich math/code editing, text resize/recolor, grouped connector movement/undo, native save/reopen and PNG pixels passed.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
+  console.error('WebView startup diagnostics:', JSON.stringify(startupDiagnostics));
+  console.error('Module startup state:', await js('JSON.stringify({ready:document.readyState,busy:document.body.getAttribute("aria-busy"),handler:typeof document.querySelector("#new-notebook")?.onclick,error:document.querySelector("#startup-error")?.textContent,resources:performance.getEntriesByType("resource").filter(r=>/\\.m?js(?:$|\\?)/.test(r.name)).map(r=>({url:r.name,duration:r.duration,size:r.decodedBodySize}))})').catch(()=>'unavailable'));
+  try { mkdirSync('.scratch',{recursive:true}); writeFileSync('.scratch/android-failure.png',execFileSync('adb',['exec-out','screencap','-p'],{timeout:15000})); }
+  catch (captureError) { console.error('Failure screenshot unavailable:',captureError.message); }
   console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),focus:document.activeElement?.id,deviceTap:window.__deviceTap,cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));
   throw error;
 } finally {
