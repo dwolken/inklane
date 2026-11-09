@@ -1,10 +1,10 @@
 name: Linux desktop workspace
 on:
   pull_request:
-    paths: ['platforms/linux/**', 'platforms/apple/Sources/NativeSave.js', 'website/**', 'tests/fixtures/browser-notebook.inklane', 'src/Inklane/Assets/**', '.github/workflows/linux.yml']
+    paths: ['platforms/linux/**', 'platforms/apple/Sources/NativeSave.js', 'website/**', 'tests/browser-pdf-host.js', 'tests/fixtures/rich-host-review.json', 'tests/fixtures/browser-notebook.inklane', 'src/Inklane/Assets/**', '.github/workflows/linux.yml']
   push:
     branches: [main]
-    paths: ['platforms/linux/**', 'platforms/apple/Sources/NativeSave.js', 'website/**', 'tests/fixtures/browser-notebook.inklane', 'src/Inklane/Assets/**', '.github/workflows/linux.yml']
+    paths: ['platforms/linux/**', 'platforms/apple/Sources/NativeSave.js', 'website/**', 'tests/browser-pdf-host.js', 'tests/fixtures/rich-host-review.json', 'tests/fixtures/browser-notebook.inklane', 'src/Inklane/Assets/**', '.github/workflows/linux.yml']
   workflow_dispatch:
 
 permissions:

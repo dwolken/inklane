@@ -16,4 +16,4 @@ adb install -r platforms/android/build/outputs/apk/debug/*-debug.apk
 
 On Windows, pass the APK's filename to `adb install`. The Gradle build generates its private copy of the workspace from the locked browser dependencies. Set the Gradle property `python` to select a different Python executable.
 
-The [Android workflow](../../.github/workflows/android.yml) builds a debug package and exercises it on an API 36 emulator. It opens the app, annotates a notebook, cancels a save, writes a portable copy through Android's document picker, and reopens that file. The workflow does not distribute its package. No Google Play release is available.
+The [Android workflow](../../.github/workflows/android.yml) builds a debug package and exercises it on an API 36 emulator. It opens the app, annotates a notebook, cancels a save, writes a portable copy through Android's document picker, and reopens that file. Its PDF journey cancels and then approves a system destination, verifies the saved bytes, and renders the source page and the last page of a long remarks appendix. The workflow does not distribute its package. No Google Play release is available.
