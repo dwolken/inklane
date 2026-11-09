@@ -118,7 +118,8 @@ final class WorkspaceTests: XCTestCase {
         if FileManager.default.fileExists(atPath: cache.appendingPathComponent("Inklane-screen.armed").path) {
             try Data().write(to: cache.appendingPathComponent("Inklane-screen.ready"), options: .atomic)
             let done = cache.appendingPathComponent("Inklane-screen.done").path
-            for _ in 0..<400 {
+            // Allow two 60-second compositor attempts plus process/handshake overhead.
+            for _ in 0..<1500 {
                 if FileManager.default.fileExists(atPath: done) { break }
                 try await Task.sleep(nanoseconds: 100_000_000)
             }
