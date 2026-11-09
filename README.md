@@ -1,6 +1,6 @@
 # Inklane
 
-[Product website](https://dwolken.github.io/inklane/) · [Open the browser editor](https://dwolken.github.io/inklane/editor/) · [Windows downloads](https://github.com/dwolken/inklane/releases)
+[Product website](https://dwolken.github.io/inklane/) · [Open the browser editor](https://dwolken.github.io/inklane/editor/) · [Windows release candidate](https://github.com/dwolken/inklane/releases/tag/v1.0.0-rc.2) · [Release history](https://github.com/dwolken/inklane/releases)
 
 Inklane keeps feedback on the material it describes. Circle a detail, type a correction, or pin a longer explanation to its place on the page. Collapse the explanation to see the original again. [Try it on the field guide](https://dwolken.github.io/inklane/editor/?sample=review).
 
@@ -22,11 +22,13 @@ The shared workspace can also be built as an offline [Android app](platforms/and
 
 ![A Windows notebook showing a section drawing and its cross-page notes index](docs/screenshots/notebook.png)
 
-**Images.** Choose **Open an image** on Home. PNG and JPEG files open at a scale that shows the whole image. Use ← and → to browse other images in the folder. Click the image counter to jump to a filename. The list follows Explorer-style numeric order and updates when files are added or removed. Save writes the editable ink, text and notes to a neighboring `.inklane.json` file. Keep the image and its sidecar together. **More actions → Export annotated PNG** creates a separate image for sharing.
+**Images.** Choose **Open file** on Home in the current Windows build. PNG and JPEG files open at a scale that shows the whole image. Use ← and → to browse other images in the folder. Click the image counter to jump to a filename. The list follows Explorer-style numeric order and updates when files are added or removed. Save writes the editable ink, text and notes to a neighboring `.inklane.json` file. Keep the image and its sidecar together. **More actions → Export annotated PNG** creates a separate image for sharing.
 
 ![An architectural plan with editable ink and numbered image notes in the German dark workspace](docs/screenshots/image.png)
 
 **Notebooks.** Choose **New notebook**, then select A4 or A5, orientation, and blank, ruled or squared paper. The live preview shows the result. Patterned paper supports 5 mm, 10 mm and custom spacing with adjustable margins. Click the notebook title to rename it. The title stays separate from the PDF filename and location. New pages inherit the current paper. Click the page counter to jump, or right-click it to duplicate, reorder or remove pages. These commands are also available under **More actions → Pages**. The initial writing view fills the available width up to 140%. Scroll down the sheet to continue writing. The zoom menu also offers full width, whole page and actual size.
+
+**Page views.** In the current Windows build, choose **More actions → Page view → Continuous scroll** for a vertical stack of pages in a notebook, PDF, or Office review. Click a visible neighboring page to edit it, or scroll past the current page. **Single page** restores the focused view. Both views use the same editable annotations.
 
 **Anchored notes.** Choose **Note** and click a point on the document. Type in the card and collapse it to its number. Click the card heading to name it, or choose **Rename note** from its context menu. Unnamed notes keep their number. Use **Notes** in the header to search note titles and contents or return to an anchor. Reading a note leaves the saved state clean. An explicit save retains the card presentation alongside its text and location.
 
