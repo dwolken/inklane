@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Inklane — motion source</title>
+<style>*{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111114;font:14px system-ui}svg{width:100%;height:auto;display:block}footer{padding:18px 28px;display:flex;gap:20px;align-items:center;border-top:1px solid #ddd}button{border:1px solid #ddd;border-radius:8px;padding:10px 16px;background:white;font:inherit;cursor:pointer}input{flex:1}output{font-variant-numeric:tabular-nums;min-width:48px}body.render svg{width:1920px;height:1080px}body.render footer{display:none}</style>
+<svg id="film" xmlns="http://www.w3.org/2000/svg" aria-label="The pen draws an ink stroke; a frame encloses it; the Inklane wordmark appears."></svg><footer><button id="replay">Replay</button><button id="theme">Dark</button><input id="seek" type="range" min="0" max="5.2" step="0.001" aria-label="Animation time"><output id="time">0.00 s</output></footer>
+<script type="module">
+import {mountFilm} from './motion.mjs';
+const data=await(await fetch('./geometry.json')).json(),svg=document.querySelector('svg');
+let dark=false,film=mountFilm(svg,data.contact),start=null,playing=false;
+const seek=document.querySelector('#seek'),time=document.querySelector('#time');
+seek.max=film.duration;
+window.renderFrame=t=>{seek.value=t;time.textContent=t.toFixed(2)+' s';return film.renderFrame(t)};
+function tick(now){if(!playing)return;start??=now;const t=Math.min(film.duration,(now-start)/1000);window.renderFrame(t);if(t<film.duration)requestAnimationFrame(tick);else playing=false;}
+function play(){start=null;playing=true;requestAnimationFrame(tick)}
+document.querySelector('#replay').onclick=play;
+document.querySelector('#theme').onclick=()=>{playing=false;dark=!dark;film=mountFilm(svg,data.contact,{dark});document.querySelector('#theme').textContent=dark?'Light':'Dark';window.renderFrame(film.duration)};
+seek.oninput=()=>{playing=false;window.renderFrame(Number(seek.value))};
+if(location.search.includes('render')){document.body.className='render';window.renderFrame(0)}else if(matchMedia('(prefers-reduced-motion: reduce)').matches)window.renderFrame(film.duration);else play();
+window.filmReady=true;
+</script></html>
