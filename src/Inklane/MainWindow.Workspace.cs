@@ -76,20 +76,17 @@ public sealed partial class MainWindow
     private static TextBlock InlineCaption(string text) =>
         new() { Text = text, Margin = new Thickness(6,0,4,0), VerticalAlignment = VerticalAlignment.Center };
 
-    private static Image BrandMark(int size)
+    private static Image BrandLockup(int height)
     {
-        var uri = new Uri("pack://application:,,,/Inklane;component/Assets/inklane.ico");
-        var decoder = BitmapDecoder.Create(uri, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        var frame = decoder.Frames.OrderBy(f => Math.Abs(f.PixelWidth - size * 2)).First();
-        return new Image { Source = frame, Width = size, Height = size, Stretch = Stretch.Uniform };
+        var image = new Image { Height = height, Width = height * 247.374 / 64, Stretch = Stretch.Uniform };
+        image.SetResourceReference(Image.SourceProperty, "BrandLockupImage");
+        AutomationProperties.SetName(image, "Inklane");
+        return image;
     }
 
     private static Button BrandButton(Action action)
     {
-        var mark = BrandMark(29);
-        var word = Studio.Label("Inklane", 17, strong: true);
-        word.Margin = new Thickness(7,0,1,0);
-        var button = new Button { Content = Studio.Line(mark,word), ToolTip = L.T("Start"), Padding = new Thickness(4) };
+        var button = new Button { Content = BrandLockup(29), ToolTip = L.T("Start"), Padding = new Thickness(4) };
         button.SetResourceReference(StyleProperty, "QuietButton");
         AutomationProperties.SetName(button, L.T("Start"));
         button.Click += (_, _) => action();

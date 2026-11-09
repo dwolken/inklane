@@ -43,6 +43,9 @@ public partial class App : Application
         };
         var window = new MainWindow();
         MainWindow = window;
+        // Only a normal cold Home launch gets a brief mark reveal. File opens,
+        // recovery, and all document controls keep their existing startup path.
+        if (!SmokeTest && !e.Args.Any(a => !a.StartsWith("--") && File.Exists(a))) window.PrepareStartupBrandMotion();
         window.Show();
         window.Dispatcher.BeginInvoke(async () =>
         {
