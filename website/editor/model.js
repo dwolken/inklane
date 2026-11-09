@@ -396,7 +396,27 @@ export function serialize(document) {
       : extended
         ? 2
         : document.schemaVersion;
-  const json = JSON.stringify({ ...document, schemaVersion }, null, 2);
+  // Validation supplies defaults for old documents. Omit those same default
+  // values on every save, so creating, reopening and saving a review does not
+  // change its bytes simply because the reader filled in optional properties.
+  // Clone only known records; unknown properties and all nondefault values survive.
+  const commonDefaults = { opacity: 1, groupId: "", layer: 0 };
+  const styleDefaults = {
+    ...commonDefaults, rotation: 0, fontFamily: "Segoe UI",
+    bold: false, italic: false, underline: false, alignment: "Left", contentFormat: "Plain",
+  };
+  const compact = (object, values = styleDefaults) => {
+    const copy = { ...object };
+    for (const [key, value] of Object.entries(values)) if (copy[key] === value) delete copy[key];
+    return copy;
+  };
+  const pages = document.pages.map(page => {
+    const result = { ...page, ink: page.ink.map(o => compact(o, commonDefaults)), items: page.items.map(o => compact(o)), images: page.images.map(o => compact(o, { ...commonDefaults, rotation: 0 })) };
+    if (page.shapes?.length) result.shapes = page.shapes.map(o => compact(o, { ...commonDefaults, rotation: 0, label: "", startId: null, endId: null, flipX: false, flipY: false }));
+    else delete result.shapes;
+    return result;
+  });
+  const json = JSON.stringify({ ...document, schemaVersion, pages }, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   check(blob.size <= JSON_LIMIT, "size");
   return blob;

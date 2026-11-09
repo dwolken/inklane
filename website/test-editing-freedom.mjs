@@ -57,6 +57,14 @@ export async function verifyEditingFreedom(browser, base, output) {
   }
   try {
     await page.goto(base + "editor/");
+    await click("sample-link");
+    await page.locator(".marker").first().waitFor();
+    const originalSample = await download("sample-first-save.inklane");
+    await page.locator("#files").setInputFiles(originalSample.path);
+    await page.waitForFunction(() => !document.querySelector("#open").disabled);
+    const reopenedSample = await download("sample-second-save.inklane");
+    assert.deepEqual(await readFile(reopenedSample.path), await readFile(originalSample.path), "An unchanged review preserves source and metadata bytes after reopening");
+    await page.locator("#more summary").click(); await click("home");
     await click("new-notebook");
     await page.locator("#paper-form button.primary").click();
     await page.locator("#more summary").click();
