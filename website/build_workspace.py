@@ -21,7 +21,7 @@ def build_workspace(output):
         files.append(path)
 
     for name in ("index.html", "editor.js", "editor.css", "language.js", "model.js", "pdf-source.js",
-                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "register-offline.js", "manifest.webmanifest"):
+                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "continuous.js", "register-offline.js", "manifest.webmanifest"):
         stage(SOURCE / "editor" / name, name)
     for size in [180, 192, 512]:
         name = f"icons/app-{size}.png"

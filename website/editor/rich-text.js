@@ -115,7 +115,7 @@ export function renderText(element, item) {
   for (const link of element.querySelectorAll("a")) {
     if (!/^(https?:|mailto:)/i.test(link.getAttribute("href") || ""))
       link.removeAttribute("href");
-    link.target = "_blank";
+    link.target = globalThis.inklaneNativeHost ? "_self" : "_blank";
     link.rel = "noopener noreferrer";
   }
 }

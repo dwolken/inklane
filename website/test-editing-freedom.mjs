@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export async function verifyEditingFreedom(browser, base, output) {
   const context = await browser.newContext({
@@ -66,12 +67,10 @@ export async function verifyEditingFreedom(browser, base, output) {
       .locator(".placed-editor")
       .fill("A box that wraps without changing its font size.");
     await page.keyboard.press("Escape");
-    const before = await page
-      .locator(".placed")
-      .evaluate((el) => ({
-        width: el.clientWidth,
-        font: getComputedStyle(el).fontSize,
-      }));
+    const before = await page.locator(".placed").evaluate((el) => ({
+      width: el.clientWidth,
+      font: getComputedStyle(el).fontSize,
+    }));
     const handle = await page.locator("[data-resize=e]").boundingBox();
     await page.mouse.move(
       handle.x + handle.width / 2,
@@ -84,12 +83,10 @@ export async function verifyEditingFreedom(browser, base, output) {
       { steps: 6 },
     );
     await page.mouse.up();
-    const after = await page
-      .locator(".placed")
-      .evaluate((el) => ({
-        width: el.clientWidth,
-        font: getComputedStyle(el).fontSize,
-      }));
+    const after = await page.locator(".placed").evaluate((el) => ({
+      width: el.clientWidth,
+      font: getComputedStyle(el).fontSize,
+    }));
     assert.ok(after.width > before.width + 70);
     assert.equal(
       after.font,
@@ -167,11 +164,34 @@ export async function verifyEditingFreedom(browser, base, output) {
     assert.equal(text.alignment, "Center");
     assert.equal(text.contentFormat, "Markdown");
     assert.equal(text.text, markdown);
+    await page.keyboard.press("Control+a");
+    await click("properties");
+    const answers = ["Review component", "Examples"];
+    const answer = (d) => d.accept(answers.shift());
+    page.on("dialog", answer);
+    await click("save-element");
+    page.off("dialog", answer);
+    await click("close-properties");
+    assert.equal(
+      await page.evaluate(
+        () => JSON.parse(localStorage.getItem("inklane.elements")).length,
+      ),
+      1,
+    );
     page.once("dialog", (d) => d.accept());
     await page.locator("#files").setInputFiles(saved.path);
     await page.waitForFunction(() => !document.querySelector("#open").disabled);
     assert.equal(await page.locator(".placed .katex").count(), 1);
     assert.equal(await page.locator("[data-shape]").count(), 3);
+    await click("properties");
+    await click("open-elements");
+    await page.locator(".element-row button").first().click();
+    await page.waitForFunction(
+      () => document.querySelectorAll("[data-shape]").length === 6,
+    );
+    await page.keyboard.press("Control+z");
+    assert.equal(await page.locator("[data-shape]").count(), 3);
+    await click("close-properties");
     await tool("note");
     await tap(0.8, 0.4);
     await page
@@ -228,12 +248,96 @@ export async function verifyEditingFreedom(browser, base, output) {
     await printed.goto(base + "editor/");
     await printed.setContent(markup);
     await printed.evaluate(() => document.fonts.ready);
-    await printed.pdf({
+    if(browser.browserType().name()==="chromium")await printed.pdf({
       path: resolve(output, "editing-rich.pdf"),
       preferCSSPageSize: true,
       printBackground: true,
     });
+    else await printed.screenshot({path:resolve(output,"editing-rich-print-"+browser.browserType().name()+".png"),fullPage:true});
     await printed.close();
+    await page.locator("#more summary").click();
+    const pngDownload = page.waitForEvent("download");
+    await click("export-image");
+    const png = await pngDownload;
+    await png.saveAs(resolve(output, "editing-rich.png"));
+    const pngBytes = await readFile(resolve(output, "editing-rich.png"));
+    assert.equal(pngBytes.subarray(1, 4).toString(), "PNG");
+    assert.ok(
+      pngBytes.readUInt32BE(16) > 1500,
+      "Image export includes the page and full remark gutter",
+    );
+    if (process.env.CROSS_NATIVE_WORKSPACE) {
+      await page
+        .locator("#files")
+        .setInputFiles(process.env.CROSS_NATIVE_WORKSPACE);
+      await page.waitForFunction(
+        () => !document.querySelector("#open").disabled,
+      );
+      assert.equal(await page.locator(".placed .katex").count(), 1);
+      assert.equal(await page.locator("[data-shape]").count(), 3);
+      const roundtrip = await download("native-browser-verified.inklane");
+      assert.equal(roundtrip.document.pages[0].items[0].text, markdown);
+      assert.equal(
+        roundtrip.document.pages[0].items[0].contentFormat,
+        "Markdown",
+      );
+    }
+    await click("add-page");
+    await page.locator("#more summary").click();
+    await click("continuous-view");
+    assert.equal(await page.locator(".page-slot").count(), 2);
+    await page
+      .locator('.page-slot[data-page="0"]')
+      .click({ position: { x: 30, y: 30 } });
+    await page.waitForFunction(
+      () => document.querySelector("#sheet").parentElement.dataset.page === "0",
+    );
+    assert.equal(await page.locator(".placed .katex").count(), 1);
+    await page
+      .locator('.page-slot[data-page="1"]')
+      .click({ position: { x: 30, y: 30 } });
+    await page.waitForFunction(
+      () => document.querySelector("#sheet").parentElement.dataset.page === "1",
+    );
+    await tool("text");
+    await tap(0.15, 0.15);
+    await page.locator(".placed-editor").fill("Second page remains editable");
+    await page.keyboard.press("Escape");
+    const continuous = await download("continuous-rich.inklane");
+    assert.equal(continuous.document.pages.length, 2);
+    assert.equal(
+      continuous.document.pages[1].items[0].text,
+      "Second page remains editable",
+    );
+    await page.screenshot({ path: resolve(output, "editing-continuous.png") });
+    await page.locator("#more summary").click();
+    await click("continuous-view");
+    assert.equal(await page.locator(".page-slot").count(), 0);
+    page.once("dialog", (d) => d.accept());
+    await page
+      .locator("#files")
+      .setInputFiles(
+        fileURLToPath(new URL("./fixtures/review-pages.pdf", import.meta.url)),
+      );
+    await page.waitForFunction(() => !document.querySelector("#open").disabled);
+    await page.locator("#more summary").click();
+    await click("continuous-view");
+    await page
+      .locator('.page-slot[data-page="1"]')
+      .click({ position: { x: 30, y: 30 } });
+    await page.waitForFunction(
+      () => document.querySelector("#sheet").parentElement.dataset.page === "1",
+    );
+    await tool("note");
+    await tap(0.3, 0.3);
+    await page.locator("#note-body").fill("Review of the second source page");
+    await click("close-card");
+    const review = await download("continuous-review.inklane");
+    assert.equal(review.document.kind, "Pdf");
+    assert.equal(
+      review.document.pages[1].items[0].text,
+      "Review of the second source page",
+    );
     assert.deepEqual(errors, []);
     console.log(
       "Passed text reflow, post-creation formatting, full HEX colors, safe Markdown/code/LaTeX, connected diagrams, grouping/duplication/undo, remark resize, and schema4 portable save/reopen.",

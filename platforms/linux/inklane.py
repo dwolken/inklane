@@ -80,7 +80,7 @@ class Exports:
             if (self.pending or self.presenting or not isinstance(size, int) or not 0 <= size <= MAX_BYTES
                     or not isinstance(name,str) or name in ("",".","..") or Path(name).name != name
                     or len(name)>255 or any(ord(c)<32 for c in name)
-                    or not name.lower().endswith((".inklane", ".inklane.json", ".feedback.json"))):
+                    or not name.lower().endswith((".inklane", ".inklane.json", ".feedback.json", ".png"))):
                 raise ValueError("Invalid export.")
             self.pending = dict(name=name,size=size,token=secrets.token_hex(24),stream=tempfile.TemporaryFile())
             return self.pending["token"]
@@ -111,7 +111,7 @@ class Exports:
             if destination is None:
                 return "cancelled"
             destination = Path(destination)
-            suffix = next(ext for ext in (".inklane.json",".feedback.json",".inklane") if transfer["name"].lower().endswith(ext))
+            suffix = next(ext for ext in (".inklane.json",".feedback.json",".inklane",".png") if transfer["name"].lower().endswith(ext))
             if not destination.name.lower().endswith(suffix):
                 raise ValueError("Unexpected file extension.")
             # Publish an entirely written file. Never replace a source or a newly appeared destination.
@@ -208,7 +208,15 @@ class Inklane(Gtk.Application):
             decision.ignore()
             return True
         if kind == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
-            uri=decision.get_navigation_action().get_request().get_uri()
+            action=decision.get_navigation_action()
+            uri=action.get_request().get_uri()
+            if (action.get_navigation_type()==WebKit2.NavigationType.LINK_CLICKED
+                    and self.valid_document(view.get_uri()) and urlsplit(uri).scheme in ("https","http","mailto")
+                    and not self.valid_document(uri)):
+                try: Gio.AppInfo.launch_default_for_uri(uri,None)
+                except GLib.Error: pass
+                decision.ignore()
+                return True
             if not self.valid_document(uri):
                 decision.ignore()
                 return True

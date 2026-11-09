@@ -1,4 +1,17 @@
 const labels = {
+  continuousView: ["Continuous scroll", "Fortlaufend scrollen"],
+  singlePageView: ["Single page", "Einzelne Seite"],
+  activatePage: ["Select page to edit", "Seite zum Bearbeiten auswählen"],
+  exportImage: ["Export page as PNG…", "Seite als PNG exportieren …"],
+  imageTooTall: [
+    "These remarks are too long for a readable image. Use Print review to export a PDF with all remarks.",
+    "Diese Anmerkungen sind für ein lesbares Bild zu lang. Über Mit Anmerkungen drucken können Sie ein PDF mit allen Anmerkungen erstellen.",
+  ],
+  imageExportFailed: [
+    "The page could not be exported as an image. Try Print review for PDF output.",
+    "Die Seite konnte nicht als Bild exportiert werden. Versuchen Sie ein PDF über Mit Anmerkungen drucken.",
+  ],
+
   colorTarget: ["Color target", "Farbbereich"],
   strokeColor: ["Stroke / text", "Linie / Text"],
   linkText: ["Link text", "Linktext"],
@@ -27,8 +40,8 @@ const labels = {
   strokeWidth: ["Stroke", "Linienstärke"],
   shapeLabel: ["Label", "Beschriftung"],
   connectorHint: [
-    "Draw a line or arrow from one object to another to attach it.",
-    "Ziehen Sie eine Linie oder einen Pfeil zwischen Objekten, um sie zu verbinden.",
+    "Draw a line or arrow between shapes to connect them. Moving the connector alone detaches its ends.",
+    "Ziehen Sie eine Linie oder einen Pfeil zwischen Formen, um sie zu verbinden. Einzelnes Verschieben des Verbinders löst die Enden.",
   ],
   font: ["Font", "Schrift"],
   fontSize: ["Font size", "Schriftgröße"],

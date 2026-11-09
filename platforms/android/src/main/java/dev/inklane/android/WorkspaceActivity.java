@@ -62,7 +62,15 @@ public final class WorkspaceActivity extends Activity {
         web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // The app has a single document host. File input goes through the system picker.
+                // Only a user's link activation may leave the trusted document host.
+                Uri target = request.getUrl();
+                String scheme = target.getScheme();
+                if (request.isForMainFrame() && request.hasGesture()
+                        && ("https".equals(scheme) || "http".equals(scheme) || "mailto".equals(scheme))
+                        && !HOST.equals(target.getHost())) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, target)); }
+                    catch (ActivityNotFoundException ignored) { }
+                }
                 return true;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -167,7 +175,7 @@ public final class WorkspaceActivity extends Activity {
     }
 
     void pickDestination(String name) {
-        String type = name.endsWith(".json") ? "application/json" : "application/octet-stream";
+        String type = name.endsWith(".png") ? "image/png" : name.endsWith(".json") ? "application/json" : "application/octet-stream";
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(type);
         intent.putExtra(Intent.EXTRA_TITLE, name);
         startActivityForResult(intent, SAVE);

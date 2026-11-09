@@ -28,7 +28,8 @@ import { switchLanguage, t, translate } from "./language.js";
 
 import { setupProperties } from "./properties.js";
 import { renderText, textStyle } from "./rich-text.js";
-import { shapeVisual } from "./shapes.js";
+import { shapeVisual, shapeEndpoints } from "./shapes.js";
+import { continuousPages } from "./continuous.js";
 
 const svgNS = "http://www.w3.org/2000/svg";
 const $ = (selector) => document.querySelector(selector);
@@ -58,6 +59,8 @@ for (const tool of toolNames) {
   b.onclick = () => setTool(tool);
   $("#tools").append(b);
 }
+let continuum = null,
+  continuousView = false;
 let properties = null,
   selectedGroupIds = new Set(),
   selectionIds = new Set(),
@@ -129,7 +132,14 @@ function updateStatus() {
   const active = Boolean(data),
     selection = current();
   const notebook = data?.kind === "Notebook";
+  if (!active) continuum?.reset();
   $("#whole-page").disabled = !active || busy;
+  $("#continuous-view").hidden = !active || data?.kind === "Image";
+  $("#continuous-view").disabled = busy;
+  $("#continuous-view").textContent = t(
+    continuousView ? "singlePageView" : "continuousView",
+  );
+  $("#continuous-view").setAttribute("aria-pressed", String(continuousView));
   document.documentElement.classList.toggle("editing", active);
   $("#open").hidden = $("#save").hidden = !active;
   for (const item of $("#more .menu").children) {
@@ -141,6 +151,7 @@ function updateStatus() {
         "feedback",
         "whole-page",
         "portable",
+        "export-image",
       ].includes(item.id)
     )
       item.hidden = !active;
@@ -163,7 +174,7 @@ function updateStatus() {
   $("#print").hidden = !active || globalThis.inklaneNativePrinting === false;
   $("#print").disabled = busy;
   $("#download").hidden = !active || Boolean(notebook);
-  $("#portable").disabled = busy || !active;
+  $("#portable").disabled = $("#export-image").disabled = busy || !active;
   $("#save .wide").textContent = t(
     notebook || portableMode ? "saveShort" : "save",
   );
@@ -230,6 +241,7 @@ function weight(obj) {
     ? 256 +
         (obj.points?.length ?? 0) * 40 +
         (obj.text?.length ?? 0) * 2 +
+        (obj.label?.length ?? 0) * 2 +
         (obj.pngData?.length ?? 0) * 2
     : 0;
 }
@@ -414,6 +426,7 @@ function editSelected() {
   }
   if (sel?.group !== "items") return;
   if (sel.obj.isNote) {
+    notePreview = false;
     setNoteOpen(sel.obj.id);
     render();
     $("#note-title").focus();
@@ -458,6 +471,7 @@ function initDoc(
   openNote = page().items.find((o) => o.isNote && o.isExpanded)?.id ?? null;
   state = loaded ? "loaded" : "ready";
   tool = "pen";
+  notePreview = false;
   fit = true;
   wholePage = false;
   if (canvas) attachCanvas(canvas);
@@ -546,7 +560,7 @@ async function openFiles(files) {
     render();
   }
 }
-async function switchPage(index) {
+async function switchPage(index, scroll = true) {
   if (!data || busy || index < 0 || index >= data.pages.length) return false;
   if (index === pageIndex) return true;
   flush();
@@ -559,7 +573,9 @@ async function switchPage(index) {
     openNote = selected = draft = null;
     attachCanvas(canvas);
     resize();
-    viewport.scrollTo(0, 0);
+    if (continuum?.enabled) {
+      if (scroll) continuum.scrollTo(index);
+    } else viewport.scrollTo(0, 0);
     return true;
   } catch (error) {
     errorMessage(error, "fileError");
@@ -686,9 +702,15 @@ function resize() {
   if (fit) {
     const padding = parseFloat(getComputedStyle($("#mat")).paddingLeft) * 2;
     zoom = Math.min(
-      (viewport.clientWidth - padding) / page().width,
+      (viewport.clientWidth - padding) /
+        (continuousView
+          ? Math.max(...data.pages.map((p) => p.width))
+          : page().width),
       data.kind === "Image" || wholePage
-        ? (viewport.clientHeight - padding) / page().height
+        ? (viewport.clientHeight - padding) /
+            (continuousView
+              ? Math.max(...data.pages.map((p) => p.height))
+              : page().height)
         : 1.45,
       2,
     );
@@ -811,6 +833,13 @@ function place(el, item, size = true) {
     el.style.transform = `rotate(${item.rotation}deg)`;
 }
 function render() {
+  continuum?.sync({
+    enabled: continuousView,
+    doc: data,
+    source: image,
+    index: pageIndex,
+    zoom,
+  });
   selectedGroupIds = new Set(selectedObjects().map((o) => o.id));
   updateStatus();
   if (!data) return;
@@ -1103,7 +1132,7 @@ function startGesture(e) {
     id,
     moved: false,
     handle: e.target.dataset.resize,
-    original: id ? structuredClone(find(id)?.obj) : null,
+    original: id ? structuredClone(mode === "resize" ? movementBase(find(id)?.obj) : find(id)?.obj) : null,
   };
   if (mode === "text" || mode === "note") {
     setNoteOpen(null);
@@ -1127,6 +1156,7 @@ function startGesture(e) {
     tool = "select";
     selected = item.id;
     if (item.isNote) {
+      notePreview = false;
       setNoteOpen(item.id);
       render();
       $("#note-body").focus();
@@ -1294,7 +1324,7 @@ function endGesture(e) {
     if (!sel) return;
     if (g.moved) {
       const next = moved(
-        sel.obj,
+        movementBase(sel.obj),
         (e.clientX - g.startX) / zoom,
         (e.clientY - g.startY) / zoom,
         page(),
@@ -1581,7 +1611,7 @@ document.addEventListener("keydown", (e) => {
     flush();
     const delta = e.shiftKey ? 10 : 1;
     const next = moved(
-      sel.obj,
+      movementBase(sel.obj),
       (key === "arrowleft" ? -1 : key === "arrowright" ? 1 : 0) * delta,
       (key === "arrowup" ? -1 : key === "arrowdown" ? 1 : 0) * delta,
       page(),
@@ -1607,6 +1637,7 @@ async function reveal(id, index = pageIndex) {
   if (!selection) return;
   flush();
   tool = "select";
+  selectionIds.clear();
   selected = id;
   setNoteOpen(selection.obj.isNote ? id : null);
   selected = id;
@@ -1635,6 +1666,7 @@ function fillIndex() {
       ...content.items.filter((o) => !o.isNote),
       ...content.ink,
       ...content.images,
+      ...(content.shapes || []),
     ]) {
       const label = item.isNote
         ? item.title || t("nativeNote") + " " + (index + 1)
@@ -1642,7 +1674,9 @@ function fillIndex() {
           ? t("stroke")
           : item.pngData
             ? t("picture")
-            : t("placed");
+            : item.kind
+              ? item.label || t(item.kind.toLowerCase())
+              : t("placed");
       if (item.isNote) index++;
       if (
         query &&
@@ -2104,7 +2138,8 @@ async function showNotebookPages(pages, index) {
     selected = openNote = draft = null;
     attachCanvas(canvas);
     resize();
-    viewport.scrollTo(0, 0);
+    if (continuum?.enabled) continuum.scrollTo(index);
+    else viewport.scrollTo(0, 0);
     return true;
   } catch (error) {
     errorMessage(error, "fileError");
@@ -2455,7 +2490,7 @@ function renderHandles() {
     selectedObjects().length > 1
   )
     return;
-  const o = sel.obj;
+  const o = movementBase(sel.obj);
   for (const [key, rx, ry] of [
     ["nw", 0, 0],
     ["n", 0.5, 0],
@@ -2811,6 +2846,7 @@ $("#note-resize").onpointerdown = (e) => {
 };
 properties = setupProperties({
   active: () => Boolean(data),
+  selectionCount:()=>selectedObjects().length,
   current,
   tool: () => tool,
   render,
@@ -2834,3 +2870,51 @@ properties = setupProperties({
     render();
   },
 });
+
+$("#export-image").onclick = async () => {
+  if (!data || busy) return;
+  closeMenu();
+  flush();
+  busy = true;
+  updateStatus();
+  try {
+    const { annotatedPng } = await import("./image-export.js");
+    const png = await annotatedPng(data, image, pageIndex, strokeVisual, t);
+    await requestDownload(
+      png,
+      (image.name.replace(/\.[^.]+$/, "") || "Inklane") +
+        "-" +
+        (pageIndex + 1) +
+        "-annotated.png",
+    );
+  } catch (error) {
+    if (error?.name !== "AbortError") errorMessage(error, "imageExportFailed");
+  } finally {
+    busy = false;
+    updateStatus();
+  }
+};
+
+continuum = continuousPages({
+  mat: $("#mat"),
+  sheet,
+  viewport,
+  activate: switchPage,
+  strokeShape: strokeVisual,
+  error: (error) => errorMessage(error, "fileError"),
+});
+$("#continuous-view").onclick = () => {
+  if (!data || busy || data.kind === "Image") return;
+  closeMenu();
+  flush();
+  continuousView = !continuousView;
+  resize();
+  if (continuousView) continuum.scrollTo(pageIndex);
+  else viewport.scrollTo(0, 0);
+};
+
+function movementBase(object) {
+  if(!object || selectedObjects().length>1 || !object.startId && !object.endId)return object;
+  const [a,b]=shapeEndpoints(object,page());
+  return {...object,x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(1,Math.abs(b.x-a.x)),height:Math.max(1,Math.abs(b.y-a.y)),flipX:b.x<a.x,flipY:b.y<a.y,startId:null,endId:null};
+}
