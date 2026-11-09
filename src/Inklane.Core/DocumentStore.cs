@@ -21,7 +21,7 @@ public sealed class PdfReadException(PdfReadProblem problem, string message) : N
 }
 
 /// <summary>Versioned, bounded persistence. Writes are committed by a same-directory atomic rename.</summary>
-public static class DocumentStore
+public static partial class DocumentStore
 {
     public const int MaxJsonBytes = 32 * 1024 * 1024;
     public const int MaxPdfBytes = 128 * 1024 * 1024;

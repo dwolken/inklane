@@ -35,7 +35,8 @@
   <header class="topbar wrap">
     <a class="brand" href="#main" aria-label="$home_label"><img src="${base}assets/inklane.svg" width="33" height="33" alt="">Inklane</a>
     <nav aria-label="$navigation">
-      <a href="#workspace">$workspace</a>
+      <a href="#try">$try_label</a>
+      <a class="desktop-link" href="#workspace">$workspace</a>
       <a class="desktop-link" href="#download">Windows</a>
       <a class="lang-link" href="$other_url" hreflang="$other_lang" lang="$other_lang" data-language-link>$other_label</a>
     </nav>
@@ -51,7 +52,32 @@
         </div>
       </div>
     </section>
+    <section class="experiments wrap" id="try" aria-labelledby="try-heading" data-demo-label="$demo_label" data-demo-remark="$demo_remark">
+      <div class="section-intro"><h2 id="try-heading">$try_heading</h2><p>$try_intro</p></div>
+      <article class="experiment">
+        <div class="experiment-copy"><h3>$draw_heading</h3><p>$draw_body</p><div class="demo-controls"><label>$demo_color <input id="demo-color" type="color" value="#7651bb"></label><button type="button" data-reset="draw">$demo_reset</button></div></div>
+        <div class="mini-stage" data-station="draw">
+          <svg class="plan" viewBox="0 0 600 300" aria-hidden="true"><path class="walls" d="M60 45H540V255H60V45M60 150H245M335 150H540M300 45V115M300 205V255"/><path class="furniture" d="M90 75h120v40H90zM400 75h80v45h-80zM85 185h90v40H85zM390 180h110v45H390z"/><path class="opening" d="M245 150v55a55 55 0 0 0 55-55M300 115h35"/></svg>
+          <svg id="demo-ink" viewBox="0 0 600 300" role="img" tabindex="0" aria-label="$draw_canvas"></svg>
+          <span class="mini-caption">$draw_caption</span>
+        </div>
+      </article>
+      <article class="experiment reverse">
+        <div class="experiment-copy"><h3>$remark_heading</h3><p>$remark_body</p><button type="button" class="text-button" data-reset="remark">$demo_reset</button></div>
+        <div class="mini-stage specimen" data-station="remark">
+          <img src="${base}assets/field-guide-$lang.png" alt="$sample_alt" width="1160" height="680" loading="lazy">
+          <button id="demo-pin" class="demo-pin" type="button" aria-expanded="false" aria-controls="demo-card" aria-label="$remark_toggle">1</button>
+          <div id="demo-card" class="demo-card" hidden><label for="demo-remark">$remark_title</label><textarea id="demo-remark" rows="4">$demo_remark</textarea><button type="button" id="demo-collapse">$remark_collapse</button></div>
+        </div>
+      </article>
+      <article class="experiment">
+        <div class="experiment-copy"><h3>$edit_heading</h3><p>$edit_body</p><div class="demo-controls"><button type="button" id="demo-bold" aria-pressed="false">$demo_bold</button><button type="button" data-reset="text">$demo_reset</button></div></div>
+        <div class="mini-stage paper-demo" data-station="text"><div id="demo-object" class="demo-object"><button id="demo-move" type="button" aria-label="$demo_move" title="$demo_move">⠿</button><textarea id="demo-text" aria-label="$edit_label" rows="3">$demo_label</textarea><button id="demo-resize" type="button" aria-label="$demo_resize" title="$demo_resize">↘</button></div><span class="mini-caption">$edit_caption</span></div>
+      </article>
+      <div class="demo-next"><p>$demo_ephemeral</p><a class="button solid" href="${base}editor/?lang=$lang">$open_editor $arrow_icon</a></div>
+    </section>
     <section class="studio wrap" id="workspace" aria-label="$sample_heading">
+      <div class="section-intro"><h2>$workspace_heading</h2><p>$workspace_intro</p></div>
       <div class="stage" id="stage">
         <div class="stage-bar">
           <h2><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h4"/></svg>$sample_name</h2>
@@ -89,6 +115,8 @@
         </div>
       </div>
     </section>
+    <section class="continuity wrap" aria-labelledby="continuity-heading"><div class="section-intro"><h2 id="continuity-heading">$continuity_heading</h2><p>$continuity_intro</p></div><div class="file-choices"><div><h3>$editable_heading</h3><p>$editable_body</p><code>.inklane</code></div><div><h3>$handoff_heading</h3><p>$handoff_body</p><code>PDF · PNG · JSON</code></div><div><h3>$local_heading</h3><p>$local_body</p><a href="${repo}#files-and-compatibility">$file_guide $arrow_icon</a></div></div></section>
+    <section class="platforms wrap" aria-labelledby="platform-heading"><div class="section-intro"><h2 id="platform-heading">$platform_heading</h2><p>$platform_intro</p></div><div class="platform-list"><a href="${base}editor/?lang=$lang"><strong>Web</strong><span>$platform_web</span><span aria-hidden="true">↗</span></a><a href="#download"><strong>Windows</strong><span>$platform_windows</span><span aria-hidden="true">↓</span></a><a href="${repo}/tree/main/platforms/android"><strong>Android</strong><span>$platform_native</span><span aria-hidden="true">↗</span></a><a href="${repo}/tree/main/platforms/linux"><strong>Linux</strong><span>$platform_native</span><span aria-hidden="true">↗</span></a><a href="${repo}/tree/main/platforms/apple"><strong>macOS · iOS</strong><span>$platform_apple</span><span aria-hidden="true">↗</span></a></div></section>
   </main>
   <footer class="wrap">
     <a class="brand" href="#main"><img src="${base}assets/inklane.svg" width="27" height="27" alt="">Inklane</a>

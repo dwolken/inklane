@@ -115,8 +115,10 @@ internal static partial class Program
             var hash = DocumentStore.GetFileHash(source);
             var w = state.Window;
             SetField(w,"_officeRenderer",renderer);
-            state.Interaction.Choices.Enqueue(0); state.Interaction.SavePaths.Enqueue(target);
             w.OpenFile(source);
+            Equal(0,state.Interaction.ChoiceCalls);
+            Equal(0,state.Interaction.SaveFilters.Count);
+            target=Field<OfficeReviewLink>(w,"_activeOfficeReview").PdfPath;
             Equal(DocumentKind.Pdf,Document(w).Kind); Equal(2,Document(w).Pages.Count);
             var firstPage = Document(w).Pages[0];
             Assert(ext == ".docx" ? firstPage.Height > firstPage.Width : firstPage.Width > firstPage.Height,
@@ -125,6 +127,26 @@ internal static partial class Program
             var savedReview = State(w);
             w.OpenFile(source); Equal(savedReview,State(w));
             Equal(hash,DocumentStore.GetFileHash(source)); Equal(DocumentStore.GetFileHash(target),Document(w).SourcePdfSha256);
+            Settings.Current.OfficeReviews.Clear();
+            w.OpenFile(source);Equal(savedReview,State(w));
+            Equal(target,Field<OfficeReviewLink>(w,"_activeOfficeReview").PdfPath);
+            var exported=state.Path("review-copy"+ext);
+            state.Interaction.SavePaths.Enqueue(exported);Call(w,"ExportOfficeReview");
+            Assert(File.Exists(exported),"The Office handoff was not created: "+string.Join("; ",state.Interaction.Messages.Select(m=>m.Text)));
+            using(var original=ZipFile.OpenRead(source))
+            using(var result=ZipFile.OpenRead(exported))
+            {
+                var changed=ext==".docx"?new[]{"word/document.xml","word/_rels/document.xml.rels","[Content_Types].xml"}:new[]{"ppt/presentation.xml","ppt/_rels/presentation.xml.rels","[Content_Types].xml"};
+                foreach(var entry in original.Entries.Where(e=>!changed.Contains(e.FullName)))
+                {
+                    using var before=entry.Open();using var after=result.GetEntry(entry.FullName)!.Open();
+                    Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(before)),Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(after)));
+                }
+                var content=ext==".docx"?"word/document.xml":"ppt/comments/inklaneReview1.xml";
+                using var reader=new StreamReader(result.GetEntry(content)!.Open());
+                Assert(reader.ReadToEnd().Contains("Check the east entrance."),"Office handoff lost the explanation.");
+            }
+            Equal(hash,DocumentStore.GetFileHash(source));
         }
     }
 }

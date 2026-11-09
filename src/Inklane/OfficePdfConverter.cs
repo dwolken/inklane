@@ -106,7 +106,7 @@ internal static class OfficePdfConverter
         }
     }
 
-    private static async Task VerifyOutput(string path)
+    internal static async Task VerifyOutput(string path)
     {
         using (var source = File.OpenRead(path))
             if (DocumentStore.ReadNotebook(source) != null) throw new InvalidDataException(L.T("OfficeConvertFailed"));
