@@ -26,7 +26,7 @@ const elementKey = 'element-6066-11e4-a52e-4f735466cecf', shadowKey = 'shadow-60
 async function call(path, data, method) {
   const response = await fetch(base + path, { method: method || (data === undefined ? 'GET' : 'POST'), headers: { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data), signal: AbortSignal.timeout(60000) });
   const result = await response.json();
-  if (!response.ok || result.value?.error) throw Error(JSON.stringify(result.value));
+  if (!response.ok || result.value?.error) throw Object.assign(Error(JSON.stringify(result.value)), { webdriverError: result.value?.error });
   return result.value;
 }
 const s = (path, data, method) => call('/session/' + session + path, data, method);
@@ -37,7 +37,19 @@ async function until(fn, label, timeout = 25000) {
   throw Error('Timed out: ' + label + (error ? '\n' + error.message : ''));
 }
 const element = async selector => (await s('/shadow/' + shadow + '/element', { using: 'css selector', value: selector }))[elementKey];
-const click = async selector => s('/element/' + await element(selector) + '/click', {});
+async function click(selector) {
+  // Layout renders replace marker elements. A stale reference is rejected before
+  // WebDriver dispatches input, so re-query that one control within a fixed bound.
+  let last;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try { await s('/element/' + await element(selector) + '/click', {}); return; }
+    catch (error) {
+      if (!['stale element reference', 'no such element'].includes(error.webdriverError)) throw error;
+      last = error; await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  throw Error('Control did not settle: ' + selector + '\n' + last?.message);
+}
 const text = async selector => s('/element/' + await element(selector) + '/text');
 const saved = () => until(async () => (await text('#status')) === 'In diesem Browser gespeichert', 'real Firefox local storage save');
 async function activate() {
@@ -51,9 +63,15 @@ async function activate() {
   await saved();
 }
 async function enterEditor() {
-  await until(async () => (await s('/element/' + await element('#editor') + '/attribute/src'))?.startsWith('moz-extension://'), 'extension-origin editor');
-  await s('/frame', { id: { [elementKey]: await element('#editor') } });
-  await until(() => js("return document.body.dataset.ready === 'true'"), 'secure editor channel');
+  // Opening a remark navigates the frame through about:blank. Re-select it
+  // from the current top-level document until the private editor has loaded.
+  await until(async () => {
+    await s('/frame', { id: null });
+    const frame = await element('#editor');
+    if (!(await s('/element/' + frame + '/attribute/src'))?.startsWith('moz-extension://')) return false;
+    await s('/frame', { id: { [elementKey]: frame } });
+    return js("return location.protocol === 'moz-extension:' && document.readyState === 'complete' && document.body.dataset.ready === 'true'");
+  }, 'secure editor frame and channel');
 }
 async function download(suffix, action) {
   const before = new Set(await readdir(downloads));
