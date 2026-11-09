@@ -34,6 +34,7 @@ jobs:
       contents: read
     outputs:
       digest: ${{ steps.verify.outputs.digest }}
+      editor_digest: ${{ steps.verify.outputs.editor_digest }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -51,6 +52,7 @@ jobs:
           node website/test-editor.mjs .scratch/pages/inklane
           INKLANE_INSTALL_CHECK=1 xvfb-run -a node website/test-platform.mjs .scratch/pages/inklane
           echo "digest=$(sha256sum .scratch/pages/inklane/index.html | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          echo "editor_digest=$(sha256sum .scratch/pages/inklane/editor/index.html | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - name: Package the tested site
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
@@ -100,13 +102,16 @@ jobs:
       - name: Verify the public HTML matches the tested build
         env:
           EXPECTED_SHA256: ${{ needs.build.outputs.digest }}
+          EDITOR_SHA256: ${{ needs.build.outputs.editor_digest }}
         run: |
           for attempt in {1..12}; do
             if curl --silent --show-error --fail --max-time 15 "https://dwolken.github.io/inklane/?build=$GITHUB_RUN_ID" --output "$RUNNER_TEMP/inklane.html" &&
-              echo "$EXPECTED_SHA256  $RUNNER_TEMP/inklane.html" | sha256sum --check --status; then
+              echo "$EXPECTED_SHA256  $RUNNER_TEMP/inklane.html" | sha256sum --check --status &&
+              curl --silent --show-error --fail --max-time 15 "https://dwolken.github.io/inklane/editor/?build=$GITHUB_RUN_ID" --output "$RUNNER_TEMP/editor.html" &&
+              echo "$EDITOR_SHA256  $RUNNER_TEMP/editor.html" | sha256sum --check --status; then
               exit 0
             fi
             sleep 5
           done
-          echo 'The public URL did not serve the tested HTML.' >&2
+          echo 'The public site or editor did not serve the tested HTML.' >&2
           exit 1
