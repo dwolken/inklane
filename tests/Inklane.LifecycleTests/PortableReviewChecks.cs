@@ -42,7 +42,7 @@ internal static partial class Program
             state.Interaction.WorkingFolders.Enqueue(root);
             w.OpenFile(incoming);
             Equal(0,state.Interaction.UnexpectedCalls.Count);
-            Equal(0,state.Interaction.Messages.Count);
+            Assert(state.Interaction.Messages.Count == 0, string.Join("; ",state.Interaction.Messages.Select(message => message.Text)));
             string source = Path.Combine(root,stem+" (2)",original.SourceName);
             string layer = source+".inklane.json";
             Equal(layer,Field<string>(w,"_filePath"));

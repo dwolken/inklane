@@ -29,12 +29,21 @@ public sealed class PortableWorkspace
     public static PortableWorkspace Read(string path)
     {
         using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return Read(input);
+    }
+
+    /// <summary>Read one bounded workspace from the current stream position, without closing the caller's stream.</summary>
+    public static PortableWorkspace Read(Stream input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (!input.CanRead) throw new ArgumentException("The workspace stream must be readable.", nameof(input));
         Span<byte> header = stackalloc byte[12];
         input.ReadExactly(header);
         if (!header[..8].SequenceEqual(Signature)) throw new InvalidDataException("Invalid workspace header.");
         int length = BinaryPrimitives.ReadInt32BigEndian(header[8..]);
-        long remainder = input.Length - 12L - length;
-        if (length < 2 || length > DocumentStore.MaxJsonBytes || remainder < 0 || remainder > MaxSourceBytes)
+        if (length < 2 || length > DocumentStore.MaxJsonBytes)
+            throw new InvalidDataException("The workspace exceeds the supported metadata size.");
+        if (input.CanSeek && (input.Length - input.Position - length is < 0 or > MaxSourceBytes))
             throw new InvalidDataException("The workspace exceeds the supported size or is incomplete.");
         var bytes = new byte[length];
         input.ReadExactly(bytes);
@@ -53,15 +62,36 @@ public sealed class PortableWorkspace
         if (document.Kind == DocumentKind.Notebook)
         {
             CheckNotebook(document);
-            if (remainder != 0) throw new InvalidDataException("Unexpected trailing notebook data.");
+            if (input.ReadByte() != -1) throw new InvalidDataException("Unexpected trailing notebook data.");
             return new(document,name,[]);
         }
         CheckSourceName(name,document.Kind);
         var declaredName = document.Kind == DocumentKind.Pdf ? document.SourcePdfName : document.SourceImagePath;
-        if (!string.Equals(name,declaredName,StringComparison.Ordinal) || remainder == 0)
+        if (!string.Equals(name,declaredName,StringComparison.Ordinal))
             throw new InvalidDataException("The source name or file does not match the annotation layer.");
-        var original = new byte[(int)remainder];
-        input.ReadExactly(original);
+        byte[] original;
+        if (input.CanSeek)
+        {
+            long remaining=input.Length-input.Position;
+            if (remaining is <=0 or >MaxSourceBytes) throw new InvalidDataException("The workspace source is missing or too large.");
+            original=new byte[(int)remaining];input.ReadExactly(original);
+            if(input.ReadByte()!=-1)throw new InvalidDataException("The workspace changed while reading.");
+        }
+        else
+        {
+            // A sequential transfer may not declare its total length. Read at most
+            // one byte beyond the limit, and reject before storing that extra byte.
+            using var source = new MemoryStream();
+            var buffer = new byte[81920];
+            int read;
+            while ((read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, MaxSourceBytes - source.Length + 1))) != 0)
+            {
+                if (source.Length + read > MaxSourceBytes) throw new InvalidDataException("The workspace source exceeds 64 MiB.");
+                source.Write(buffer, 0, read);
+            }
+            if (source.Length == 0) throw new InvalidDataException("The workspace source is missing.");
+            original = source.ToArray();
+        }
         CheckFingerprint(document,Convert.ToHexString(SHA256.HashData(original)));
         return new(document,name,original);
     }
@@ -95,7 +125,7 @@ public sealed class PortableWorkspace
         long pixels = 0, points = 0;
         foreach (var page in document.Pages)
         {
-            if (page.Images.Count > 100 || page.Items.Count > 2000 || page.Ink.Count > 10000)
+            if (page.Images.Count > 100 || page.Items.Count > 2000 || page.Shapes.Count > 2000 || page.Ink.Count > 10000)
                 throw new PortableCapacityException("The page has too many objects for a portable workspace.");
             foreach (var picture in page.Images) pixels += EmbeddedPng.CheckHeader(picture.PngData);
             foreach (var stroke in page.Ink) points += stroke.Points.Count;

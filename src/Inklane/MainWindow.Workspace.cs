@@ -106,7 +106,7 @@ public sealed partial class MainWindow
         history.Children.Add(Studio.Rule()); history.Children.Add(undo); history.Children.Add(redo);
         DockPanel.SetDock(history, Dock.Bottom); rail.Children.Add(history);
         var stack = new StackPanel();
-        foreach (var tool in new[] { EditorTool.Select, EditorTool.Pen, EditorTool.Eraser, EditorTool.Text, EditorTool.Note, EditorTool.Pan })
+        foreach (var tool in new[] { EditorTool.Select, EditorTool.Pen, EditorTool.Eraser, EditorTool.Text, EditorTool.Note, EditorTool.Shape, EditorTool.Pan })
         {
             var name = tool.ToString();
             var caption = L.T(tool == EditorTool.Select ? "SelectShort" : tool == EditorTool.Pan ? "PanShort" : name);
@@ -116,7 +116,11 @@ public sealed partial class MainWindow
             var button = new ToggleButton { Content = content, Height = 46, Margin = new Thickness(6,1,6,1), ToolTip = L.T(name + "Hint") };
             button.SetResourceReference(StyleProperty, "ToolButton");
             AutomationProperties.SetName(button, L.T(name));
-            button.Click += (_, _) => SetTool(tool);
+            button.Click += (_, _) =>
+            {
+                if (tool == EditorTool.Shape) { button.IsChecked = _surface.Tool == tool; var menu = ShapeMenu(); menu.PlacementTarget = button; menu.Placement = PlacementMode.Right; menu.IsOpen = true; }
+                else SetTool(tool);
+            };
             _tools.Add(tool, button); stack.Children.Add(button);
         }
         rail.Children.Add(new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -153,23 +157,18 @@ public sealed partial class MainWindow
         DockPanel.SetDock(zoom, Dock.Right); bar.Children.Add(zoom);
         var properties = Studio.Line();
         var ink = Studio.Line();
-        var color = new ComboBox { Width = 136, MinWidth = 0, MinHeight = 28, Height = 30, ToolTip = L.T("Color") };
-        foreach (var (key, hex) in new[] { ("Black","#202020"), ("Blue","#245DD7"), ("Red","#C3343F"), ("Green","#16734A"), ("Purple","#7947AB") })
-        {
-            var chip = new Border { Width = 11, Height = 11, CornerRadius = new CornerRadius(5.5),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)), BorderThickness = new Thickness(1) };
-            chip.SetResourceReference(Border.BorderBrushProperty, "MutedBrush");
-            var item = new ComboBoxItem { Content = Studio.Line(chip, InlineCaption(L.T(key))), Tag = hex };
-            AutomationProperties.SetName(item, L.T(key)); color.Items.Add(item);
-        }
-        color.SelectedIndex = 0;
-        color.SelectionChanged += (_, _) => _surface.InkColor = (string)((ComboBoxItem)color.SelectedItem).Tag;
-        AutomationProperties.SetName(color, L.T("Color")); ink.Children.Add(color);
-        var width = SizeChoice("Width", new[] {1,2,4,8}, "px", 1, v => _surface.InkWidth = v);
+        var color = new Button { Content = L.T("Color") + "…", MinWidth = 72, Height = 30, MinHeight = 28, ToolTip = L.T("Color") };
+        color.Click += (_, _) => ChooseColor(); AutomationProperties.SetName(color, L.T("Color")); ink.Children.Add(color);
+        var width = SizeChoice("Width", new[] {1,2,4,8}, "px", 1, v => { _surface.InkWidth = v; _surface.ApplyStrokeWidth(v); });
         ink.Children.Add(width); _strokeWidth = width;
         _inkProperties = ink; properties.Children.Add(ink);
-        _textProperties = SizeChoice("TextSize", new[] {12,18,24,32,48}, "pt", 1, v => _surface.TextSize = v * 96d / 72);
+        _textProperties = SizeChoice("TextSize", new[] {12,18,24,32,48}, "pt", 1, v => { _surface.TextSize = v * 96d / 72; _surface.ApplyTextFormatting(t => t.FontSize = v * 96d / 72); });
         _surface.TextSize = 24; properties.Children.Add(_textProperties);
+        var objectMenu = MenuButton("ObjectProperties", "More", () => { var menu = new ContextMenu(); AddVisualObjectCommands(menu); return menu; });
+        var propertyLabel = Studio.Label(L.T("PropertiesShort"),12); propertyLabel.Margin = new Thickness(4,0,0,0);
+        objectMenu.Content = Studio.Line(Studio.Icon("More",16),propertyLabel); objectMenu.Padding = new Thickness(6,0,6,0);
+        bar.SizeChanged += (_,_) => propertyLabel.Visibility = bar.ActualWidth >= 780 ? Visibility.Visible : Visibility.Collapsed;
+        properties.Children.Add(objectMenu);
         bar.Children.Add(properties);
         return Edges(bar, new Thickness(0,1,0,0));
     }

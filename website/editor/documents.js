@@ -150,7 +150,7 @@ export async function readPortable(file) {
     /[\\/\u0000-\u001f]/.test(meta.sourceName) ||
     meta.sourceName.length > 255 ||
     !["Notebook", "Image", "Pdf"].includes(doc?.kind) ||
-    !(doc.kind === "Pdf" ? doc.schemaVersion === 3 : [1, 2].includes(doc.schemaVersion))
+    !(doc.kind === "Pdf" ? [3, 4].includes(doc.schemaVersion) : [1, 2, 4].includes(doc.schemaVersion))
   )
     throw new EditorError("invalid");
   const bytes = file.slice(12 + length);

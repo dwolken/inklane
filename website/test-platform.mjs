@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { readFile, mkdir, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { chromium, webkit } from 'playwright-core';
 
@@ -102,6 +102,22 @@ try {
   await offline.waitForFunction(()=>document.querySelector('#name')?.textContent==='review.pdf');
   await offline.locator('#page-count').click(); await offline.locator('#page-choices button').nth(1).click();
   await offline.locator('#viewport').waitFor();
+  const rich = await offline.evaluate(async () => {
+    const {renderText}=await import('./rich-text.js');
+    const {annotatedPng}=await import('./image-export.js');
+    const {paperPage,notebookDocument,notebookSource}=await import('./documents.js');
+    const {newItem}=await import('./model.js');
+    const page=paperPage('A5'),item=newItem(false,40,40,page);item.text='# Offline\n\n**Local mathematics:** $x^2 + y^2$';item.contentFormat='Markdown';item.height=180;page.items.push(item);
+    const note={...newItem(true,60,260,page),text:'$$\\frac{a}{b}$$',contentFormat:'Markdown'};page.items.push(note);
+    const doc=notebookDocument('Offline rich text',page),element=document.createElement('div');renderText(element,item);
+    const png=await annotatedPng(doc,notebookSource(doc.title),0,()=>null,key=>key);
+    const bytes=new Uint8Array(await png.arrayBuffer());
+    let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    return {math:element.querySelectorAll('.katex').length,bytes:bytes.length,base64:btoa(binary)};
+  });
+  assert.equal(rich.math,1);assert.ok(rich.bytes>10000);
+  const output=resolve(process.argv[3] || '.scratch/platform-rich');await mkdir(output,{recursive:true});
+  await writeFile(resolve(output,engine+'-offline-rich.png'),Buffer.from(rich.base64,'base64'));
   assert.deepEqual(errors,[]); assert.deepEqual(external,[]);
-  console.log(`${process.platform}/${engine}: offline navigation, first local PDF import, rotation/crop, source hash, rendered pixels and page navigation passed.`);
+  console.log(`${process.platform}/${engine}: offline navigation, first local PDF import, rotation/crop, source hash, rendered pixels, page navigation, rich math rendering and annotated PNG export passed.`);
 } finally { await context.close(); server.close(); }

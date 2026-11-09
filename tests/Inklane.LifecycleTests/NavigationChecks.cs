@@ -37,11 +37,18 @@ internal static partial class Program
         var notebook = Notebook("South");
         notebook.Pages.Add(new PageData { Pattern = PaperPattern.Squared, SpacingMm = 10,
             Items = [new TextItem { IsNote = true, Title = "Porch", Text = "Keep access clear" }] });
+        var start = new ShapeItem { Id="node-start", X=80, Y=300, GroupId="diagram", Label="Start" };
+        var end = new ShapeItem { Id="node-end", X=380, Y=300, GroupId="diagram", Kind=ShapeKind.Ellipse, Label="End" };
+        notebook.Pages[1].Shapes.AddRange([start,end,new ShapeItem { Id="edge", Kind=ShapeKind.Arrow, StartId=start.Id, EndId=end.Id, GroupId="diagram" }]);
         DocumentStore.SavePdf(notebook,file);
         var w = state.Window; w.OpenFile(file); Call(w,"Navigate",1);
         var original = Document(w).Pages[1].Items.Single();
         Call(w,"DuplicatePage");
         var duplicate = Document(w).Pages[2].Items.Single();
+        var copiedShapes = Document(w).Pages[2].Shapes;
+        Assert(copiedShapes.All(s => notebook.Pages[1].Shapes.All(original => original.Id != s.Id && original.GroupId != s.GroupId)),"Page duplication reused graph identities.");
+        var edge = copiedShapes.Single(s => s.Kind == ShapeKind.Arrow);
+        Assert(copiedShapes.Any(s => s.Id == edge.StartId) && copiedShapes.Any(s => s.Id == edge.EndId),"Copied connector did not reference its copied nodes.");
         Assert(original.Id != duplicate.Id && original != duplicate, "Page duplicate aliases the original note.");
         Equal(original.Title,duplicate.Title); Equal(original.Text,duplicate.Text); Equal(10d,Document(w).Pages[2].SpacingMm);
         Call(w,"MovePage",-1);

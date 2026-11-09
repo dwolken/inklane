@@ -112,6 +112,17 @@ final class WorkspaceHost: NSObject, ObservableObject, WKNavigationDelegate, WKU
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if action.navigationType == .linkActivated, action.sourceFrame.isMainFrame,
+           let url = action.request.url, ["https", "http", "mailto"].contains(url.scheme ?? ""),
+           url.host != origin?.host {
+            #if os(iOS)
+            UIApplication.shared.open(url)
+            #else
+            NSWorkspace.shared.open(url)
+            #endif
+            decisionHandler(.cancel)
+            return
+        }
         guard let origin, let url = action.request.url, action.targetFrame?.isMainFrame == true,
               url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port,
               url.path == "/editor/index.html" || url.path == "/editor/" || url.path == "/editor" else {

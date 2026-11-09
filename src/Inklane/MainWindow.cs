@@ -90,8 +90,8 @@ public sealed partial class MainWindow : Window
     {
         _surface.CommitEdits(); _surface.Tool = tool;
         foreach (var pair in _tools) pair.Value.IsChecked = pair.Key == tool;
-        _inkProperties.Visibility = tool is EditorTool.Pen or EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
-        _strokeWidth.Visibility = tool == EditorTool.Pen ? Visibility.Visible : Visibility.Collapsed;
+        _inkProperties.Visibility = tool is EditorTool.Pen or EditorTool.Text or EditorTool.Note or EditorTool.Select or EditorTool.Shape ? Visibility.Visible : Visibility.Collapsed;
+        _strokeWidth.Visibility = tool is EditorTool.Pen or EditorTool.Shape ? Visibility.Visible : Visibility.Collapsed;
         _textProperties.Visibility = tool == EditorTool.Text ? Visibility.Visible : Visibility.Collapsed;
     }
     private void ShowPage(bool fit = true) => DisplayPage(fit, reveal: fit);
@@ -512,9 +512,10 @@ public sealed partial class MainWindow : Window
             if (!notebook && (sourcePath == null || !File.Exists(sourcePath) || !string.Equals(DocumentStore.GetFileHash(sourcePath), identity, StringComparison.OrdinalIgnoreCase)))
             { Error(L.T(_document.Kind == DocumentKind.Pdf ? "PdfChanged" : "ImageChanged")); return false; }
             _saving = true; UpdateState();
-            if (_document.Kind == DocumentKind.Notebook) SaveProgress.WriteNotebook(this, _document, _history[_historyIndex].Data, path);
-            else DocumentStore.SaveJson(_document, path);
-            _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = _history[_historyIndex].Data; ClearRecovery();
+            var writtenHash = _document.Kind == DocumentKind.Notebook
+                ? SaveProgress.WriteNotebook(this, _document, _history[_historyIndex].Data, path)
+                : DocumentStore.SaveJson(_document, path);
+            _filePath = path; _diskHash = writtenHash; _savedState = _history[_historyIndex].Data; ClearRecovery();
             if (_document.Kind == DocumentKind.Notebook) RenameViewSession(path);
             var source = SourcePath;
             RememberRecent(source != null && SamePath(path, source + ".inklane.json")
@@ -556,7 +557,8 @@ public sealed partial class MainWindow : Window
         var path = _interaction.ChooseSavePath(this, dialog); if (path == null || !DestinationAllowed(path, ".png", true)) return;
         try
         {
-            var bitmap = _surface.RenderPage(_document.Kind == DocumentKind.Image ? 96 : 150); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            var bitmap = ReviewPresentation.WithNotes(_surface.RenderPage(_document.Kind == DocumentKind.Image ? 96 : 150), _document.Pages[_pageIndex], _pageIndex + 1);
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
             AtomicWrite(path, stream => encoder.Save(stream));
         }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); }
@@ -595,7 +597,8 @@ public sealed partial class MainWindow : Window
                     start = Math.Clamp(dialog.PageRange.PageFrom - 1,0,count - 1);
                     count = Math.Clamp(dialog.PageRange.PageTo - start,1,count - start);
                 }
-                dialog.PrintDocument(new PdfMarkupPaginator(this,_document,_pdf,sheet,printable,start,count),DisplayName);
+                dialog.PrintDocument(ReviewPresentation.AppendNotes(new PdfMarkupPaginator(this,_document,_pdf,sheet,printable,start,count),
+                    _document.Pages.Select((page, index) => (index + 1, page)).Skip(start).Take(count), sheet, printable),DisplayName);
                 return;
             }
             var pages = new FixedDocument();
@@ -607,7 +610,9 @@ public sealed partial class MainWindow : Window
                 fixedPage.Children.Add(new Image { Source = bitmap, Width = page.Width, Height = page.Height });
                 var content = new PageContent { Child = fixedPage }; pages.Pages.Add(content);
             }
-            dialog.PrintDocument(pages.DocumentPaginator, DisplayName);
+            var outputSize = new Size(dialog.PrintableAreaWidth, dialog.PrintableAreaHeight);
+            dialog.PrintDocument(ReviewPresentation.AppendNotes(pages.DocumentPaginator,
+                _document.Pages.Select((page, index) => (index + 1, page)), outputSize, new Rect(outputSize)), DisplayName);
         }
         catch (Exception ex) when (IsExpected(ex) || ex is PrintSystemException) { Error(L.T("Error"), ex); }
     }

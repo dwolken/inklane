@@ -33,7 +33,8 @@ public sealed partial class DocumentSurface
     {
         var source = EmbeddedPng.Decode(item.PngData);
         var image = new Image { Source = source, Stretch = Stretch.Fill };
-        _imageLayer.Children.Add(image);
+        image.IsHitTestVisible = false;
+        _objects.Children.Add(image);
         var controls = new Grid { Tag = item.Id };
         Panel.SetZIndex(controls, -1);
         var outline = new Border { IsHitTestVisible = false, BorderThickness = new Thickness(1.5), BorderBrush = Brushes.SlateBlue };
@@ -57,7 +58,7 @@ public sealed partial class DocumentSurface
         bool draggingInk = false;
         move.PreviewMouseLeftButtonDown += (_, e) =>
         {
-            var hit = _ink.Strokes.HitTest(e.GetPosition(_ink), Math.Clamp(6 / _zoom, 1, 100)).LastOrDefault();
+            var hit = _ink.Strokes.HitTest(e.GetPosition(_ink), Math.Clamp(6 / _zoom, 1, 100)).Where(s => !s.ContainsPropertyData(StrokeLayer) ? item.Layer <= 0 : Z((int)s.GetPropertyData(StrokeLayer),1) > Z(item.Layer,0)).LastOrDefault();
             draggingInk = hit != null;
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
@@ -107,7 +108,10 @@ public sealed partial class DocumentSurface
         {
             Canvas.SetLeft(element, visual.Item.X); Canvas.SetTop(element, visual.Item.Y);
             element.Width = visual.Item.Width; element.Height = visual.Item.Height;
+            element.RenderTransformOrigin = new Point(.5,.5); element.RenderTransform = new RotateTransform(visual.Item.Rotation);
+            Panel.SetZIndex(element, Z(visual.Item.Layer, 0));
         }
+        visual.Image.Opacity = visual.Item.Opacity;
     }
 
     private void UpdatePictureStates()
@@ -126,7 +130,7 @@ public sealed partial class DocumentSurface
     {
         if (!_pictures.Remove(item.Id, out var visual)) return;
         _page!.Images.Remove(item);
-        _imageLayer.Children.Remove(visual.Image);
+        _objects.Children.Remove(visual.Image);
         _objects.Children.Remove(visual.Controls);
     }
 }

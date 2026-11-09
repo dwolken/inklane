@@ -31,11 +31,11 @@ public sealed partial class DocumentSurface
         if (selected.Ink.Count > 0)
         {
             var isf = new MemoryStream();
-            _ink.GetSelectedStrokes().Save(isf);
+            new StrokeCollection(selected.Ink.Select(ToStroke)).Save(isf);
             isf.Position = 0;
             data.SetData(StrokeCollection.InkSerializedFormat, isf, false);
         }
-        if (selected.Images.Count == 1 && selected.Items.Count == 0 && selected.Ink.Count == 0)
+        if (selected.Images.Count == 1 && selected.Items.Count == 0 && selected.Ink.Count == 0 && selected.Shapes.Count == 0)
         {
             var picture = selected.Images[0];
             data.SetData("PNG", new MemoryStream(picture.PngData, false), false);
@@ -86,7 +86,7 @@ public sealed partial class DocumentSurface
             var doc = DocumentStore.Deserialize(new UTF8Encoding(false, true).GetString(bytes));
             if (doc.Pages.Count != 1 || doc.Kind != DocumentKind.Notebook) throw new InvalidDataException();
             var page = doc.Pages[0];
-            if (page.Ink.Count + page.Items.Count + page.Images.Count == 0) throw new InvalidDataException();
+            if (page.Ink.Count + page.Items.Count + page.Images.Count + page.Shapes.Count == 0) throw new InvalidDataException();
             return new(page, false);
         }
         byte[]? png = null;
@@ -155,11 +155,12 @@ public sealed partial class DocumentSurface
                 position = new Point(Math.Max(16, visible.Left + 24), Math.Max(16, visible.Top + 24));
         }
         PositionPastedObjects(content, _page, bounds, position ?? bounds.TopLeft + new Vector(16,16));
-        var strokes = new StrokeCollection(content.Ink.Select(ToStroke));
+        var strokes = new StrokeCollection(content.Ink.Select(ToLiveStroke));
         // Check the combined destination, including its other pages, before modifying the visual tree.
         _page.Items.AddRange(content.Items);
         _page.Ink.AddRange(content.Ink);
         _page.Images.AddRange(content.Images);
+        _page.Shapes.AddRange(content.Shapes);
         try
         {
             if (ValidateInsertedContent != null) ValidateInsertedContent();
@@ -170,14 +171,16 @@ public sealed partial class DocumentSurface
             _page.Items.RemoveRange(_page.Items.Count - content.Items.Count, content.Items.Count);
             _page.Ink.RemoveRange(_page.Ink.Count - content.Ink.Count, content.Ink.Count);
             _page.Images.RemoveRange(_page.Images.Count - content.Images.Count, content.Images.Count);
+            _page.Shapes.RemoveRange(_page.Shapes.Count - content.Shapes.Count, content.Shapes.Count);
             throw;
         }
         EnterSelectionTool();
         foreach (var item in content.Images) AddPicture(item);
         foreach (var item in content.Items) AddItemVisual(item);
+        foreach (var item in content.Shapes) AddShapeVisual(item);
         _ink.Strokes.Add(strokes);
         NumberNotes();
-        SelectObjects(content.Items.Select(i => i.Id).Concat(content.Images.Select(i => i.Id)), strokes);
+        SelectObjects(content.Items.Select(i => i.Id).Concat(content.Images.Select(i => i.Id)).Concat(content.Shapes.Select(i => i.Id)), strokes);
         NotifyChanged();
     }
 
@@ -190,12 +193,13 @@ public sealed partial class DocumentSurface
         var delta = topLeft - bounds.TopLeft;
         var dx = Constrain(delta.X, bounds.Left, bounds.Right, destination.Width);
         var dy = Constrain(delta.Y, bounds.Top, bounds.Bottom, destination.Height);
+        PageObjects.RegenerateIds(content);
+        foreach (var shape in content.Shapes) { shape.X += dx; shape.Y += dy; }
         foreach (var ink in content.Ink)
         {
-            ink.Id = Guid.NewGuid().ToString("N");
             foreach (var point in ink.Points) { point.X += dx; point.Y += dy; }
         }
-        foreach (var item in content.Items) { item.Id = Guid.NewGuid().ToString("N"); item.X += dx; item.Y += dy; }
-        foreach (var item in content.Images) { item.Id = Guid.NewGuid().ToString("N"); item.X += dx; item.Y += dy; }
+        foreach (var item in content.Items) { item.X += dx; item.Y += dy; }
+        foreach (var item in content.Images) { item.X += dx; item.Y += dy; }
     }
 }

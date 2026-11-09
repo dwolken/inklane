@@ -21,7 +21,7 @@ def build_workspace(output):
         files.append(path)
 
     for name in ("index.html", "editor.js", "editor.css", "language.js", "model.js", "pdf-source.js",
-                 "documents.js", "drafts.js", "print.js", "register-offline.js", "manifest.webmanifest"):
+                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "continuous.js", "register-offline.js", "manifest.webmanifest"):
         stage(SOURCE / "editor" / name, name)
     for size in [180, 192, 512]:
         name = f"icons/app-{size}.png"
@@ -52,6 +52,22 @@ def build_workspace(output):
             if not asset.is_file() or "quickjs" in asset.name.lower():
                 continue  # Inklane never loads PDF scripting or sandbox modules.
             stage(asset, f"pdf-lib/{folder}/{asset.name}")
+
+    for package, source, destination in [
+        ("marked", "lib/marked.esm.js", "marked.js"),
+        ("dompurify", "dist/purify.es.mjs", "purify.js"),
+        ("katex", "dist/katex.mjs", "katex.mjs"),
+        ("katex", "dist/katex.min.css", "katex.css"),
+        ("@highlightjs/cdn-assets", "es/highlight.min.js", "highlight.js")]:
+        package_root = SOURCE / "node_modules" / package
+        expected_version = json.loads((SOURCE / "package.json").read_text())["dependencies"][package]
+        if json.loads((package_root / "package.json").read_text())["version"] != expected_version:
+            raise ValueError("Install the locked rich-text dependencies with npm ci first")
+        stage(package_root / source, "rich-lib/" + destination)
+    for font in (SOURCE / "node_modules/katex/dist/fonts").glob("*.woff2"):
+        stage(font, "rich-lib/fonts/" + font.name)
+    for package, license in [("marked", "LICENSE"), ("dompurify", "LICENSE"), ("katex", "LICENSE"), ("@highlightjs/cdn-assets", "LICENSE")]:
+        stage(SOURCE / "node_modules" / package / license, "rich-lib/" + package.replace("/", "-") + "-LICENSE")
 
     maps = [name for name in files if name.endswith(".bcmap")]
     (editor / "offline-maps.json").write_text(json.dumps({

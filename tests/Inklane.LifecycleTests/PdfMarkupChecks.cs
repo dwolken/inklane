@@ -71,7 +71,7 @@ internal static partial class Program
         p.Items.Add(note); Call(w,"ShowPage",false); Call(w,"DocumentChanged");
         state.Interaction.SavePaths.Enqueue(state.Path("marked.png")); Call(w,"ExportImage");
         var pin = BitmapFrame.Create(new Uri(state.Path("marked.png")),BitmapCreateOptions.None,BitmapCacheOption.OnLoad);
-        var pinColor = Pixel(pin,(note.X+4)/p.Width,(note.Y+9)/p.Height);
+        var pinColor = Pixel(pin,(note.X+4) * pin.DpiX / 96 / pin.PixelWidth,(note.Y+9) * pin.DpiY / 96 / pin.PixelHeight);
         Assert(pinColor[2] > 230 && pinColor[0] < 195,"Export did not render the note at its page coordinates.");
         Assert(Call<bool>(w,"Save",false),"Could not save PDF sidecar.");
         var sidecar = file+".inklane.json"; var markup = DocumentStore.LoadJson(sidecar);

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 4,
+  "kind": "Notebook",
+  "title": "Rich host review",
+  "pages": [{
+    "width": 600, "height": 800, "pattern": "Blank", "spacingMm": 5, "marginMm": 15,
+    "images": [], "ink": [],
+    "items": [
+      {"id":"host-text","title":"","text":"# Host review\n\n**Local math:** $x^2$.\n\n```js\nconst height = 42;\n```","x":40,"y":40,"width":300,"height":240,"fontSize":24,"color":"#202020","isNote":false,"isExpanded":false,"contentFormat":"Markdown"},
+      {"id":"host-note","title":"Complete explanation","text":"## Local explanation\n\nThe complete remark stays editable.\n\n$$\\frac{a}{b}$$","x":420,"y":70,"width":280,"height":220,"fontSize":18,"color":"#6650B8","isNote":true,"isExpanded":false,"contentFormat":"Markdown"}
+    ],
+    "shapes": [
+      {"id":"host-left","kind":"Rectangle","x":60,"y":360,"width":140,"height":80,"color":"#202020","fillColor":"#EAB308","strokeWidth":2,"label":"Source","groupId":"host-diagram"},
+      {"id":"host-right","kind":"Ellipse","x":360,"y":360,"width":140,"height":80,"color":"#202020","fillColor":"#EAB308","strokeWidth":2,"label":"Result","groupId":"host-diagram"},
+      {"id":"host-arrow","kind":"Arrow","x":200,"y":400,"width":160,"height":1,"color":"#202020","fillColor":null,"strokeWidth":2,"startId":"host-left","endId":"host-right","groupId":"host-diagram"}
+    ]
+  }]
+}

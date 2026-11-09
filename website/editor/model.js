@@ -10,19 +10,25 @@ function range(v, min, max) {
   check(Number.isFinite(v) && v >= min && v <= max);
 }
 function title(v) {
-  check(typeof v === "string" && v.length <= 200 && !/[\u0000-\u001f\u007f-\u009f]/.test(v));
+  check(
+    typeof v === "string" &&
+      v.length <= 200 &&
+      !/[\u0000-\u001f\u007f-\u009f]/.test(v),
+  );
 }
 function color(v) {
   check(typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v));
 }
 function defaults(obj, values) {
   check(obj && typeof obj === "object" && !Array.isArray(obj));
-  for (const [key, value] of Object.entries(values)) if (!Object.hasOwn(obj, key)) obj[key] = value;
+  for (const [key, value] of Object.entries(values))
+    if (!Object.hasOwn(obj, key)) obj[key] = value;
 }
 export async function digest(bytes) {
   check(globalThis.crypto?.subtle, "secure");
-  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (n) =>
-    n.toString(16).padStart(2, "0")
+  return Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    (n) => n.toString(16).padStart(2, "0"),
   )
     .join("")
     .toUpperCase();
@@ -30,13 +36,14 @@ export async function digest(bytes) {
 
 function pngSize(bytes) {
   const sig = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82];
-  if (bytes.byteLength < 33 || !sig.every((v, i) => bytes[i] === v)) return null;
+  if (bytes.byteLength < 33 || !sig.every((v, i) => bytes[i] === v))
+    return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return [view.getUint32(16), view.getUint32(20)];
 }
 function jpegSize(bytes) {
   if (bytes[0] !== 255 || bytes[1] !== 216) return null;
-  for (let i = 2; i + 8 < bytes.length; ) {
+  for (let i = 2; i + 8 < bytes.length;) {
     if (bytes[i++] !== 255) return null;
     while (bytes[i] === 255) i++;
     const marker = bytes[i++];
@@ -44,7 +51,10 @@ function jpegSize(bytes) {
     const len = (bytes[i] << 8) + bytes[i + 1];
     if (len < 2 || i + len > bytes.length) return null;
     if (marker >= 192 && marker <= 207 && ![196, 200, 204].includes(marker))
-      return [(bytes[i + 5] << 8) + bytes[i + 6], (bytes[i + 3] << 8) + bytes[i + 4]];
+      return [
+        (bytes[i + 5] << 8) + bytes[i + 6],
+        (bytes[i + 3] << 8) + bytes[i + 4],
+      ];
     i += len;
   }
   return null;
@@ -56,7 +66,11 @@ export async function openImage(file) {
   const png = pngSize(view);
   const dimensions = png || jpegSize(view);
   check(dimensions && dimensions.every((v) => v > 0), "decode");
-  check(dimensions.every((v) => v <= 32768) && dimensions[0] * dimensions[1] <= PIXEL_LIMIT, "size");
+  check(
+    dimensions.every((v) => v <= 32768) &&
+      dimensions[0] * dimensions[1] <= PIXEL_LIMIT,
+    "size",
+  );
   const hash = await digest(bytes);
   let bitmap;
   try {
@@ -70,7 +84,7 @@ export async function openImage(file) {
     bitmap,
     width: bitmap.width,
     height: bitmap.height,
-    mediaType: png ? "image/png" : "image/jpeg"
+    mediaType: png ? "image/png" : "image/jpeg",
   };
 }
 export function newDocument(image) {
@@ -89,9 +103,9 @@ export function newDocument(image) {
         marginMm: 15,
         ink: [],
         items: [],
-        images: []
-      }
-    ]
+        images: [],
+      },
+    ],
   };
 }
 
@@ -109,8 +123,10 @@ export async function readEnvelope(file) {
   check(doc?.format !== "inklane.feedback", "feedbackOnly");
   const pdf = doc?.kind === "Pdf";
   check(
-    pdf ? doc.schemaVersion === 3 : [1, 2].includes(doc?.schemaVersion) && doc.kind === "Image",
-    "version"
+    pdf
+      ? [3, 4].includes(doc.schemaVersion)
+      : [1, 2, 4].includes(doc?.schemaVersion) && doc.kind === "Image",
+    "version",
   );
   const identity = pdf ? doc.sourcePdfSha256 : doc.sourceImageSha256;
   check(typeof identity === "string" && /^[0-9a-f]{64}$/i.test(identity));
@@ -131,7 +147,12 @@ export async function readSidecar(file, image, envelope = null) {
 }
 
 export async function validateDocument(doc, dimensions) {
-  check(Array.isArray(doc.pages) && doc.pages.length >= 1 && doc.pages.length <= 1000, "size");
+  check(
+    Array.isArray(doc.pages) &&
+      doc.pages.length >= 1 &&
+      doc.pages.length <= 1000,
+    "size",
+  );
   defaults(doc, { title: "" });
   title(doc.title);
   const totals = { points: 0, pixels: 0, bytes: 0, ids: new Set() };
@@ -144,25 +165,54 @@ export async function validateDocument(doc, dimensions) {
         original &&
           Math.abs(page.width - original.width) < 0.01 &&
           Math.abs(page.height - original.height) < 0.01,
-        "identity"
+        "identity",
       );
     }
-    if (doc.kind === "Pdf") check(page.pattern === "Blank" && page.marginMm === 0);
-    if (doc.kind === "Notebook") range(page.marginMm, 0, (Math.min(page.width, page.height) * 25.4) / 192);
+    if (doc.kind === "Pdf")
+      check(page.pattern === "Blank" && page.marginMm === 0);
+    if (doc.kind === "Notebook")
+      range(page.marginMm, 0, (Math.min(page.width, page.height) * 25.4) / 192);
     await validatePage(page, totals);
   }
 }
 async function validatePage(p, totals) {
-  defaults(p, { images: [], pattern: "Blank", spacingMm: 5, marginMm: 15 });
+  defaults(p, {
+    images: [],
+    shapes: [],
+    pattern: "Blank",
+    spacingMm: 5,
+    marginMm: 15,
+  });
   check(["Blank", "Ruled", "Squared"].includes(p.pattern));
   range(p.spacingMm, 1, 100);
   range(p.marginMm, 0, 1000);
-  check([p.ink, p.items, p.images].every(Array.isArray));
-  check(p.ink.length <= 10000 && p.items.length <= 2000 && p.images.length <= 100, "size");
+  check([p.ink, p.items, p.images, p.shapes].every(Array.isArray));
+  check(
+    p.ink.length <= 10000 &&
+      p.items.length <= 2000 &&
+      p.images.length <= 100 &&
+      p.shapes.length <= 2000,
+    "size",
+  );
   const ids = totals.ids;
   function id(obj) {
-    check(typeof obj?.id === "string" && obj.id.trim() && obj.id.length <= 128 && !ids.has(obj.id));
+    check(
+      typeof obj?.id === "string" &&
+        obj.id.trim() &&
+        obj.id.length <= 128 &&
+        !ids.has(obj.id),
+    );
     ids.add(obj.id);
+    defaults(obj, { opacity: 1, groupId: "", layer: 0 });
+    range(obj.opacity, 0, 1);
+    check(
+      typeof obj.groupId === "string" &&
+        obj.groupId.length <= 128 &&
+        !/[\x00-\x1f\x7f-\x9f]/.test(obj.groupId),
+    );
+    range(obj.layer, -1000000, 1000000);
+    check(Number.isInteger(obj.layer));
+    if (obj.rotation !== undefined) range(obj.rotation, -360, 360);
   }
   function point(obj) {
     check(obj && typeof obj === "object");
@@ -190,14 +240,78 @@ async function validatePage(p, totals) {
   for (const item of p.items) {
     id(item);
     rect(item);
-    defaults(item, { title: "" });
+    defaults(item, {
+      title: "",
+      fontFamily: "Segoe UI",
+      bold: false,
+      italic: false,
+      underline: false,
+      alignment: "Left",
+      contentFormat: "Plain",
+      rotation: 0,
+    });
+    check(
+      typeof item.fontFamily === "string" &&
+        item.fontFamily.length > 0 &&
+        item.fontFamily.length <= 128 &&
+        !/[\x00-\x1f\x7f-\x9f]/.test(item.fontFamily),
+    );
+    check(
+      [item.bold, item.italic, item.underline].every(
+        (v) => typeof v === "boolean",
+      ),
+    );
+    check(["Left", "Center", "Right", "Justify"].includes(item.alignment));
+    check(["Plain", "Markdown"].includes(item.contentFormat));
     title(item.title);
     color(item.color);
     range(item.fontSize, 1, 1000);
-    check(typeof item.isNote === "boolean" && typeof item.isExpanded === "boolean");
+    check(
+      typeof item.isNote === "boolean" && typeof item.isExpanded === "boolean",
+    );
     check(typeof item.text === "string" && item.text.length <= 1000000);
   }
 
+  for (const shape of p.shapes) {
+    id(shape);
+    rect(shape);
+    defaults(shape, {
+      kind: "Rectangle",
+      color: "#202020",
+      fillColor: null,
+      strokeWidth: 2,
+      rotation: 0,
+      label: "",
+      startId: null,
+      endId: null,
+      flipX: false,
+      flipY: false,
+    });
+    check(
+      ["Rectangle", "Ellipse", "Line", "Arrow", "Diamond"].includes(shape.kind),
+    );
+    color(shape.color);
+    if (shape.fillColor !== null) color(shape.fillColor);
+    range(shape.strokeWidth, 0.1, 1000);
+    range(shape.rotation, -360, 360);
+    check(typeof shape.label === "string" && shape.label.length <= 100000);
+    check(typeof shape.flipX === "boolean" && typeof shape.flipY === "boolean");
+    for (const endpoint of [shape.startId, shape.endId])
+      check(
+        endpoint === null ||
+          (typeof endpoint === "string" && endpoint.length <= 128),
+      );
+  }
+  for (const shape of p.shapes)
+    for (const endpoint of [shape.startId, shape.endId])
+      check(
+        endpoint === null ||
+          (endpoint !== shape.id &&
+            ["Line", "Arrow"].includes(shape.kind) &&
+            p.shapes.some(
+              (o) => o.id === endpoint && !["Line", "Arrow"].includes(o.kind),
+            )),
+      );
   for (const pic of p.images) {
     id(pic);
     rect(pic);
@@ -217,12 +331,14 @@ async function validatePage(p, totals) {
       dim &&
         dim.every((v) => v > 0 && v <= 32768) &&
         png.length <= 16 * 1024 * 1024 &&
-        dim[0] * dim[1] <= 24000000
+        dim[0] * dim[1] <= 24000000,
     );
     totals.pixels += dim[0] * dim[1];
     check(totals.pixels <= 32_000_000, "size");
     try {
-      const decoded = await createImageBitmap(new Blob([png], { type: "image/png" }));
+      const decoded = await createImageBitmap(
+        new Blob([png], { type: "image/png" }),
+      );
       decoded.close();
     } catch {
       throw new EditorError("invalid");
@@ -233,22 +349,74 @@ export function serialize(document) {
   let points = 0,
     pixels = 0,
     bytes = 0;
-  let extended = Boolean(document.title);
+  let extended = Boolean(document.title),
+    styled = document.schemaVersion === 4;
+  const nondefault = (obj) =>
+    (obj.opacity !== undefined && obj.opacity !== 1) ||
+    obj.groupId ||
+    obj.layer ||
+    obj.rotation ||
+    obj.bold ||
+    obj.italic ||
+    obj.underline ||
+    (obj.fontFamily && obj.fontFamily !== "Segoe UI") ||
+    (obj.alignment && obj.alignment !== "Left") ||
+    (obj.contentFormat && obj.contentFormat !== "Plain");
   for (const page of document.pages) {
-    check(page.ink.length <= 10000 && page.items.length <= 2000 && page.images.length <= 100, "size");
+    styled ||=
+      Boolean(page.shapes?.length) ||
+      [...page.ink, ...page.items, ...page.images].some(nondefault);
+    check(
+      page.ink.length <= 10000 &&
+        page.items.length <= 2000 &&
+        page.images.length <= 100,
+      "size",
+    );
     for (const stroke of page.ink) points += stroke.points.length;
     for (const picture of page.images) {
-      const header = Uint8Array.from(atob(picture.pngData.slice(0, 48)), (ch) => ch.charCodeAt(0));
+      const header = Uint8Array.from(atob(picture.pngData.slice(0, 48)), (ch) =>
+        ch.charCodeAt(0),
+      );
       const dimensions = pngSize(header);
       check(dimensions, "invalid");
       pixels += dimensions[0] * dimensions[1];
       bytes += Math.floor((picture.pngData.length * 3) / 4);
     }
-    if (page.images.length || page.items.some((item) => item.title)) extended = true;
+    if (page.images.length || page.items.some((item) => item.title))
+      extended = true;
   }
-  check(points <= 500000 && pixels <= 32_000_000 && bytes <= 24 * 1024 * 1024, "size");
-  const schemaVersion = document.kind === "Pdf" ? 3 : extended ? 2 : document.schemaVersion;
-  const json = JSON.stringify({ ...document, schemaVersion }, null, 2);
+  check(
+    points <= 500000 && pixels <= 32_000_000 && bytes <= 24 * 1024 * 1024,
+    "size",
+  );
+  const schemaVersion = styled
+    ? 4
+    : document.kind === "Pdf"
+      ? 3
+      : extended
+        ? 2
+        : document.schemaVersion;
+  // Validation supplies defaults for old documents. Omit those same default
+  // values on every save, so creating, reopening and saving a review does not
+  // change its bytes simply because the reader filled in optional properties.
+  // Clone only known records; unknown properties and all nondefault values survive.
+  const commonDefaults = { opacity: 1, groupId: "", layer: 0 };
+  const styleDefaults = {
+    ...commonDefaults, rotation: 0, fontFamily: "Segoe UI",
+    bold: false, italic: false, underline: false, alignment: "Left", contentFormat: "Plain",
+  };
+  const compact = (object, values = styleDefaults) => {
+    const copy = { ...object };
+    for (const [key, value] of Object.entries(values)) if (copy[key] === value) delete copy[key];
+    return copy;
+  };
+  const pages = document.pages.map(page => {
+    const result = { ...page, ink: page.ink.map(o => compact(o, commonDefaults)), items: page.items.map(o => compact(o)), images: page.images.map(o => compact(o, { ...commonDefaults, rotation: 0 })) };
+    if (page.shapes?.length) result.shapes = page.shapes.map(o => compact(o, { ...commonDefaults, rotation: 0, label: "", startId: null, endId: null, flipX: false, flipY: false }));
+    else delete result.shapes;
+    return result;
+  });
+  const json = JSON.stringify({ ...document, schemaVersion, pages }, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   check(blob.size <= JSON_LIMIT, "size");
   return blob;
@@ -265,7 +433,7 @@ export function newItem(isNote, x, y, page) {
     fontSize: 20,
     color: "#30293E",
     isNote,
-    isExpanded: isNote
+    isExpanded: isNote,
   };
 }
 export function moved(object, dx, dy, page) {
@@ -283,25 +451,50 @@ export function moved(object, dx, dy, page) {
   dx = Math.max(-left, Math.min(dx, page.width - 1 - right));
   dy = Math.max(-top, Math.min(dy, page.height - 1 - bottom));
   return object.points
-    ? { ...object, points: coords.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+    ? {
+        ...object,
+        points: coords.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })),
+      }
     : { ...object, x: object.x + dx, y: object.y + dy };
 }
 
+function feedbackStyle(obj) {
+  const defaults = {
+    fontFamily: "Segoe UI",
+    bold: false,
+    italic: false,
+    underline: false,
+    alignment: "Left",
+    contentFormat: "Plain",
+    opacity: 1,
+    rotation: 0,
+    groupId: "",
+    layer: 0,
+  };
+  return Object.fromEntries(
+    Object.entries(defaults)
+      .filter(([key, value]) => obj[key] !== undefined && obj[key] !== value)
+      .map(([key]) => [key, obj[key]]),
+  );
+}
 export async function feedbackFile(doc, image) {
   const pages = [];
   for (const [index, p] of doc.pages.entries()) {
     const annotations = [];
     for (const picture of p.images) {
       const { id, x, y, width, height } = picture;
-      const bytes = Uint8Array.from(atob(picture.pngData), (ch) => ch.charCodeAt(0));
+      const bytes = Uint8Array.from(atob(picture.pngData), (ch) =>
+        ch.charCodeAt(0),
+      );
       annotations.push({
         id,
         type: "picture",
+        ...feedbackStyle(picture),
         x,
         y,
         width,
         height,
-        sha256: (await digest(bytes)).toLowerCase()
+        sha256: (await digest(bytes)).toLowerCase(),
       });
     }
     for (const stroke of p.ink) {
@@ -310,21 +503,35 @@ export async function feedbackFile(doc, image) {
         type: "ink",
         color: stroke.color,
         width: stroke.width,
-        points: stroke.points.map(({ x, y, pressure }) => ({ x, y, pressure }))
+        ...feedbackStyle(stroke),
+        points: stroke.points.map(({ x, y, pressure }) => ({ x, y, pressure })),
       });
     }
     for (const item of p.items) {
       const { id, x, y, width, height, text, color, fontSize } = item;
-      const record = { id, type: item.isNote ? "note" : "text", x, y, width, height, text, color, fontSize };
+      const record = {
+        id,
+        type: item.isNote ? "note" : "text",
+        x,
+        y,
+        width,
+        height,
+        text,
+        color,
+        fontSize,
+      };
+      Object.assign(record, feedbackStyle(item));
       if (item.isNote) record.title = item.title;
       annotations.push(record);
     }
+    for (const shape of p.shapes || [])
+      annotations.push({ ...shape, type: "shape" });
     pages.push({
       number: index + 1,
       width: p.width,
       height: p.height,
       unit: doc.kind === "Image" ? "image-pixel" : "dip-96",
-      annotations
+      annotations,
     });
   }
   const hash = image.hash;
@@ -334,14 +541,18 @@ export async function feedbackFile(doc, image) {
         {
           format: "inklane.feedback",
           version: 1,
-          source: { name: image.name, mediaType: image.mediaType, sha256: hash.toLowerCase() },
+          source: {
+            name: image.name,
+            mediaType: image.mediaType,
+            sha256: hash.toLowerCase(),
+          },
           coordinateSystem: "top-left",
-          pages
+          pages,
         },
         null,
-        2
-      )
+        2,
+      ),
     ],
-    { type: "application/json" }
+    { type: "application/json" },
   );
 }

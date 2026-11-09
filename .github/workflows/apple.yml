@@ -3,9 +3,9 @@ name: Apple workspaces
 on:
   push:
     branches: [main]
-    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+    paths: ['platforms/apple/**', 'website/**', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
   pull_request:
-    paths: ['platforms/apple/**', 'website/**', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
+    paths: ['platforms/apple/**', 'website/**', 'tests/browser-rich-host.js', 'tests/fixtures/rich-host-review.json', '.github/workflows/apple.yml', 'src/Inklane/Assets/**']
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,9 @@ jobs:
     name: ${{ matrix.label }} workspace
     concurrency:
       group: apple-${{ matrix.queue }}-${{ github.ref }}
-      cancel-in-progress: false
+      # Verify the current PR revision instead of queuing superseded simulators.
+      # Integrated main builds retain their complete qualification runs.
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:

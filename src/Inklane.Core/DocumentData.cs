@@ -14,7 +14,8 @@ public sealed class DocumentData
     [JsonRequired]
     public int SchemaVersion
     {
-        get => declaredVersion is 1 or 2 && Kind == DocumentKind.Pdf ? 3 :
+        get => declaredVersion is >= 1 and <= 3 && Pages?.Any(UsesExtendedObjects) == true ? 4 :
+            declaredVersion is 1 or 2 && Kind == DocumentKind.Pdf ? 3 :
             declaredVersion == 1 && (!string.IsNullOrEmpty(Title) || Pages?.Any(page =>
             page?.Images is { Count: > 0 } || page?.Items?.Any(item => !string.IsNullOrEmpty(item?.Title)) == true) == true)
             ? 2 : declaredVersion;
@@ -29,6 +30,11 @@ public sealed class DocumentData
     public string? SourcePdfName { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourcePdfSha256 { get; set; }
+
+    private static bool UsesExtendedObjects(PageData page) => page != null &&
+        (page.Shapes?.Count > 0 || page.Items?.Any(i => i != null && (i.FontFamily != "Segoe UI" || i.Bold || i.Italic || i.Underline || i.Alignment != "Left" || i.ContentFormat != "Plain" || i.Opacity != 1 || i.Rotation != 0 || i.Layer != 0 || i.GroupId != "")) == true ||
+         page.Ink?.Any(i => i != null && (i.Opacity != 1 || i.Layer != 0 || i.GroupId != "")) == true ||
+         page.Images?.Any(i => i != null && (i.Opacity != 1 || i.Rotation != 0 || i.Layer != 0 || i.GroupId != "")) == true);
 
     // Changing a stored reference does not change the session or copy its potentially large page content.
     internal DocumentData WithSourceName(string name) => new()
@@ -49,11 +55,17 @@ public sealed class PageData
     public List<InkData> Ink { get; set; } = [];
     public List<TextItem> Items { get; set; } = [];
     public List<ImageItem> Images { get; set; } = [];
+    public List<ShapeItem> Shapes { get; set; } = [];
 }
 
 /// <summary>A portable PNG placed in page coordinates, below ink and text.</summary>
 public sealed class ImageItem
 {
+    public string GroupId { get; set; } = "";
+    public int Layer { get; set; }
+    public double Opacity { get; set; } = 1;
+    public double Rotation { get; set; }
+
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public double X { get; set; }
     public double Y { get; set; }
@@ -64,6 +76,10 @@ public sealed class ImageItem
 
 public sealed class InkData
 {
+    public string GroupId { get; set; } = "";
+    public int Layer { get; set; }
+    public double Opacity { get; set; } = 1;
+
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Color { get; set; } = "#202020";
     public double Width { get; set; } = 2;
@@ -79,6 +95,11 @@ public sealed class InkPoint
 
 public sealed class TextItem
 {
+    public string GroupId { get; set; } = "";
+    public int Layer { get; set; }
+    public double Opacity { get; set; } = 1;
+    public double Rotation { get; set; }
+
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Title { get; set; } = "";
     public string Text { get; set; } = "";
@@ -87,9 +108,40 @@ public sealed class TextItem
     public double Width { get; set; } = 240;
     public double Height { get; set; } = 80;
     public double FontSize { get; set; } = 18;
+    public string FontFamily { get; set; } = "Segoe UI";
+    public bool Bold { get; set; }
+    public bool Italic { get; set; }
+    public bool Underline { get; set; }
+    public string Alignment { get; set; } = "Left";
+    public string ContentFormat { get; set; } = "Plain";
     public string Color { get; set; } = "#202020";
     public bool IsNote { get; set; }
     public bool IsExpanded { get; set; } = true;
+}
+
+public enum ShapeKind { Rectangle, Ellipse, Line, Arrow, Diamond }
+
+/// <summary>Editable vector geometry. Connectors refer to shape identifiers on the same page.</summary>
+public sealed class ShapeItem
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public ShapeKind Kind { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; } = 160;
+    public double Height { get; set; } = 100;
+    public string Color { get; set; } = "#202020";
+    public string? FillColor { get; set; }
+    public double StrokeWidth { get; set; } = 2;
+    public double Opacity { get; set; } = 1;
+    public double Rotation { get; set; }
+    public bool FlipX { get; set; }
+    public bool FlipY { get; set; }
+    public string Label { get; set; } = "";
+    public string GroupId { get; set; } = "";
+    public int Layer { get; set; }
+    public string? StartId { get; set; }
+    public string? EndId { get; set; }
 }
 
 public static class Units

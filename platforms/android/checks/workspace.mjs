@@ -7,6 +7,10 @@ import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 30000 }).trim();
+// `adb shell` rejoins arguments before the remote shell parses them. Enumerate
+// the fixed test directory, then match locally so names with spaces stay intact.
+const findDownload = (name, minimum = 12) => adb('shell','find','/sdcard/Download','-type','f','-size','+'+minimum+'c')
+  .split('\n').find(path => path.endsWith('/'+name));
 const app = 'dev.inklane.android';
 const output = 'platforms/android/build/outputs/apk/debug';
 const apk = readdirSync(output).find(f => f.endsWith('.apk'));
@@ -77,7 +81,7 @@ async function systemTap(match, label) {
 
 // The OS picker was exercised above. Send deterministic fixtures to the same
 // file-input handler to check WebView's image codec and the APK's PDF worker.
-async function loadFixture(path, type) {
+async function loadFixture(path, type, expectedName = basename(path)) {
   const bytes = readFileSync(path);
   const name = basename(path);
   await js(`(() => {
@@ -87,7 +91,7 @@ async function loadFixture(path, type) {
     input.files = transfer.files;
     input.dispatchEvent(new Event('change', {bubbles:true}));
   })()`);
-  await waitFor(()=>js('document.querySelector("#name").textContent === '+JSON.stringify(name)),'open '+name);
+  await waitFor(()=>js('document.querySelector("#name").textContent === '+JSON.stringify(expectedName)),'open '+name);
   return bytes;
 }
 
@@ -116,7 +120,7 @@ try {
   // DocumentsUI creates an empty entry before our activity receives its URI.
   // Wait for the editor to confirm the native write before inspecting that entry.
   await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled && document.querySelector("#state").textContent.toLowerCase().includes("saved")'), 'editor confirmation of native write');
-  const deviceFile=await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name',title+'.inklane'), 'committed notebook');
+  const deviceFile=await waitFor(async()=>findDownload(title+'.inklane'), 'committed notebook');
   adb('pull',deviceFile,join(fresh,'saved.inklane'));
   const bytes=readFileSync(join(fresh,'saved.inklane'));
   const meta=JSON.parse(bytes.subarray(12,12+bytes.readUInt32BE(8)).toString('utf8'));
@@ -222,12 +226,40 @@ try {
   await tap('#more summary');
   await tap('#feedback');
   await systemTap(saveButton,'system feedback Save');
-  const feedbackPath = await waitFor(async()=>adb('shell','find','/sdcard/Download','-size','+12c','-name','review-pages.pdf.feedback.json'),'written feedback report');
+  const feedbackPath = await waitFor(async()=>findDownload('review-pages.pdf.feedback.json'),'written feedback report');
   adb('pull',feedbackPath,join(fresh,'feedback.json'));
   const report = JSON.parse(readFileSync(join(fresh,'feedback.json'),'utf8'));
   assert.equal(report.source.sha256,createHash('sha256').update(pdf).digest('hex'));
   assert.equal(report.pages[1].annotations[0].title,'Scale bar');
   assert.equal(report.pages[1].annotations[0].text,'Change the units.');
+  await tap('#more summary'); await tap('#home');
+  await waitFor(()=>visible('#new-notebook'), 'home before rich fixture');
+  const rich = JSON.parse(readFileSync('tests/fixtures/rich-host-review.json','utf8'));
+  const metadata = Buffer.from(JSON.stringify({format:'inklane.workspace',version:1,sourceName:rich.title,document:rich}));
+  const header = Buffer.alloc(12); header.write('INKLANE1'); header.writeUInt32BE(metadata.length,8);
+  const richInput = join(fresh,'Rich.inklane'); writeFileSync(richInput,Buffer.concat([header,metadata]));
+  await loadFixture(richInput,'application/octet-stream',rich.title);
+  await waitFor(()=>js('document.querySelectorAll("[data-shape]").length === 3 && document.querySelectorAll(".placed .katex").length === 1'),'local rich renderers');
+  assert.equal(await js(readFileSync('tests/browser-rich-host.js','utf8')),true);
+  await tap('#save'); await systemTap(saveButton,'system rich workspace Save');
+  await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled && document.querySelector("#state").textContent.toLowerCase().includes("saved")'),'rich native save');
+  const richDevicePath = await waitFor(async()=>findDownload('Rich host review.inklane'),'saved rich notebook');
+  const richSaved = join(fresh,'Rich saved.inklane'); adb('pull',richDevicePath,richSaved);
+  const richBytes = readFileSync(richSaved), richModel = JSON.parse(richBytes.subarray(12,12+richBytes.readUInt32BE(8))).document;
+  assert.equal(richModel.schemaVersion,4);
+  const richText = richModel.pages[0].items.find(o=>o.id==='host-text');
+  assert.deepEqual([richText.width,richText.fontSize,richText.color,richText.bold,richText.contentFormat],[210,24,'#F97316',true,'Markdown']);
+  const richArrow = richModel.pages[0].shapes.find(o=>o.id==='host-arrow');
+  assert.deepEqual([richArrow.startId,richArrow.endId,richArrow.groupId],['host-left','host-right','host-diagram']);
+  await tap('#more summary'); await tap('#export-image'); await systemTap(saveButton,'system annotated PNG Save');
+  await waitFor(()=>js('document.hasFocus() && !document.querySelector("#save").disabled'),'PNG native completion');
+  const pngDevicePath = await waitFor(async()=>findDownload('Rich host review-1-annotated.png',1000),'annotated PNG');
+  const pngPath = join(fresh,'Rich.png'); adb('pull',pngDevicePath,pngPath);
+  const png = readFileSync(pngPath); assert.equal(png.subarray(1,4).toString(),'PNG');
+  assert.deepEqual(await js(`(async()=>{const i=new Image();i.src='data:image/png;base64,${png.toString('base64')}';await i.decode();const c=document.createElement('canvas');c.width=i.width;c.height=i.height;c.getContext('2d').drawImage(i,0,0);return [...c.getContext('2d').getImageData(180,760,1,1).data];})()`),[234,179,8,255]);
+  await loadFixture(richSaved,'application/octet-stream',rich.title);
+  await waitFor(()=>js('document.querySelectorAll("[data-shape]").length === 3 && document.querySelectorAll(".placed .katex").length === 1'),'reopened rich workspace');
+  console.log('Android schema4 rich math/code editing, text resize/recolor, grouped connector movement/undo, native save/reopen and PNG pixels passed.');
   console.log('Android notebook round trip, cancelled save, local PNG decoding, two-page PDF rendering and source-linked feedback export passed.');
 } catch (error) {
   console.error('Workspace state:', await js('JSON.stringify({title:document.querySelector("#name")?.textContent,state:document.querySelector("#state")?.textContent,notice:document.querySelector("#message")?.textContent,dialog:document.querySelector("dialog[open]")?.id,active:document.hasFocus(),focus:document.activeElement?.id,deviceTap:window.__deviceTap,cardHidden:document.querySelector("#card")?.hidden,expanded:document.querySelector(".marker")?.getAttribute("aria-expanded")})').catch(()=>'unavailable'));

@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; font-src 'self' blob: data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
@@ -11,12 +14,16 @@
     <title>Inklane · Workspace</title>
     <link rel="icon" href="../assets/inklane.svg" />
     <link rel="stylesheet" href="editor.css" />
+    <link rel="stylesheet" href="rich-lib/katex.css" />
+    <link rel="stylesheet" href="rich-text.css" />
     <script type="module" src="editor.js"></script>
   </head>
   <body>
     <header>
       <a class="brand" href="../" aria-label="Inklane"
-        ><img src="../assets/inklane.svg" alt="" width="30" height="30" /><span>Inklane</span></a
+        ><img src="../assets/inklane.svg" alt="" width="30" height="30" /><span
+          >Inklane</span
+        ></a
       >
       <div id="document">
         <strong id="name" data-i="workspace">Workspace</strong
@@ -36,13 +43,25 @@
             <button id="home" data-i="home">Documents</button
             ><button id="new-sheet" data-i="create">New notebook</button>
             <button id="rename-book" hidden data-i="rename"></button
-            ><button id="index" disabled data-i="index">Browse annotations</button
-            ><button id="download" disabled data-i="download">Download annotation copy</button
-            ><button id="feedback" disabled data-i="feedback">Export feedback…</button
-            ><button id="portable" disabled data-i="portable">Save portable copy…</button
+            ><button id="index" disabled data-i="index">
+              Browse annotations</button
+            ><button id="download" disabled data-i="download">
+              Download annotation copy</button
+            ><button id="feedback" disabled data-i="feedback">
+              Export feedback…</button
+            ><button id="portable" disabled data-i="portable">
+              Save portable copy…</button
             ><button id="whole-page" disabled data-i="fitPage"></button
             ><button id="print" disabled data-i="print">Print review…</button>
-            <button id="shortcuts" data-i="guide">How to use the workspace</button
+            <button
+              id="continuous-view"
+              disabled
+              data-i="continuousView"
+              aria-pressed="false"
+            ></button>
+            <button id="export-image" disabled data-i="exportImage"></button>
+            <button id="shortcuts" data-i="guide">
+              How to use the workspace</button
             ><button id="language"></button>
           </div>
         </details>
@@ -52,10 +71,13 @@
       <section id="welcome">
         <div class="welcome-lead">
           <span class="library-mark" aria-hidden="true"
-            ><svg viewBox="0 0 48 48"><path d="M8 12h24v27H8zM15 6h24v27M14 21h11m-11 5h7" /></svg
+            ><svg viewBox="0 0 48 48">
+              <path d="M8 12h24v27H8zM15 6h24v27M14 21h11m-11 5h7" /></svg
           ></span>
           <h1 data-i="home">Documents</h1>
-          <p data-i="intro">Open a document to review, or start on fresh paper.</p>
+          <p data-i="intro">
+            Open a document to review, or start on fresh paper.
+          </p>
         </div>
         <div class="launch-grid">
           <button id="start" class="launch">
@@ -75,15 +97,23 @@
           <h2 data-i="recent">On this device</h2>
           <div id="draft-list"></div>
         </section>
-        <button id="sample-link" class="sample-link" data-i="openSample">Open the field guide</button>
+        <button id="sample-link" class="sample-link" data-i="openSample">
+          Open the field guide
+        </button>
       </section>
-      <div id="tools" class="tools" role="group" data-label="tools" hidden></div>
+      <div
+        id="tools"
+        class="tools"
+        role="group"
+        data-label="tools"
+        hidden
+      ></div>
       <section id="viewport" tabindex="0" data-label="surface" hidden>
         <div id="mat">
           <div id="sheet">
             <canvas id="source" aria-hidden="true"></canvas>
             <div id="pictures"></div>
-            <svg id="marks" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+            <div id="marks" aria-hidden="true"></div>
             <div id="objects"></div>
           </div>
         </div>
@@ -91,24 +121,41 @@
       <aside id="card" hidden>
         <div class="card-head">
           <span id="badge"></span
-          ><input id="note-title" maxlength="200" data-label="title" autocomplete="off" /><button
-            id="close-card"
-            data-label="collapse"
-            class="icon"
-          >
+          ><input
+            id="note-title"
+            maxlength="200"
+            data-label="title"
+            autocomplete="off"
+          /><button id="close-card" data-label="collapse" class="icon">
             ⌃
           </button>
         </div>
-        <textarea id="note-body" maxlength="1000000" data-label="noteBody"></textarea>
+        <div class="note-modes">
+          <button id="note-edit" data-i="edit" aria-pressed="true"></button
+          ><button
+            id="note-read"
+            data-i="preview"
+            aria-pressed="false"
+          ></button>
+        </div>
+        <div id="note-preview" hidden></div>
+        <button id="note-resize" data-label="resize">◢</button>
+        <textarea
+          id="note-body"
+          maxlength="1000000"
+          data-label="noteBody"
+        ></textarea>
       </aside>
       <div id="message" role="status" hidden></div>
     </main>
     <footer hidden>
       <div id="pen-properties">
-        <input type="color" id="ink-color" value="#6447b0" data-label="inkColor" /><select
-          id="ink-size"
-          data-label="inkSize"
-        >
+        <input
+          type="color"
+          id="ink-color"
+          value="#6447b0"
+          data-label="inkColor"
+        /><select id="ink-size" data-label="inkSize">
           <option value="1.5">1.5 px</option>
           <option value="3" selected>3 px</option>
           <option value="5">5 px</option>
@@ -135,7 +182,13 @@
         ><button id="plus" class="icon" data-label="in">+</button>
       </div>
     </footer>
-    <input id="files" type="file" accept=".png,.jpg,.jpeg,.pdf,.json,.inklane" multiple hidden />
+    <input
+      id="files"
+      type="file"
+      accept=".png,.jpg,.jpeg,.pdf,.json,.inklane"
+      multiple
+      hidden
+    />
     <dialog id="new-document" aria-labelledby="new-heading">
       <form id="paper-form">
         <h2 id="new-heading" data-i="create"></h2>
@@ -174,7 +227,13 @@
         ></label>
         <label id="custom-spacing-row" hidden
           ><span data-i="customSpacing"></span
-          ><input id="custom-spacing" type="number" min="1" max="100" step="any" value="7"
+          ><input
+            id="custom-spacing"
+            type="number"
+            min="1"
+            max="100"
+            step="any"
+            value="7"
         /></label>
         <div class="relink-actions">
           <button type="button" id="cancel-new" data-i="cancel"></button
@@ -185,7 +244,9 @@
     <dialog id="page-list" aria-labelledby="pages-heading">
       <div class="dialog-top">
         <h2 id="pages-heading" data-i="pages"></h2>
-        <form method="dialog"><button class="icon" data-label="done">×</button></form>
+        <form method="dialog">
+          <button class="icon" data-label="done">×</button>
+        </form>
       </div>
       <div id="page-choices"></div>
       <div id="page-manage" hidden>
@@ -217,7 +278,11 @@
         <p id="print-limit" hidden data-i="printLimit"></p>
         <div class="relink-actions">
           <button type="button" id="cancel-print" data-i="cancel"></button
-          ><button type="submit" class="primary" data-i="continuePrint"></button>
+          ><button
+            type="submit"
+            class="primary"
+            data-i="continuePrint"
+          ></button>
         </div>
       </form>
     </dialog>
@@ -225,9 +290,13 @@
       <form id="size-form">
         <h2 data-i="resize"></h2>
         <label for="picture-width" data-i="pictureWidth"></label
-        ><input id="picture-width" type="number" min="1" step="any" required /><small
-          id="picture-height"
-        ></small>
+        ><input
+          id="picture-width"
+          type="number"
+          min="1"
+          step="any"
+          required
+        /><small id="picture-height"></small>
         <div class="relink-actions">
           <button id="cancel-size" type="button" data-i="cancel"></button
           ><button class="primary" data-i="done"></button>
@@ -237,7 +306,9 @@
     <dialog id="browse">
       <div class="dialog-top">
         <h2 data-i="index"></h2>
-        <form method="dialog"><button data-label="done" class="icon">×</button></form>
+        <form method="dialog">
+          <button data-label="done" class="icon">×</button>
+        </form>
       </div>
       <input id="search" type="search" data-label="search" />
       <div id="results"></div>
@@ -256,8 +327,12 @@
       <p data-i="helpOpen"></p>
       <p data-i="helpEdit"></p>
       <p data-i="helpSave"></p>
-      <form method="dialog"><button class="primary" data-i="done">Done</button></form>
+      <form method="dialog">
+        <button class="primary" data-i="done">Done</button>
+      </form>
     </dialog>
-    <noscript>Inklane requires JavaScript. Inklane benötigt JavaScript.</noscript>
+    <noscript
+      >Inklane requires JavaScript. Inklane benötigt JavaScript.</noscript
+    >
   </body>
 </html>

@@ -12,15 +12,14 @@ namespace Inklane;
 
 internal static class SaveProgress
 {
-    public static void WriteNotebook(Window owner, DocumentData document, string historySnapshot, string path)
+    public static string WriteNotebook(Window owner, DocumentData document, string historySnapshot, string path)
     {
         // Short saves keep the normal inline status. Larger ink, annotation,
         // or page counts can spend seconds constructing PDF appearances.
         if (historySnapshot.Length < 1_000_000 && document.Pages.Count < 32 &&
-            document.Pages.Sum(page => page.Ink.Count + page.Items.Count) < 160)
+            document.Pages.Sum(page => page.Ink.Count + page.Items.Count + page.Shapes.Count) < 160)
         {
-            DocumentStore.SavePdf(document, path);
-            return;
+            return DocumentStore.SavePdf(document, path);
         }
 
         // CaptureHistory just validated this immutable snapshot. Note expansion
@@ -29,6 +28,7 @@ internal static class SaveProgress
             .Where(item => item.IsNote && !item.IsExpanded).Select(item => item.Id).ToFrozenSet(StringComparer.Ordinal);
         var dialog = CreateWindow(owner, path, L.T("Saving"));
         ExceptionDispatchInfo? failure = null;
+        string? writtenHash = null;
         var finished = false;
         var started = false;
         var worker = new Thread(() =>
@@ -38,7 +38,7 @@ internal static class SaveProgress
                 var copy = DocumentStore.Deserialize(historySnapshot);
                 foreach (var note in copy.Pages.SelectMany(page => page.Items).Where(item => item.IsNote))
                     note.IsExpanded = !collapsed.Contains(note.Id);
-                DocumentStore.SavePdf(copy, path);
+                writtenHash = DocumentStore.SavePdf(copy, path);
             }
             catch (Exception exception) { failure = ExceptionDispatchInfo.Capture(exception); }
             finally
@@ -63,6 +63,7 @@ internal static class SaveProgress
         if (started) worker.Join(); // Also finishes a write if Windows closes the owned window.
         failure?.Throw();
         if (!started) throw new IOException("The PDF writer could not start.");
+        return writtenHash ?? throw new IOException("The PDF writer did not return a completed save.");
     }
 
     internal static Window CreateWindow(Window owner, string path, string operation)

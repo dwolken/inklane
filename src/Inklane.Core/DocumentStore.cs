@@ -77,11 +77,21 @@ public static partial class DocumentStore
     public static DocumentData Clone(DocumentData data) => Deserialize(Serialize(data));
     public static string GetFileHash(string path)
     {
-        using var input = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(input));
+        // Indexers and antivirus can briefly claim a just-published file. Retry only
+        // sharing/lock violations; missing files and denied access remain real errors.
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var input = File.OpenRead(path);
+                return Convert.ToHexString(SHA256.HashData(input));
+            }
+            catch (IOException ex) when ((ex.HResult & 0xffff) is 32 or 33 && attempt < 5)
+            { Thread.Sleep(40 << attempt); }
+        }
     }
 
-    public static void SaveJson(DocumentData data, string path)
+    public static string SaveJson(DocumentData data, string path)
     {
         if (data.Kind == DocumentKind.Pdf && !Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("PDF markup must be saved to a JSON annotation file.");
@@ -91,7 +101,9 @@ public static partial class DocumentStore
             stored = data.WithSourceName(Path.GetFileName(source));
         var bytes = Encoding.UTF8.GetBytes(Serialize(stored));
         ProtectSourceImage(data, path);
+        var hash = Convert.ToHexString(SHA256.HashData(bytes));
         AtomicWrite(path, temporary => File.WriteAllBytes(temporary, bytes));
+        return hash;
     }
 
     public static DocumentData LoadJson(string path)
@@ -110,7 +122,7 @@ public static partial class DocumentStore
         return model;
     }
 
-    public static void SavePdf(DocumentData data, string path)
+    public static string SavePdf(DocumentData data, string path)
     {
         if (data.Kind == DocumentKind.Pdf)
             throw new NotSupportedException("An external PDF and its editable annotation file must be kept together.");
@@ -129,6 +141,7 @@ public static partial class DocumentStore
         pdf.Internals.Catalog.Elements["/InklaneData"] = metadata.Reference!;
 
         XImage? sourceImage = null;
+        string? writtenHash = null;
         try
         {
             if (data.Kind == DocumentKind.Image)
@@ -151,7 +164,7 @@ public static partial class DocumentStore
                     if (sourceImage is not null)
                         graphics.DrawImage(sourceImage, 0, 0, page.Width.Point, page.Height.Point);
                     else DrawPaper(graphics, model);
-                    foreach (var item in model.Images)
+                    foreach (var item in data.SchemaVersion < 4 ? model.Images : [])
                     {
                         using var stream = new MemoryStream(item.PngData, 0, item.PngData.Length, writable: false, publiclyVisible: true);
                         using var image = XImage.FromStream(stream);
@@ -159,8 +172,7 @@ public static partial class DocumentStore
                             Units.DipToPoint(item.Width), Units.DipToPoint(item.Height));
                     }
                 }
-                foreach (var stroke in model.Ink) AddInk(pdf, page, stroke);
-                foreach (var item in model.Items) AddText(pdf, page, item);
+                AddObjects(pdf, page, model, includeImages: data.SchemaVersion >= 4);
             }
             AtomicWrite(path, temporary =>
             {
@@ -171,9 +183,11 @@ public static partial class DocumentStore
                 finalized.Internals.Catalog.Elements.SetString("/InklaneContentHash", ContentHash(finalized));
                 finalized.Save(temporary);
                 CheckSize(temporary, MaxPdfBytes);
+                writtenHash = GetFileHash(temporary);
             });
         }
         finally { sourceImage?.Dispose(); }
+        return writtenHash ?? throw new IOException("The PDF was not written.");
     }
 
     public static DocumentData LoadPdf(string path)
@@ -310,17 +324,28 @@ public static partial class DocumentStore
                         polygon.Add(new XPoint(Units.DipToPoint(single.Point.X) - left, Units.DipToPoint(single.Point.Y) - top));
                 if (polygon.Count > 2) outline.AddPolygon(polygon.ToArray());
             }
-            graphics.DrawPath(new XSolidBrush(ParseColor(ink.Color)), outline);
+            graphics.DrawPath(new XSolidBrush(WithOpacity(ink.Color, ink.Opacity)), outline);
         });
         page.Annotations.Add(annotation);
     }
 
     private static void AddText(PdfDocument pdf, PdfPage page, TextItem item)
     {
-        var left = Units.DipToPoint(item.X);
-        var top = Units.DipToPoint(item.Y);
-        var width = Units.DipToPoint(item.IsNote ? 26 : item.Width);
-        var height = Units.DipToPoint(item.IsNote ? 26 : item.Height);
+        var rich = !item.IsNote && item.ContentFormat == "Markdown" ? StructuredText.CreateDrawing(item) : null;
+        double layoutHeight = item.Height;
+        if (!item.IsNote)
+        {
+            var measured = new System.Windows.Media.FormattedText(item.Text,CultureInfo.CurrentCulture,System.Windows.FlowDirection.LeftToRight,
+                new System.Windows.Media.Typeface(new System.Windows.Media.FontFamily(item.FontFamily), item.Italic ? System.Windows.FontStyles.Italic : System.Windows.FontStyles.Normal,
+                    item.Bold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal,System.Windows.FontStretches.Normal), item.FontSize,System.Windows.Media.Brushes.Black,1)
+                { MaxTextWidth = item.Width };
+            layoutHeight = Math.Max(item.Height,rich?.Bounds.Bottom ?? measured.Height + item.FontSize * .3);
+        }
+        var area = new System.Windows.Rect(item.X,item.Y,item.IsNote ? 26 : item.Width,item.IsNote ? 26 : layoutHeight);
+        if (!item.IsNote && item.Rotation != 0) area = new System.Windows.Media.RotateTransform(item.Rotation,item.X+item.Width/2,item.Y+item.Height/2).TransformBounds(area);
+        var left = Units.DipToPoint(area.X); var top = Units.DipToPoint(area.Y);
+        var width = Units.DipToPoint(area.Width); var height = Units.DipToPoint(area.Height);
+        var textWidth = Units.DipToPoint(item.Width); var textHeight = Units.DipToPoint(layoutHeight);
         var annotation = new StandardAnnotation(pdf, item.IsNote ? "/Text" : "/FreeText")
         {
             Rectangle = new PdfRectangle(new XRect(left, page.Height.Point - top - height, width, height)),
@@ -339,7 +364,7 @@ public static partial class DocumentStore
         else
         {
             annotation.Elements.SetString("/DA", $"/Helv {Number(Units.DipToPoint(item.FontSize))} Tf 0 g");
-            annotation.Elements.SetInteger("/Q", 0);
+            annotation.Elements.SetInteger("/Q", item.Alignment == "Center" ? 1 : item.Alignment == "Right" ? 2 : 0);
         }
         SetAppearance(pdf, annotation, width, height, graphics =>
         {
@@ -352,10 +377,16 @@ public static partial class DocumentStore
             }
             else
             {
-                var font = new XFont("Segoe UI", Units.DipToPoint(item.FontSize), XFontStyleEx.Regular);
-                var formatter = new XTextFormatter(graphics);
-                formatter.DrawString(item.Text, font, new XSolidBrush(ParseColor(item.Color)),
-                    new XRect(0, 0, width, height), XStringFormats.TopLeft);
+                graphics.TranslateTransform(Units.DipToPoint(item.X)-left,Units.DipToPoint(item.Y)-top);
+                graphics.RotateAtTransform(item.Rotation, new XPoint(textWidth / 2,Units.DipToPoint(item.Height) / 2));
+                if (rich != null) { DrawRichText(graphics,rich,System.Windows.Media.Matrix.Identity); return; }
+                var style = (item.Bold ? XFontStyleEx.Bold : XFontStyleEx.Regular) | (item.Italic ? XFontStyleEx.Italic : XFontStyleEx.Regular) | (item.Underline ? XFontStyleEx.Underline : XFontStyleEx.Regular);
+                XFont font;
+                try { font = new XFont(item.FontFamily, Units.DipToPoint(item.FontSize), style); }
+                catch (InvalidOperationException) { font = new XFont("Segoe UI", Units.DipToPoint(item.FontSize), style); }
+                var formatter = new XTextFormatter(graphics) { Alignment = item.Alignment switch { "Center" => XParagraphAlignment.Center, "Right" => XParagraphAlignment.Right, "Justify" => XParagraphAlignment.Justify, _ => XParagraphAlignment.Left } };
+                formatter.DrawString(item.Text, font, new XSolidBrush(WithOpacity(item.Color, item.Opacity)),
+                    new XRect(0, 0, textWidth, textHeight), XStringFormats.TopLeft);
             }
         });
         page.Annotations.Add(annotation);
@@ -409,7 +440,7 @@ public static partial class DocumentStore
 
     public static void CheckPageCapacity(PageData page)
     {
-        if (page.Ink is null || page.Items is null || page.Images is null || page.Images.Count > 1000 ||
+        if (page.Ink is null || page.Items is null || page.Images is null || page.Shapes is null || page.Shapes.Count > 10000 || page.Images.Count > 1000 ||
             page.Ink.Count > 100000 || page.Items.Count > 10000)
             throw new InvalidDataException("The page contains too many annotations or missing collections.");
     }
@@ -417,7 +448,7 @@ public static partial class DocumentStore
     public static void Validate(DocumentData data, bool decodeImages = false)
     {
         ArgumentNullException.ThrowIfNull(data);
-        if (data.Kind == DocumentKind.Pdf ? data.SchemaVersion != 3 : data.SchemaVersion is not (1 or 2))
+        if (data.Kind == DocumentKind.Pdf ? data.SchemaVersion is not (3 or 4) : data.SchemaVersion is not (1 or 2 or 4))
             throw new NotSupportedException("This Inklane document version is not supported.");
         if (data.Kind == DocumentKind.Pdf)
         {
@@ -458,6 +489,7 @@ public static partial class DocumentStore
             {
                 if (image is null) throw new InvalidDataException("An embedded image is missing.");
                 Id(image.Id, ids);
+                ExtendedStyle(image.GroupId, image.Layer, image.Opacity, image.Rotation);
                 Range(image.X, -100000, 200000, "Image X");
                 Range(image.Y, -100000, 200000, "Image Y");
                 Range(image.Width, 1, 100000, "Image width");
@@ -471,6 +503,7 @@ public static partial class DocumentStore
             {
                 if (ink is null || ink.Points is null) throw new InvalidDataException("An ink stroke is invalid.");
                 Id(ink.Id, ids);
+                ExtendedStyle(ink.GroupId, ink.Layer, ink.Opacity, 0);
                 Color(ink.Color);
                 Range(ink.Width, .1, 1000, "Stroke width");
                 pointCount += ink.Points.Count;
@@ -488,6 +521,10 @@ public static partial class DocumentStore
                 if (item is null || item.Text is null || item.Text.Length > 1000000)
                     throw new InvalidDataException("A text annotation is invalid or too long.");
                 Id(item.Id, ids);
+                ExtendedStyle(item.GroupId, item.Layer, item.Opacity, item.Rotation);
+                if (item.FontFamily == null || item.FontFamily.Length is 0 or > 128 || item.FontFamily.Any(char.IsControl) ||
+                    item.Alignment is not ("Left" or "Center" or "Right" or "Justify") || item.ContentFormat is not ("Plain" or "Markdown"))
+                    throw new InvalidDataException("Unsupported text formatting.");
                 CheckTitle(item.Title);
                 Color(item.Color);
                 Range(item.X, -100000, 200000, "Text X");
@@ -497,10 +534,32 @@ public static partial class DocumentStore
                 Range(item.FontSize, 1, 1000, "Font size");
             }
         }
+        foreach (var page in data.Pages)
+        {
+            var nodes = page.Shapes.Where(s => s != null && s.Kind is not (ShapeKind.Line or ShapeKind.Arrow)).Select(s => s.Id).ToHashSet();
+            foreach (var shape in page.Shapes)
+            {
+                if (shape == null || !Enum.IsDefined(shape.Kind) || shape.Label == null || shape.Label.Length > 100000)
+                    throw new InvalidDataException("Invalid shape.");
+                Id(shape.Id, ids); Color(shape.Color); if (shape.FillColor != null) Color(shape.FillColor);
+                ExtendedStyle(shape.GroupId, shape.Layer, shape.Opacity, shape.Rotation);
+                Range(shape.X, -100000, 200000, "Shape X"); Range(shape.Y, -100000, 200000, "Shape Y");
+                Range(shape.Width, 1, 100000, "Shape width"); Range(shape.Height, 1, 100000, "Shape height");
+                Range(shape.StrokeWidth, .1, 1000, "Shape stroke");
+                if ((shape.StartId != null || shape.EndId != null) && shape.Kind is not (ShapeKind.Line or ShapeKind.Arrow) ||
+                    shape.StartId != null && !nodes.Contains(shape.StartId) || shape.EndId != null && !nodes.Contains(shape.EndId))
+                    throw new InvalidDataException("Connector endpoints must refer to shapes on the same page.");
+            }
+        }
         // Establish aggregate bounds for every page before allocating any decoded images.
         if (decodeImages)
             foreach (var image in data.Pages.SelectMany(page => page.Images))
                 EmbeddedPng.Decode(image.PngData);
+    }
+    private static void ExtendedStyle(string group, int layer, double opacity, double rotation)
+    {
+        if (group == null || group.Length > 128 || group.Any(char.IsControl)) throw new InvalidDataException("Invalid group identifier.");
+        Range(layer, -1000000, 1000000, "Layer"); Range(opacity, 0, 1, "Opacity"); Range(rotation, -360, 360, "Rotation");
     }
     private static void CheckTitle(string title)
     {

@@ -10,7 +10,7 @@ import {
   readEnvelope,
   readSidecar,
   serialize,
-  validateDocument
+  validateDocument,
 } from "./model.js";
 import {
   attachCanvas,
@@ -21,24 +21,31 @@ import {
   openBackdrop,
   paperPage,
   portableFile,
-  readPortable
+  readPortable,
 } from "./documents.js";
 import { listDrafts, readDraft, removeDraft, writeDraft } from "./drafts.js";
 import { switchLanguage, t, translate } from "./language.js";
 
+import { setupProperties } from "./properties.js";
+import { renderText, textStyle } from "./rich-text.js";
+import { shapeVisual, shapeEndpoints } from "./shapes.js";
+import { continuousPages } from "./continuous.js";
+
+const svgNS = "http://www.w3.org/2000/svg";
 const $ = (selector) => document.querySelector(selector);
 const sheet = $("#sheet"),
   viewport = $("#viewport"),
   marks = $("#marks"),
   objects = $("#objects"),
   card = $("#card");
-const toolNames = ["select", "pen", "text", "note", "pan"];
+const toolNames = ["select", "pen", "text", "note", "shape", "pan"];
 const icons = {
+  shape: "M3 4h11v11H3z M12 17a5 5 0 1 0 6-6",
   select: "M4 3l15 10-7 1-3 7z",
   pen: "M4 20l2-6L17 3l4 4L10 18z M14 6l4 4",
   text: "M4 8V4h16v4 M12 4v16 M8 20h8",
   note: "M4 4h16v11l-6 6H4z M14 21v-6h6 M8 9h8",
-  pan: "M6 13V7q0-3 3-2v6-7q1-3 3 0v7-6q2-3 3 0v7-4q2-3 3 0v8q0 5-5 5h-2q-3 0-5-3l-4-5q1-3 4 0z"
+  pan: "M6 13V7q0-3 3-2v6-7q1-3 3 0v7-6q2-3 3 0v7-4q2-3 3 0v8q0 5-5 5h-2q-3 0-5-3l-4-5q1-3 4 0z",
 };
 for (const tool of toolNames) {
   const b = document.createElement("button");
@@ -52,6 +59,13 @@ for (const tool of toolNames) {
   b.onclick = () => setTool(tool);
   $("#tools").append(b);
 }
+let continuum = null,
+  continuousView = false;
+let properties = null,
+  selectedGroupIds = new Set(),
+  selectionIds = new Set(),
+  localClipboard = null,
+  notePreview = false;
 let data = null,
   image = null,
   tool = "pen",
@@ -88,11 +102,11 @@ document.documentElement.classList.toggle("embedded", embedded);
 const page = () => data.pages[pageIndex];
 const current = () => find(selected);
 const dirty = () => revision !== savedRevision || changedDraft();
-const collections = ["ink", "items", "images"];
+const collections = ["ink", "items", "images", "shapes"];
 function find(id) {
   if (!id || !data) return null;
   for (const group of collections) {
-    const index = page()[group].findIndex((o) => o.id === id);
+    const index = (page()[group] || []).findIndex((o) => o.id === id);
     if (index >= 0) return { group, index, obj: page()[group][index] };
   }
   return null;
@@ -100,7 +114,9 @@ function find(id) {
 function changedDraft() {
   if (!draft) return false;
   const original = find(draft.id)?.obj;
-  return original && (original.text !== draft.text || original.title !== draft.title);
+  return (
+    original && (original.text !== draft.text || original.title !== draft.title)
+  );
 }
 function message(key, error = false) {
   clearTimeout(timer);
@@ -116,53 +132,97 @@ function updateStatus() {
   const active = Boolean(data),
     selection = current();
   const notebook = data?.kind === "Notebook";
+  if (!active) continuum?.reset();
   $("#whole-page").disabled = !active || busy;
+  $("#continuous-view").hidden = !active || data?.kind === "Image";
+  $("#continuous-view").disabled = busy;
+  $("#continuous-view").textContent = t(
+    continuousView ? "singlePageView" : "continuousView",
+  );
+  $("#continuous-view").setAttribute("aria-pressed", String(continuousView));
   document.documentElement.classList.toggle("editing", active);
   $("#open").hidden = $("#save").hidden = !active;
   for (const item of $("#more .menu").children) {
-    if (["home", "new-sheet", "index", "feedback", "whole-page", "portable"].includes(item.id))
+    if (
+      [
+        "home",
+        "new-sheet",
+        "index",
+        "feedback",
+        "whole-page",
+        "portable",
+        "export-image",
+      ].includes(item.id)
+    )
       item.hidden = !active;
   }
   $("#pages").hidden = !active || data.kind === "Image";
-  $("#page-count").textContent = active ? pageIndex + 1 + " / " + data.pages.length : "";
+  $("#page-count").textContent = active
+    ? pageIndex + 1 + " / " + data.pages.length
+    : "";
   $("#prev-page").disabled = !active || busy || pageIndex < 1;
-  $("#next-page").disabled = !active || busy || pageIndex >= data.pages.length - 1;
+  $("#next-page").disabled =
+    !active || busy || pageIndex >= data.pages.length - 1;
   $("#add-page").hidden = !notebook;
   $("#add-page").disabled = busy || (notebook && data.pages.length >= 1000);
-  $("#new-notebook").disabled = $("#new-sheet").disabled = $("#home").disabled = busy;
+  $("#new-notebook").disabled =
+    $("#new-sheet").disabled =
+    $("#home").disabled =
+      busy;
   $("#rename-book").hidden = !notebook;
   $("#rename-book").disabled = busy;
   $("#print").hidden = !active || globalThis.inklaneNativePrinting === false;
   $("#print").disabled = busy;
   $("#download").hidden = !active || Boolean(notebook);
-  $("#portable").disabled = busy || !active;
-  $("#save .wide").textContent = t(notebook || portableMode ? "saveShort" : "save");
-  $("#save").setAttribute("aria-label", t(notebook ? "saveNotebook" : portableMode ? "saveShort" : "save"));
+  $("#portable").disabled = $("#export-image").disabled = busy || !active;
+  $("#save .wide").textContent = t(
+    notebook || portableMode ? "saveShort" : "save",
+  );
+  $("#save").setAttribute(
+    "aria-label",
+    t(notebook ? "saveNotebook" : portableMode ? "saveShort" : "save"),
+  );
   $("#name").textContent = active ? image.name : t("workspace");
   $("#state").textContent = t(
-    !active ? "newHint" : busy ? (printing ? "preparingPrint" : "saving") : dirty() ? "changed" : state
+    !active
+      ? "newHint"
+      : busy
+        ? printing
+          ? "preparingPrint"
+          : "saving"
+        : dirty()
+          ? "changed"
+          : state,
   );
   $("#feedback").disabled =
     $("#index").disabled =
     $("#save").disabled =
     $("#download").disabled =
       !active || busy;
-  for (const element of [viewport, card, $("#tools"), $("footer")]) element.inert = busy;
+  for (const element of [viewport, card, $("#tools"), $("footer")])
+    element.inert = busy;
   $("#open").disabled = $("#start").disabled = busy;
   $("#welcome").hidden = active;
   $("#tools").hidden = viewport.hidden = $("footer").hidden = !active;
   $("#undo").disabled = !undoStack.length && !changedDraft();
   $("#redo").disabled = !redoStack.length;
   $("#edit").hidden = !selection || selection.group === "ink";
-  $("#edit").textContent = t(selection?.group === "images" ? "sizeAction" : "edit");
+  $("#edit").textContent = t(
+    selection?.group === "images" ? "sizeAction" : "edit",
+  );
   $("#duplicate").hidden = $("#remove").hidden = !selection;
-  $("#hint").textContent = t(selection && tool === "select" ? "selectHintKeyboard" : tool + "Hint");
+  $("#hint").textContent = t(
+    selection && tool === "select" ? "selectHintKeyboard" : tool + "Hint",
+  );
   $("#fit").textContent = Math.round(zoom * 100) + "%";
   $("#fit").setAttribute("aria-pressed", String(fit));
   $("#tools")
     .querySelectorAll("button")
-    .forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tool === tool)));
+    .forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.tool === tool)),
+    );
   sheet.dataset.tool = tool;
+  properties?.update();
   $("#pen-properties").hidden = !active || tool !== "pen" || Boolean(selection);
 }
 function setTool(next) {
@@ -171,19 +231,27 @@ function setTool(next) {
   cancelGesture();
   tool = next;
   selected = null;
+  selectionIds.clear();
   openNote = null;
   render();
   viewport.focus({ preventScroll: true });
 }
 function weight(obj) {
   return obj
-    ? 256 + (obj.points?.length ?? 0) * 40 + (obj.text?.length ?? 0) * 2 + (obj.pngData?.length ?? 0) * 2
+    ? 256 +
+        (obj.points?.length ?? 0) * 40 +
+        (obj.text?.length ?? 0) * 2 +
+        (obj.label?.length ?? 0) * 2 +
+        (obj.pngData?.length ?? 0) * 2
     : 0;
 }
 function change(group, index, before, after) {
   if (!before && !after) return;
   const items = page()[group];
-  if (!before && items.length >= (group === "ink" ? 10000 : group === "images" ? 100 : 2000)) {
+  if (
+    !before &&
+    items.length >= (group === "ink" ? 10000 : group === "images" ? 100 : 2000)
+  ) {
     message("size", true);
     return false;
   }
@@ -193,7 +261,7 @@ function change(group, index, before, after) {
     index,
     before,
     after,
-    weight: weight(before) + weight(after)
+    weight: weight(before) + weight(after),
   };
   items.splice(index, before ? 1 : 0, ...(after ? [after] : []));
   record(op);
@@ -206,7 +274,10 @@ function record(op) {
   undoStack.push(op);
   redoStack = [];
   historyWeight += op.weight;
-  while (undoStack.length > 1 && (undoStack.length > 64 || historyWeight > 16 * 1024 * 1024))
+  while (
+    undoStack.length > 1 &&
+    (undoStack.length > 64 || historyWeight > 16 * 1024 * 1024)
+  )
     historyWeight -= undoStack.shift().weight;
   queueRecovery();
 }
@@ -223,16 +294,20 @@ async function undoOrRedo(redo) {
     if (!(await showNotebookPages(pages, index))) return;
   } else if (op.group === "title") {
     data.title = image.name = redo ? op.after : op.before;
-  } else if (op.pageIndex !== pageIndex && !(await switchPage(op.pageIndex))) return;
+  } else if (op.pageIndex !== pageIndex && !(await switchPage(op.pageIndex)))
+    return;
   source.pop();
   const from = redo ? op.before : op.after,
     to = redo ? op.after : op.before;
-  if (collections.includes(op.group)) page()[op.group].splice(op.index, from ? 1 : 0, ...(to ? [to] : []));
+  if (op.group === "batch") data.pages[pageIndex] = structuredClone(to);
+  if (collections.includes(op.group))
+    page()[op.group].splice(op.index, from ? 1 : 0, ...(to ? [to] : []));
   revision = redo ? op.next : op.previous;
   target.push(op);
   queueRecovery();
   historyWeight += redo ? op.weight : -op.weight;
   selected = to?.id ?? null;
+  selectionIds.clear();
   openNote = null;
   render();
   viewport.focus({ preventScroll: true });
@@ -243,13 +318,16 @@ function flush() {
   const original = find(draft.id);
   if (changedDraft()) {
     const height = field
-      ? Math.max(original.obj.height, Math.min(100000, field.scrollHeight / zoom))
+      ? Math.max(
+          original.obj.height,
+          Math.min(100000, field.scrollHeight / zoom),
+        )
       : original.obj.height;
     change("items", original.index, original.obj, {
       ...original.obj,
       title: draft.title,
       text: draft.text,
-      height
+      height,
     });
   }
   draft = null;
@@ -259,19 +337,45 @@ function removeSelected() {
   flush();
   const sel = current();
   if (!sel) return;
-  change(sel.group, sel.index, sel.obj, null);
+  const ids = new Set(selectedObjects().map((o) => o.id));
+  mutatePage((p) => {
+    for (const shape of p.shapes) {
+      if (ids.has(shape.id) || !ids.has(shape.startId) && !ids.has(shape.endId)) continue;
+      const [a, b] = shapeEndpoints(shape, p);
+      Object.assign(shape, {
+        x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+        width: Math.max(1, Math.abs(b.x - a.x)), height: Math.max(1, Math.abs(b.y - a.y)),
+        flipX: b.x < a.x, flipY: b.y < a.y,
+      });
+      if (ids.has(shape.startId)) shape.startId = null;
+      if (ids.has(shape.endId)) shape.endId = null;
+    }
+    for (const group of collections)
+      p[group] = p[group].filter((o) => !ids.has(o.id));
+  });
+  selectionIds.clear();
   selected = openNote = null;
   render();
   viewport.focus({ preventScroll: true });
 }
 function duplicateSelected() {
+  if (selectedObjects().length > 1) {
+    insertObjects(selectedRecords());
+    return;
+  }
   flush();
   const sel = current();
   if (!sel) return;
-  const copy = { ...moved(sel.obj, 14 / zoom, 14 / zoom, page()), id: crypto.randomUUID() };
+  const copy = {
+    ...moved(sel.obj, 14 / zoom, 14 / zoom, page()),
+    id: crypto.randomUUID(),
+  };
   try {
     const combined = { ...page(), [sel.group]: [...page()[sel.group], copy] };
-    serialize({ ...data, pages: data.pages.map((p, i) => (i === pageIndex ? combined : p)) });
+    serialize({
+      ...data,
+      pages: data.pages.map((p, i) => (i === pageIndex ? combined : p)),
+    });
   } catch (error) {
     errorMessage(error, "size");
     return;
@@ -296,12 +400,20 @@ function closeCard() {
 }
 function editSelected() {
   const sel = current();
+  if (sel?.group === "shapes") {
+    properties.open();
+    $("#shape-label").focus();
+    return;
+  }
   if (sel?.group === "images") {
     const input = $("#picture-width"),
       picture = sel.obj;
     const max = Math.max(
       picture.width,
-      Math.min(page().width - picture.x, ((page().height - picture.y) * picture.width) / picture.height)
+      Math.min(
+        page().width - picture.x,
+        ((page().height - picture.y) * picture.width) / picture.height,
+      ),
     );
     input.min = Math.max(1, Math.ceil(picture.width / picture.height));
     input.max = Math.max(Number(input.min), max);
@@ -321,6 +433,7 @@ function editSelected() {
   }
   if (sel?.group !== "items") return;
   if (sel.obj.isNote) {
+    notePreview = false;
     setNoteOpen(sel.obj.id);
     render();
     $("#note-title").focus();
@@ -334,7 +447,15 @@ function editSelected() {
     field.select();
   }
 }
-function initDoc(next, source, fingerprint, loaded, canvas, index = 0, portable = false) {
+function initDoc(
+  next,
+  source,
+  fingerprint,
+  loaded,
+  canvas,
+  index = 0,
+  portable = false,
+) {
   cancelGesture();
   $("#pictures").replaceChildren();
   if (image !== source) image?.dispose?.();
@@ -342,6 +463,8 @@ function initDoc(next, source, fingerprint, loaded, canvas, index = 0, portable 
   recovery = { id: crypto.randomUUID(), stored: false };
   pageIndex = index;
   portableMode = portable || next.kind === "Notebook";
+  for (const p of next.pages) p.shapes ||= [];
+  selectionIds.clear();
   data = next;
   image = source;
   sourceFingerprint = fingerprint;
@@ -355,6 +478,7 @@ function initDoc(next, source, fingerprint, loaded, canvas, index = 0, portable 
   openNote = page().items.find((o) => o.isNote && o.isExpanded)?.id ?? null;
   state = loaded ? "loaded" : "ready";
   tool = "pen";
+  notePreview = false;
   fit = true;
   wholePage = false;
   if (canvas) attachCanvas(canvas);
@@ -385,11 +509,20 @@ async function openFiles(files) {
     } else {
       const originals = files.filter((f) => /\.(png|jpe?g|pdf)$/i.test(f.name));
       const json = files.filter((f) => /\.json$/i.test(f.name));
-      if (originals.length + json.length !== files.length || originals.length > 1 || json.length > 1)
+      if (
+        originals.length + json.length !== files.length ||
+        originals.length > 1 ||
+        json.length > 1
+      )
         throw new EditorError("files");
       const envelope = json.length ? await readEnvelope(json[0]) : null;
-      const sourceName = envelope?.doc.sourcePdfName ?? envelope?.doc.sourceImagePath;
-      if (!originals.length && (!image?.file || (envelope.doc.kind === "Pdf") !== (data.kind === "Pdf"))) {
+      const sourceName =
+        envelope?.doc.sourcePdfName ?? envelope?.doc.sourceImagePath;
+      if (
+        !originals.length &&
+        (!image?.file ||
+          (envelope.doc.kind === "Pdf") !== (data.kind === "Pdf"))
+      ) {
         requestSource(json[0], sourceName);
         return;
       }
@@ -397,9 +530,16 @@ async function openFiles(files) {
       if (originals.length) candidate = source;
       if (envelope) {
         try {
-          if ((envelope.doc.kind === "Pdf") !== (source.mediaType === "application/pdf"))
+          if (
+            (envelope.doc.kind === "Pdf") !==
+            (source.mediaType === "application/pdf")
+          )
             throw new EditorError("identity");
-          ({ doc: next, fingerprint } = await readSidecar(json[0], source, envelope));
+          ({ doc: next, fingerprint } = await readSidecar(
+            json[0],
+            source,
+            envelope,
+          ));
           loaded = true;
         } catch (error) {
           if (error.message === "identity") {
@@ -407,7 +547,8 @@ async function openFiles(files) {
               requestSource(json[0], sourceName);
               return;
             }
-            if (envelope.doc.kind === "Pdf") throw new EditorError("identityPdf");
+            if (envelope.doc.kind === "Pdf")
+              throw new EditorError("identityPdf");
           }
           throw error;
         }
@@ -426,7 +567,7 @@ async function openFiles(files) {
     render();
   }
 }
-async function switchPage(index) {
+async function switchPage(index, scroll = true) {
   if (!data || busy || index < 0 || index >= data.pages.length) return false;
   if (index === pageIndex) return true;
   flush();
@@ -439,7 +580,9 @@ async function switchPage(index) {
     openNote = selected = draft = null;
     attachCanvas(canvas);
     resize();
-    viewport.scrollTo(0, 0);
+    if (continuum?.enabled) {
+      if (scroll) continuum.scrollTo(index);
+    } else viewport.scrollTo(0, 0);
     return true;
   } catch (error) {
     errorMessage(error, "fileError");
@@ -453,10 +596,15 @@ async function switchPage(index) {
 function requestSource(sidecar, sourcePath) {
   $("#message").hidden = true;
   pendingSidecar = sidecar;
-  $("#source-name").textContent = typeof sourcePath === "string" ? sourcePath.split(/[\\/]/).at(-1) : "";
+  $("#source-name").textContent =
+    typeof sourcePath === "string" ? sourcePath.split(/[\\/]/).at(-1) : "";
   $("#relink").showModal();
 }
-async function requestDownload(blob, name = image.name + ".inklane.json", notification = "downloaded") {
+async function requestDownload(
+  blob,
+  name = image.name + ".inklane.json",
+  notification = "downloaded",
+) {
   if (typeof globalThis.inklaneSaveCopy === "function") {
     await globalThis.inklaneSaveCopy(blob, name);
     message("nativeSaved");
@@ -483,8 +631,16 @@ async function save(downloadOnly = false) {
       ? image.name.replace(/[<>:"/\\|?*]/g, "-") + ".inklane"
       : image.name + ".inklane.json";
     const blob = bundle ? await portableFile(data, image) : serialize(data);
-    if (downloadOnly || globalThis.inklaneSaveCopy || !window.showSaveFilePicker) {
-      const confirmed = await requestDownload(blob, suggestedName, bundle ? "portableDone" : "downloaded");
+    if (
+      downloadOnly ||
+      globalThis.inklaneSaveCopy ||
+      !window.showSaveFilePicker
+    ) {
+      const confirmed = await requestDownload(
+        blob,
+        suggestedName,
+        bundle ? "portableDone" : "downloaded",
+      );
       if (confirmed && !downloadOnly) {
         savedRevision = revision;
         state = "saved";
@@ -498,10 +654,22 @@ async function save(downloadOnly = false) {
         suggestedName,
         id: "inklane-annotations",
         types: bundle
-          ? [{ description: "Inklane", accept: { "application/octet-stream": [".inklane"] } }]
-          : [{ description: "Inklane JSON", accept: { "application/json": [".json"] } }]
+          ? [
+              {
+                description: "Inklane",
+                accept: { "application/octet-stream": [".inklane"] },
+              },
+            ]
+          : [
+              {
+                description: "Inklane JSON",
+                accept: { "application/json": [".json"] },
+              },
+            ],
       }));
-    if (!handle.name.toLowerCase().endsWith(bundle ? ".inklane" : ".inklane.json"))
+    if (
+      !handle.name.toLowerCase().endsWith(bundle ? ".inklane" : ".inklane.json")
+    )
       throw new EditorError(bundle ? "portableExtension" : "extension");
     const write = await handle.createWritable({ mode: "exclusive" });
     try {
@@ -541,15 +709,23 @@ function resize() {
   if (fit) {
     const padding = parseFloat(getComputedStyle($("#mat")).paddingLeft) * 2;
     zoom = Math.min(
-      (viewport.clientWidth - padding) / page().width,
-      data.kind === "Image" || wholePage ? (viewport.clientHeight - padding) / page().height : 1.45,
-      2
+      (viewport.clientWidth - padding) /
+        (continuousView
+          ? Math.max(...data.pages.map((p) => p.width))
+          : page().width),
+      data.kind === "Image" || wholePage
+        ? (viewport.clientHeight - padding) /
+            (continuousView
+              ? Math.max(...data.pages.map((p) => p.height))
+              : page().height)
+        : 1.45,
+      2,
     );
     zoom = Math.max(zoom, 0.001);
   }
   sheet.style.width = page().width * zoom + "px";
   sheet.style.height = page().height * zoom + "px";
-  marks.setAttribute("viewBox", `0 0 ${page().width} ${page().height}`);
+
   render();
 }
 function zoomBy(factor, clientX, clientY) {
@@ -569,7 +745,9 @@ function zoomBy(factor, clientX, clientY) {
 }
 function stripPath(points) {
   return points.length
-    ? "M" + points.map((p) => p.x + " " + p.y).join(" L") + (points.length === 1 ? "l.001 0" : "")
+    ? "M" +
+        points.map((p) => p.x + " " + p.y).join(" L") +
+        (points.length === 1 ? "l.001 0" : "")
     : "";
 }
 function pressureOutline(points, width) {
@@ -584,8 +762,12 @@ function pressureOutline(points, width) {
       dy = b.y - a.y,
       length = Math.hypot(dx, dy) || 1;
     const radius = width * Math.max(0.08, p.pressure);
-    left.push(p.x - (dy * radius) / length + " " + (p.y + (dx * radius) / length));
-    right.push(p.x + (dy * radius) / length + " " + (p.y - (dx * radius) / length));
+    left.push(
+      p.x - (dy * radius) / length + " " + (p.y + (dx * radius) / length),
+    );
+    right.push(
+      p.x + (dy * radius) / length + " " + (p.y - (dx * radius) / length),
+    );
   }
   const end = width * Math.max(0.08, points.at(-1).pressure),
     start = width * Math.max(0.08, points[0].pressure);
@@ -612,19 +794,27 @@ function pressureOutline(points, width) {
 function strokeVisual(stroke) {
   let group = strokeShapes.get(stroke);
   if (!group) {
-    group = document.createElementNS(marks.namespaceURI, "g");
+    group = document.createElementNS(svgNS, "g");
     group.dataset.id = stroke.id;
-    const line = document.createElementNS(marks.namespaceURI, "path");
+    const line = document.createElementNS(svgNS, "path");
     const pts = stroke.points,
       centre = stripPath(pts);
-    const variable = pts.length > 1 && pts.some((p) => p.pressure !== pts[0].pressure);
-    line.setAttribute("d", variable ? pressureOutline(pts, stroke.width) : centre);
+    const variable =
+      pts.length > 1 && pts.some((p) => p.pressure !== pts[0].pressure);
+    line.setAttribute(
+      "d",
+      variable ? pressureOutline(pts, stroke.width) : centre,
+    );
     line.setAttribute("fill", variable ? stroke.color : "none");
     line.setAttribute("stroke", variable ? "none" : stroke.color);
-    line.setAttribute("stroke-width", stroke.width * Math.max(0.16, (pts[0]?.pressure ?? 0.5) * 2));
+    line.setAttribute(
+      "stroke-width",
+      stroke.width * Math.max(0.16, (pts[0]?.pressure ?? 0.5) * 2),
+    );
+    line.setAttribute("opacity", stroke.opacity ?? 1);
     line.setAttribute("stroke-linecap", "round");
     line.setAttribute("stroke-linejoin", "round");
-    const hit = document.createElementNS(marks.namespaceURI, "path");
+    const hit = document.createElementNS(svgNS, "path");
     hit.setAttribute("d", centre);
     hit.setAttribute("stroke", "transparent");
     hit.setAttribute("stroke-width", "12");
@@ -633,7 +823,7 @@ function strokeVisual(stroke) {
     group.append(line, hit);
     strokeShapes.set(stroke, group);
   }
-  group.classList.toggle("ink-selected", selected === stroke.id);
+  group.classList.toggle("ink-selected", isSelected(stroke.id));
   return group;
 }
 function place(el, item, size = true) {
@@ -644,15 +834,31 @@ function place(el, item, size = true) {
     el.style.height = item.height * zoom + "px";
   }
   el.dataset.id = item.id;
+  el.style.zIndex = 1000001 + (item.layer || 0);
+  el.style.opacity = item.opacity ?? 1;
+  if (item.rotation && !item.isNote)
+    el.style.transform = `rotate(${item.rotation}deg)`;
 }
 function render() {
+  continuum?.sync({
+    enabled: continuousView,
+    doc: data,
+    source: image,
+    index: pageIndex,
+    zoom,
+  });
+  selectedGroupIds = new Set(selectedObjects().map((o) => o.id));
   updateStatus();
   if (!data) return;
   const previousEditor = objects.querySelector(".placed-editor");
   const editing = previousEditor && document.activeElement === previousEditor;
-  const caret = editing ? [previousEditor.selectionStart, previousEditor.selectionEnd] : null;
+  const caret = editing
+    ? [previousEditor.selectionStart, previousEditor.selectionEnd]
+    : null;
   const pictures = $("#pictures");
-  const existing = new Map([...pictures.children].map((el) => [el.dataset.id, el]));
+  const existing = new Map(
+    [...pictures.children].map((el) => [el.dataset.id, el]),
+  );
   for (const picture of page().images) {
     const img = existing.get(picture.id) ?? document.createElement("img");
     if (!img.src) {
@@ -662,19 +868,45 @@ function render() {
     }
     img.alt = t("picture");
     place(img, picture);
-    img.classList.toggle("selected", selected === picture.id);
+    img.classList.toggle("selected", isSelected(picture.id));
     pictures.append(img);
     existing.delete(picture.id);
   }
   for (const old of existing.values()) old.remove();
-  marks.replaceChildren(...page().ink.map(strokeVisual));
+  marks.replaceChildren(
+    ...page().ink.map((stroke) => svgObject(strokeVisual(stroke), stroke)),
+  );
+  for (const shape of page().shapes || []) {
+    const visual = shapeVisual(shape, page());
+    visual.dataset.shape = "true";
+    visual.classList.toggle("object-selected", isSelected(shape.id));
+    marks.append(svgObject(visual, shape));
+  }
   objects.replaceChildren();
   let n = 0;
   for (const item of page().items) {
     const editingText = !item.isNote && draft?.id === item.id;
-    const el = document.createElement(editingText ? "textarea" : "button");
-    el.className = item.isNote ? "marker" : editingText ? "placed-editor" : "placed";
-    el.classList.toggle("selected", selected === item.id);
+    const el = document.createElement(
+      editingText ? "textarea" : item.isNote ? "button" : "div",
+    );
+    if (!editingText && !item.isNote) {
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+    }
+    if (!editingText && !item.isNote)
+      el.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          selected = item.id;
+          editSelected();
+        }
+      };
+    el.className = item.isNote
+      ? "marker"
+      : editingText
+        ? "placed-editor"
+        : "placed";
+    el.classList.toggle("selected", isSelected(item.id));
     place(el, item, !item.isNote);
     if (item.isNote) {
       n++;
@@ -687,15 +919,20 @@ function render() {
         // The sheet already handled this physical tap or drag on pointerup.
         // A WebView can synthesize a second, positioned click with detail 0.
         const previous = handledSurfacePointer;
-        if (previous && (previous.pan || previous.id === item.id) && performance.now() - previous.time < 750 &&
-            (e.detail > 0 || e.pointerType || Math.hypot(e.clientX - previous.x, e.clientY - previous.y) < 3))
+        if (
+          previous &&
+          (previous.pan || previous.id === item.id) &&
+          performance.now() - previous.time < 750 &&
+          (e.detail > 0 ||
+            e.pointerType ||
+            Math.hypot(e.clientX - previous.x, e.clientY - previous.y) < 3)
+        )
           return;
         setNoteOpen(openNote === item.id ? null : item.id);
         render();
       };
     } else {
-      el.style.fontSize = item.fontSize * zoom + "px";
-      el.style.color = item.color;
+      textStyle(el, item, zoom);
       if (editingText) {
         el.setAttribute("aria-label", t("placed"));
         el.maxLength = 1000000;
@@ -706,7 +943,7 @@ function render() {
           updateStatus();
         };
       } else {
-        el.textContent = item.text;
+        renderText(el, item);
         el.setAttribute("aria-label", item.text || t("placed"));
         el.onclick = (e) => {
           if (!e.detail && !busy) {
@@ -723,6 +960,7 @@ function render() {
     field.focus({ preventScroll: true });
     field.setSelectionRange(...caret);
   }
+  renderHandles();
   renderCard();
 }
 function renderCard() {
@@ -743,6 +981,17 @@ function renderCard() {
     $("#note-body").value = item.text;
   }
   card.hidden = false;
+  card.style.width =
+    Math.min(Math.max(210, item.width), viewport.clientWidth - 12) + "px";
+  card.style.height =
+    Math.min(Math.max(150, item.height), viewport.clientHeight - 12) + "px";
+  $("#note-body").hidden = notePreview;
+  $("#note-preview").hidden = !notePreview;
+  $("#note-read").setAttribute("aria-pressed", String(notePreview));
+  $("#note-edit").setAttribute("aria-pressed", String(!notePreview));
+  textStyle($("#note-body"), item);
+  textStyle($("#note-preview"), item);
+  renderText($("#note-preview"), item);
   positionCard();
 }
 function positionCard() {
@@ -754,7 +1003,11 @@ function positionCard() {
     rect = sheet.getBoundingClientRect();
   const x = rect.left + note.x * zoom,
     y = rect.top + note.y * zoom;
-  const inView = x + 27 >= view.left && x <= view.right && y + 27 >= view.top && y <= view.bottom;
+  const inView =
+    x + 27 >= view.left &&
+    x <= view.right &&
+    y + 27 >= view.top &&
+    y <= view.bottom;
   card.style.visibility = inView ? "visible" : "hidden";
   delete card.dataset.desk;
   if (!inView) return;
@@ -763,28 +1016,54 @@ function positionCard() {
   if (left + card.offsetWidth > view.right - 5) left = x - card.offsetWidth - 5;
   if (left < view.left + 4) {
     left = x + 13 - card.offsetWidth / 2;
-    desiredTop = y + 31 + card.offsetHeight <= view.bottom ? y + 31 : y - card.offsetHeight - 5;
+    desiredTop =
+      y + 31 + card.offsetHeight <= view.bottom
+        ? y + 31
+        : y - card.offsetHeight - 5;
   }
   const centerX = x + 13;
-  if (view.width <= 600 && view.height > view.width && centerX > view.left + 8 && centerX < view.right - 8) {
+  if (
+    view.width <= 600 &&
+    view.height > view.width &&
+    centerX > view.left + 8 &&
+    centerX < view.right - 8
+  ) {
     // On a phone a landscape page often has room for the whole note just beyond an edge.
     // Prefer the nearer edge only while a short leader can still visibly join card and marker.
     const choices = [
-      { side: "above", top: rect.top - 7 - card.offsetHeight, distance: y - rect.top },
-      { side: "below", top: rect.bottom + 7, distance: rect.bottom - (y + 27) }
-    ].filter(choice => choice.top >= view.top + 5 &&
-      choice.top + card.offsetHeight <= view.bottom - 5 && choice.distance <= Math.min(140, view.height / 4));
-    const best = choices.sort((a,b) => a.distance - b.distance)[0];
+      {
+        side: "above",
+        top: rect.top - 7 - card.offsetHeight,
+        distance: y - rect.top,
+      },
+      { side: "below", top: rect.bottom + 7, distance: rect.bottom - (y + 27) },
+    ].filter(
+      (choice) =>
+        choice.top >= view.top + 5 &&
+        choice.top + card.offsetHeight <= view.bottom - 5 &&
+        choice.distance <= Math.min(140, view.height / 4),
+    );
+    const best = choices.sort((a, b) => a.distance - b.distance)[0];
     if (best) {
       left = centerX - card.offsetWidth / 2;
       desiredTop = best.top;
       card.dataset.desk = best.side;
-      card.style.setProperty("--leader-length", Math.max(0, best.distance + 7) + "px");
+      card.style.setProperty(
+        "--leader-length",
+        Math.max(0, best.distance + 7) + "px",
+      );
     }
   }
-  left = Math.max(view.left + 4, Math.min(left, view.right - card.offsetWidth - 5));
-  if (card.dataset.desk) card.style.setProperty("--leader-x", centerX - left + "px");
-  const top = Math.max(view.top + 4, Math.min(desiredTop, view.bottom - card.offsetHeight - 6));
+  left = Math.max(
+    view.left + 4,
+    Math.min(left, view.right - card.offsetWidth - 5),
+  );
+  if (card.dataset.desk)
+    card.style.setProperty("--leader-x", centerX - left + "px");
+  const top = Math.max(
+    view.top + 4,
+    Math.min(desiredTop, view.bottom - card.offsetHeight - 6),
+  );
   card.style.left = left - outer.left + "px";
   card.style.top = top - outer.top + "px";
 }
@@ -812,27 +1091,41 @@ function point(e) {
   return {
     x: Math.max(0, Math.min(page().width - 1, (e.clientX - r.left) / zoom)),
     y: Math.max(0, Math.min(page().height - 1, (e.clientY - r.top) / zoom)),
-    pressure: e.pointerType === "pen" ? e.pressure : 0.5
+    pressure: e.pointerType === "pen" ? e.pressure : 0.5,
   };
 }
 function cancelGesture() {
   if (!gesture) return;
   const g = gesture;
   gesture = null;
-  if (sheet.hasPointerCapture(g.pointer)) sheet.releasePointerCapture(g.pointer);
+  if (sheet.hasPointerCapture(g.pointer))
+    sheet.releasePointerCapture(g.pointer);
   g.preview?.remove();
-  if (g.el) g.el.style.transform = "";
+  g.previewRoot?.remove();
+  if (g.el) g.el.style.translate = "";
 }
 function startGesture(e) {
-  if (busy || !data || gesture || (e.button !== 0 && e.button !== 1) || e.target.matches("textarea")) return;
+  if (
+    busy ||
+    !data ||
+    gesture ||
+    (e.button !== 0 && e.button !== 1) ||
+    e.target.closest("textarea,a")
+  )
+    return;
   handledSurfacePointer = null;
   const p = point(e),
     id = e.target.closest("[data-id]")?.dataset.id;
   flush();
-  let mode = tool;
+  let mode = e.target.dataset.resize ? "resize" : tool;
   if (e.button === 1 || tool === "pan") mode = "pan";
-  else if (id && find(id)?.obj.isNote) mode = "object";
-  else if (tool === "select" || (id && tool === "text" && find(id)?.group === "items")) mode = "object";
+  else if (mode !== "resize" && id && find(id)?.obj.isNote) mode = "object";
+  else if (
+    mode !== "resize" &&
+    (tool === "select" ||
+      (id && tool === "text" && find(id)?.group === "items"))
+  )
+    mode = "object";
   e.preventDefault();
   viewport.focus({ preventScroll: true });
   const g = {
@@ -844,11 +1137,15 @@ function startGesture(e) {
     left: viewport.scrollLeft,
     top: viewport.scrollTop,
     id,
-    moved: false
+    moved: false,
+    handle: e.target.dataset.resize,
+    original: id ? structuredClone(mode === "resize" ? movementBase(find(id)?.obj) : find(id)?.obj) : null,
   };
   if (mode === "text" || mode === "note") {
     setNoteOpen(null);
     const item = newItem(mode === "note", p.x, p.y, page());
+    item.color = properties.defaults().color;
+    item.opacity = properties.defaults().opacity;
     if (!item.isNote) {
       item.fontSize = Math.min(300, Math.max(12, 18 / zoom));
       item.width = Math.min(page().width, 240 / zoom);
@@ -856,34 +1153,70 @@ function startGesture(e) {
     }
     // Leave enough room to read the first line when inserting text near a page edge.
     if (!item.isNote) {
-      item.x = Math.min(item.x, Math.max(0, page().width - Math.min(90, item.width)));
+      item.x = Math.min(
+        item.x,
+        Math.max(0, page().width - Math.min(90, item.width)),
+      );
       item.width = Math.min(item.width, page().width - item.x);
     }
     if (!change("items", page().items.length, null, item)) return;
     tool = "select";
     selected = item.id;
     if (item.isNote) {
+      notePreview = false;
       setNoteOpen(item.id);
       render();
       $("#note-body").focus();
     } else editSelected();
     return;
   }
-  if (mode === "object") {
+  if (mode === "resize") {
+    g.el = [...sheet.querySelectorAll("[data-id]")].find(
+      (el) => el.dataset.id === id,
+    );
+  } else if (mode === "shape") {
+    g.shape = {
+      id: crypto.randomUUID(),
+      x: p.x,
+      y: p.y,
+      width: 1,
+      height: 1,
+      rotation: 0,
+      label: "",
+      startId: null,
+      endId: null,
+      flipX: false,
+      flipY: false,
+      ...properties.defaults(),
+    };
+    if (["Line", "Arrow"].includes(g.shape.kind))
+      g.shape.startId = nodeAt(p)?.id || null;
+    g.preview = svgObject(shapeVisual(g.shape, page()), g.shape);
+    marks.append(g.preview);
+  } else if (mode === "object") {
     // Claim the pointer on the stable sheet before rendering replaces the
     // original marker, which touch screens can implicitly capture on contact.
     if (id) sheet.setPointerCapture(e.pointerId);
     if (id !== openNote && openNote) setNoteOpen(null);
     if (id && tool === "pen") tool = "select";
+    if (e.shiftKey && id) {
+      if (selected) selectionIds.add(selected);
+      if (selectionIds.has(id)) selectionIds.delete(id);
+      else selectionIds.add(id);
+    } else if (!id || !isSelected(id)) selectionIds.clear();
     selected = id ?? null;
     render();
     if (!id) return;
-    g.el = [...sheet.querySelectorAll("[data-id]")].find((el) => el.dataset.id === id);
+    g.el = [...sheet.querySelectorAll("[data-id]")].find(
+      (el) => el.dataset.id === id,
+    );
   } else if (mode === "pen") {
     setNoteOpen(null);
     selected = null;
     render();
-    g.remaining = 500000 - page().ink.reduce((sum, stroke) => sum + stroke.points.length, 0);
+    g.remaining =
+      500000 -
+      page().ink.reduce((sum, stroke) => sum + stroke.points.length, 0);
     if (page().ink.length >= 10000 || g.remaining < 1) {
       message("size", true);
       return;
@@ -891,17 +1224,20 @@ function startGesture(e) {
     g.stroke = {
       id: crypto.randomUUID(),
       color: $("#ink-color").value,
+      opacity: properties.defaults().opacity,
       width: Math.min(1000, Math.max(0.2, Number($("#ink-size").value) / zoom)),
-      points: [p]
+      points: [p],
     };
-    g.preview = document.createElementNS(marks.namespaceURI, "polyline");
+    g.preview = document.createElementNS(svgNS, "polyline");
     g.preview.setAttribute("stroke", g.stroke.color);
     g.preview.setAttribute("stroke-width", g.stroke.width);
     g.preview.setAttribute("points", p.x + "," + p.y);
-    marks.append(g.preview);
+    g.previewRoot = svgObject(g.preview, g.stroke);
+    marks.append(g.previewRoot);
   }
   gesture = g;
-  if (!sheet.hasPointerCapture(e.pointerId)) sheet.setPointerCapture(e.pointerId);
+  if (!sheet.hasPointerCapture(e.pointerId))
+    sheet.setPointerCapture(e.pointerId);
 }
 function moveGesture(e) {
   const g = gesture;
@@ -913,9 +1249,31 @@ function moveGesture(e) {
     viewport.scrollLeft = g.left - dx;
     viewport.scrollTop = g.top - dy;
   }
+  if (g.mode === "resize") {
+    g.resized = resized(g.original, g.handle, dx / zoom, dy / zoom);
+    if (g.el && !g.original.isNote) {
+      if (find(g.id)?.group === "shapes") {
+        const visual = shapeVisual(g.resized, page());
+        g.el.replaceChildren(...visual.childNodes);
+        g.el.setAttribute("transform", visual.getAttribute("transform") || "");
+      } else place(g.el, g.resized);
+    }
+  }
+  if (g.mode === "shape") {
+    const p = point(e);
+    g.shape.x = Math.min(p.x, g.first.x);
+    g.shape.y = Math.min(p.y, g.first.y);
+    g.shape.width = Math.max(1, Math.abs(p.x - g.first.x));
+    g.shape.height = Math.max(1, Math.abs(p.y - g.first.y));
+    g.shape.flipX = p.x < g.first.x;
+    g.shape.flipY = p.y < g.first.y;
+    if (["Line", "Arrow"].includes(g.shape.kind))
+      g.shape.endId = nodeAt(p)?.id || null;
+    g.preview.replaceChildren(shapeVisual(g.shape, page()));
+  }
   if (g.mode === "object" && g.moved && g.el) {
-    const scale = g.el.namespaceURI === marks.namespaceURI ? zoom : 1;
-    g.el.style.transform = `translate(${dx / scale}px,${dy / scale}px)`;
+    const scale = g.el.namespaceURI === svgNS ? zoom : 1;
+    g.el.style.translate = `${dx / scale}px ${dy / scale}px`;
   }
   if (g.mode === "pen") {
     const events = e.getCoalescedEvents?.();
@@ -930,7 +1288,7 @@ function moveGesture(e) {
         return;
       }
       g.stroke.points.push(p);
-      const v = marks.createSVGPoint();
+      const v = g.preview.ownerSVGElement.createSVGPoint();
       v.x = p.x;
       v.y = p.y;
       g.preview.points.appendItem(v);
@@ -945,7 +1303,25 @@ function endGesture(e) {
   cancelGesture();
   const sel = g.mode === "object" ? find(g.id) : null;
   if (g.mode === "pan" || sel?.obj.isNote) {
-    handledSurfacePointer = { id:g.id, pan:g.mode === "pan", x:e.clientX, y:e.clientY, time:performance.now() };
+    handledSurfacePointer = {
+      id: g.id,
+      pan: g.mode === "pan",
+      x: e.clientX,
+      y: e.clientY,
+      time: performance.now(),
+    };
+  }
+  if (g.mode === "resize" && g.resized && g.moved) {
+    const sel = find(g.id);
+    if (sel) change(sel.group, sel.index, sel.obj, g.resized);
+    render();
+  }
+  if (g.mode === "shape" && g.moved) {
+    if (g.shape.startId === g.shape.endId) g.shape.endId = null;
+    change("shapes", page().shapes.length, null, g.shape);
+    selected = g.shape.id;
+    tool = "select";
+    render();
   }
   if (g.mode === "pen") {
     change("ink", page().ink.length, null, g.stroke);
@@ -954,12 +1330,27 @@ function endGesture(e) {
   if (g.mode === "object") {
     if (!sel) return;
     if (g.moved) {
-      const next = moved(sel.obj, (e.clientX - g.startX) / zoom, (e.clientY - g.startY) / zoom, page());
-      change(sel.group, sel.index, sel.obj, next);
+      const next = moved(
+        movementBase(sel.obj),
+        (e.clientX - g.startX) / zoom,
+        (e.clientY - g.startY) / zoom,
+        page(),
+      );
+      if (selectedObjects().length > 1)
+        mutateSelection((o) =>
+          moved(
+            o,
+            (e.clientX - g.startX) / zoom,
+            (e.clientY - g.startY) / zoom,
+            page(),
+          ),
+        );
+      else change(sel.group, sel.index, sel.obj, next);
     } else if (sel.obj.isNote) setNoteOpen(openNote === g.id ? null : g.id);
     else if (
       sel.group === "items" &&
-      (tool === "text" || (lastTap?.id === g.id && performance.now() - lastTap.time < 450))
+      (tool === "text" ||
+        (lastTap?.id === g.id && performance.now() - lastTap.time < 450))
     ) {
       editSelected();
       return;
@@ -971,9 +1362,16 @@ function endGesture(e) {
 sheet.onpointerdown = startGesture;
 sheet.onpointermove = moveGesture;
 sheet.onpointerup = endGesture;
-sheet.onpointercancel = cancelGesture;
+sheet.onpointercancel = () => {
+  cancelGesture();
+  render();
+};
 sheet.onlostpointercapture = (e) => {
-  if (e.target === sheet && e.pointerId === gesture?.pointer && !sheet.hasPointerCapture(e.pointerId))
+  if (
+    e.target === sheet &&
+    e.pointerId === gesture?.pointer &&
+    !sheet.hasPointerCapture(e.pointerId)
+  )
     cancelGesture();
 };
 sheet.ondblclick = (e) => {
@@ -991,7 +1389,7 @@ viewport.addEventListener(
       zoomBy(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX, e.clientY);
     }
   },
-  { passive: false }
+  { passive: false },
 );
 new ResizeObserver(() => {
   if (data && (fit || !card.hidden)) resize();
@@ -1046,11 +1444,17 @@ $("#feedback").onclick = async () => {
         ? {
             name: image.name + ".inklane",
             mediaType: "application/vnd.inklane.workspace",
-            hash: await digest(await (await portableFile(data, image)).arrayBuffer())
+            hash: await digest(
+              await (await portableFile(data, image)).arrayBuffer(),
+            ),
           }
         : image;
     const blob = await feedbackFile(data, revision);
-    await requestDownload(blob, image.name + ".feedback.json", "feedbackDownload");
+    await requestDownload(
+      blob,
+      image.name + ".feedback.json",
+      "feedbackDownload",
+    );
   } catch (error) {
     if (error.name !== "AbortError") errorMessage(error, "saveError");
   } finally {
@@ -1065,7 +1469,8 @@ $("#size-form").onsubmit = (e) => {
   const width = $("#picture-width").valueAsNumber;
   if (!$("#picture-width").reportValidity() || !Number.isFinite(width)) return;
   const height = (width * sel.obj.height) / sel.obj.width;
-  if (width !== sel.obj.width) change("images", sel.index, sel.obj, { ...sel.obj, width, height });
+  if (width !== sel.obj.width)
+    change("images", sel.index, sel.obj, { ...sel.obj, width, height });
   $("#picture-size").close();
   render();
   viewport.focus({ preventScroll: true });
@@ -1099,7 +1504,12 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => {
   handledSurfacePointer = null;
-  if (document.querySelector("dialog[open]") || busy || e.isComposing || (gesture && e.key !== "Escape"))
+  if (
+    document.querySelector("dialog[open]") ||
+    busy ||
+    e.isComposing ||
+    (gesture && e.key !== "Escape")
+  )
     return;
   const key = e.key.toLowerCase(),
     mod = e.ctrlKey || e.metaKey,
@@ -1122,6 +1532,7 @@ document.addEventListener("keydown", (e) => {
     } else if (openNote) closeCard();
     else {
       selected = null;
+      selectionIds.clear();
       render();
     }
     viewport.focus({ preventScroll: true });
@@ -1138,6 +1549,34 @@ document.addEventListener("keydown", (e) => {
     save();
     return;
   }
+  if (
+    typing &&
+    mod &&
+    ["b", "i", "u", "k"].includes(key) &&
+    e.target.matches("#note-body,.placed-editor")
+  ) {
+    e.preventDefault();
+    const obj = find(draft?.id || selected)?.obj;
+    if (obj?.contentFormat === "Markdown") {
+      const field = e.target,
+        start = field.selectionStart,
+        end = field.selectionEnd,
+        part = field.value.slice(start, end);
+      const token =
+        key === "b" ? "**" : key === "i" ? "*" : key === "u" ? "++" : "";
+      const replacement =
+        key === "k"
+          ? `[${part || t("linkText")}](https://)`
+          : token + part + token;
+      field.setRangeText(replacement, start, end, "select");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    } else if (obj && key !== "k")
+      applyProperties({
+        [key === "b" ? "bold" : key === "i" ? "italic" : "underline"]:
+          !obj[key === "b" ? "bold" : key === "i" ? "italic" : "underline"],
+      });
+    return;
+  }
   if (typing || e.altKey || $("#more").open) return;
   if (mod && (key === "z" || key === "y")) {
     e.preventDefault();
@@ -1147,6 +1586,18 @@ document.addEventListener("keydown", (e) => {
   if (mod && key === "d" && selected) {
     e.preventDefault();
     duplicateSelected();
+    return;
+  }
+  if (mod && key === "a") {
+    e.preventDefault();
+    selectionIds = new Set(allObjects().map((o) => o.id));
+    selected = allObjects()[0]?.id;
+    render();
+    return;
+  }
+  if (mod && key === "g") {
+    e.preventDefault();
+    groupSelection(!e.shiftKey);
     return;
   }
   if (mod) return;
@@ -1167,12 +1618,21 @@ document.addEventListener("keydown", (e) => {
     flush();
     const delta = e.shiftKey ? 10 : 1;
     const next = moved(
-      sel.obj,
+      movementBase(sel.obj),
       (key === "arrowleft" ? -1 : key === "arrowright" ? 1 : 0) * delta,
       (key === "arrowup" ? -1 : key === "arrowdown" ? 1 : 0) * delta,
-      page()
+      page(),
     );
-    change(sel.group, sel.index, sel.obj, next);
+    if (selectedObjects().length > 1)
+      mutateSelection((o) =>
+        moved(
+          o,
+          (key === "arrowleft" ? -1 : key === "arrowright" ? 1 : 0) * delta,
+          (key === "arrowup" ? -1 : key === "arrowdown" ? 1 : 0) * delta,
+          page(),
+        ),
+      );
+    else change(sel.group, sel.index, sel.obj, next);
     render();
   }
 });
@@ -1184,6 +1644,7 @@ async function reveal(id, index = pageIndex) {
   if (!selection) return;
   flush();
   tool = "select";
+  selectionIds.clear();
   selected = id;
   setNoteOpen(selection.obj.isNote ? id : null);
   selected = id;
@@ -1192,8 +1653,10 @@ async function reveal(id, index = pageIndex) {
   if (Number.isFinite(origin.x)) {
     const rect = sheet.getBoundingClientRect(),
       view = viewport.getBoundingClientRect();
-    viewport.scrollLeft += rect.left + origin.x * zoom - view.left - view.width / 2;
-    viewport.scrollTop += rect.top + origin.y * zoom - view.top - view.height / 2;
+    viewport.scrollLeft +=
+      rect.left + origin.x * zoom - view.left - view.width / 2;
+    viewport.scrollTop +=
+      rect.top + origin.y * zoom - view.top - view.height / 2;
   }
   viewport.focus({ preventScroll: true });
   positionCard();
@@ -1209,7 +1672,8 @@ function fillIndex() {
       ...notes,
       ...content.items.filter((o) => !o.isNote),
       ...content.ink,
-      ...content.images
+      ...content.images,
+      ...(content.shapes || []),
     ]) {
       const label = item.isNote
         ? item.title || t("nativeNote") + " " + (index + 1)
@@ -1217,7 +1681,9 @@ function fillIndex() {
           ? t("stroke")
           : item.pngData
             ? t("picture")
-            : t("placed");
+            : item.kind
+              ? item.label || t(item.kind.toLowerCase())
+              : t("placed");
       if (item.isNote) index++;
       if (
         query &&
@@ -1226,7 +1692,8 @@ function fillIndex() {
       )
         continue;
       const b = document.createElement("button");
-      b.textContent = data.pages.length > 1 ? pageNumber + 1 + " · " + label : label;
+      b.textContent =
+        data.pages.length > 1 ? pageNumber + 1 + " · " + label : label;
       if (item.text) {
         const detail = document.createElement("small");
         detail.textContent = item.text.slice(0, 160);
@@ -1264,17 +1731,28 @@ function inField(e) {
 for (const event of ["copy", "cut"]) {
   document.addEventListener(event, (e) => {
     const sel = current();
-    if (inField(e) || busy || !sel || !e.clipboardData || document.querySelector("dialog[open]")) return;
+    if (
+      inField(e) ||
+      busy ||
+      !sel ||
+      !e.clipboardData ||
+      document.querySelector("dialog[open]")
+    )
+      return;
     flush();
     const obj = find(selected)?.obj;
     if (!obj) return;
     try {
-      e.clipboardData.setData(clipFormat, JSON.stringify({ group: sel.group, obj }));
+      localClipboard = selectedRecords();
+      e.clipboardData.setData(
+        clipFormat,
+        JSON.stringify({ group: sel.group, obj, objects: localClipboard }),
+      );
       e.clipboardData.setData(
         "text/plain",
         obj.isNote
           ? [obj.title, obj.text].filter(Boolean).join("\n")
-          : (obj.text ?? t(sel.group === "ink" ? "stroke" : "picture"))
+          : (obj.text ?? t(sel.group === "ink" ? "stroke" : "picture")),
       );
       e.preventDefault();
       if (event === "cut") removeSelected();
@@ -1287,13 +1765,32 @@ function pasteOrigin() {
   const view = viewport.getBoundingClientRect(),
     rect = sheet.getBoundingClientRect();
   return {
-    x: Math.max(0, Math.min(page().width - 1, (view.left + Math.min(32, view.width / 5) - rect.left) / zoom)),
-    y: Math.max(0, Math.min(page().height - 1, (view.top + Math.min(32, view.height / 5) - rect.top) / zoom))
+    x: Math.max(
+      0,
+      Math.min(
+        page().width - 1,
+        (view.left + Math.min(32, view.width / 5) - rect.left) / zoom,
+      ),
+    ),
+    y: Math.max(
+      0,
+      Math.min(
+        page().height - 1,
+        (view.top + Math.min(32, view.height / 5) - rect.top) / zoom,
+      ),
+    ),
   };
 }
 async function pasted(e) {
   const clip = e.clipboardData;
-  if (!data || busy || inField(e) || !clip || document.querySelector("dialog[open]")) return;
+  if (
+    !data ||
+    busy ||
+    inField(e) ||
+    !clip ||
+    document.querySelector("dialog[open]")
+  )
+    return;
   const rich = clip.getData(clipFormat),
     text = clip.getData("text/plain");
   const png = Array.from(clip.files).find((f) => f.type === "image/png");
@@ -1301,6 +1798,22 @@ async function pasted(e) {
   e.preventDefault();
   flush();
   try {
+    if (rich && rich.length <= JSON_LIMIT) {
+      const bundle = JSON.parse(rich);
+      if (bundle.objects) {
+        await insertObjects(bundle.objects);
+        return;
+      }
+    }
+    if (
+      !rich &&
+      text.length <= JSON_LIMIT &&
+      text.startsWith('{"format":"inklane.selection"')
+    ) {
+      const bundle = JSON.parse(text);
+      await insertObjects(bundle.objects);
+      return;
+    }
     busy = true;
     updateStatus();
     let group, obj;
@@ -1308,20 +1821,32 @@ async function pasted(e) {
     if (rich) {
       if (rich.length > JSON_LIMIT) throw new EditorError("size");
       const incoming = JSON.parse(rich);
-      if (!collections.includes(incoming.group)) throw new EditorError("invalid");
+      if (!collections.includes(incoming.group))
+        throw new EditorError("invalid");
       group = incoming.group;
       // Validate data from other tabs and applications exactly as an opened annotation file.
       const target = {
         width: page().width,
         height: page().height,
         name: "selection.png",
-        hash: "0".repeat(64)
+        hash: "0".repeat(64),
       };
       const shell = newDocument(target);
+      shell.pages[0].shapes = [];
+      if (group === "shapes") {
+        incoming.obj.startId = null;
+        incoming.obj.endId = null;
+      }
       shell.pages[0][group].push(incoming.obj);
-      const checked = await readSidecar(new File([JSON.stringify(shell)], "selection.json"), target);
+      const checked = await readSidecar(
+        new File([JSON.stringify(shell)], "selection.json"),
+        target,
+      );
       const original = checked.doc.pages[0][group][0];
-      obj = { ...moved(original, 14 / zoom, 14 / zoom, page()), id: crypto.randomUUID() };
+      obj = {
+        ...moved(original, 14 / zoom, 14 / zoom, page()),
+        id: crypto.randomUUID(),
+      };
     } else if (png) {
       if (png.size > 16 * 1024 * 1024) throw new EditorError("size");
       const blobText = await new Promise((done, fail) => {
@@ -1332,7 +1857,11 @@ async function pasted(e) {
       });
       const picture = await openImage(png);
       picture.bitmap.close();
-      const scale = Math.min(1, (0.8 * page().width) / picture.width, (0.8 * page().height) / picture.height);
+      const scale = Math.min(
+        1,
+        (0.8 * page().width) / picture.width,
+        (0.8 * page().height) / picture.height,
+      );
       group = "images";
       obj = {
         id: crypto.randomUUID(),
@@ -1340,7 +1869,7 @@ async function pasted(e) {
         x: pos.x,
         y: pos.y,
         width: Math.max(1, picture.width * scale),
-        height: Math.max(1, picture.height * scale)
+        height: Math.max(1, picture.height * scale),
       };
     } else {
       if (text.length > 1000000) throw new EditorError("size");
@@ -1348,9 +1877,13 @@ async function pasted(e) {
       obj = { ...newItem(false, pos.x, pos.y, page()), text };
     }
     const combined = { ...page(), [group]: [...page()[group], obj] };
-    serialize({ ...data, pages: data.pages.map((p, i) => (i === pageIndex ? combined : p)) });
+    serialize({
+      ...data,
+      pages: data.pages.map((p, i) => (i === pageIndex ? combined : p)),
+    });
     // Check aggregate PNG limits before accepting a newly pasted or duplicated picture.
-    if (group === "images") await validateDocument({ ...data, pages: [combined] });
+    if (group === "images")
+      await validateDocument({ ...data, pages: [combined] });
     if (!change(group, page()[group].length, null, obj)) return;
     tool = "select";
     selected = obj.id;
@@ -1369,7 +1902,10 @@ document.addEventListener("paste", pasted);
 function queueRecovery() {
   if (!data || !recovery || embedded) return;
   clearTimeout(recoverTimer);
-  recoverTimer = setTimeout(() => captureRecovery().catch(() => message("draftError", true)), 300);
+  recoverTimer = setTimeout(
+    () => captureRecovery().catch(() => message("draftError", true)),
+    300,
+  );
 }
 function captureRecovery() {
   clearTimeout(recoverTimer);
@@ -1391,7 +1927,11 @@ function captureRecovery() {
   if (changedDraft()) {
     const original = find(draft.id);
     doc.pages[pageIndex] = { ...page(), items: [...page().items] };
-    doc.pages[pageIndex].items[original.index] = { ...original.obj, text: draft.text, title: draft.title };
+    doc.pages[pageIndex].items[original.index] = {
+      ...original.obj,
+      text: draft.text,
+      title: draft.title,
+    };
   }
   const snapshot = structuredClone(doc),
     source = image,
@@ -1437,7 +1977,7 @@ async function showRecent() {
     label.textContent = entry.name;
     last.textContent = new Intl.DateTimeFormat(document.documentElement.lang, {
       dateStyle: "medium",
-      timeStyle: "short"
+      timeStyle: "short",
     }).format(entry.time);
     open.append(label, last);
     open.onclick = () => resume(entry);
@@ -1468,12 +2008,17 @@ async function resume(entry) {
     const { doc, file } = await readDraft(entry.id);
     candidate = file ? await openBackdrop(file) : notebookSource(doc.title);
     if (
-      (doc.sourceImageSha256 ?? doc.sourcePdfSha256 ?? null)?.toUpperCase() !== (candidate.hash ?? undefined)
+      (doc.sourceImageSha256 ?? doc.sourcePdfSha256 ?? null)?.toUpperCase() !==
+      (candidate.hash ?? undefined)
     )
       throw new EditorError("invalid");
     await validateDocument(
       doc,
-      doc.kind === "Pdf" ? candidate.pages : doc.kind === "Image" ? [candidate] : undefined
+      doc.kind === "Pdf"
+        ? candidate.pages
+        : doc.kind === "Image"
+          ? [candidate]
+          : undefined,
     );
     const index = Math.max(0, Math.min(doc.pages.length - 1, entry.index));
     const canvas = await backdropCanvas(doc, candidate, index);
@@ -1492,7 +2037,8 @@ async function resume(entry) {
   }
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") captureRecovery().catch(() => message("draftError", true));
+  if (document.visibilityState === "hidden")
+    captureRecovery().catch(() => message("draftError", true));
 });
 $("#home").onclick = async () => {
   closeMenu();
@@ -1535,7 +2081,7 @@ async function sample() {
     const response = await fetch("../assets/field-guide-" + language + ".png");
     if (!response.ok) throw new EditorError("fileError");
     const source = await openBackdrop(
-      new File([await response.blob()], t("sampleName"), { type: "image/png" })
+      new File([await response.blob()], t("sampleName"), { type: "image/png" }),
     );
     const next = createLayer(source),
       p = next.pages[0];
@@ -1544,9 +2090,14 @@ async function sample() {
         ...newItem(true, 312, 292, p),
         title: t("sampleTitle"),
         text: t("sampleBody"),
-        isExpanded: innerWidth >= 700
+        isExpanded: innerWidth >= 700,
       },
-      { ...newItem(true, 850, 445, p), title: t("sampleTitle2"), text: t("sampleBody2"), isExpanded: false }
+      {
+        ...newItem(true, 850, 445, p),
+        title: t("sampleTitle2"),
+        text: t("sampleBody2"),
+        isExpanded: false,
+      },
     );
     const canvas = await backdropCanvas(next, source, 0);
     if (dirty() && !confirm(t("discard"))) return;
@@ -1572,7 +2123,7 @@ $("#portable").onclick = async () => {
     await requestDownload(
       await portableFile(data, image),
       image.name.replace(/[<>:"/\\|?*]/g, "-") + ".inklane",
-      "portableDone"
+      "portableDone",
     );
   } catch (error) {
     if (error.name !== "AbortError") errorMessage(error, "saveError");
@@ -1594,7 +2145,8 @@ async function showNotebookPages(pages, index) {
     selected = openNote = draft = null;
     attachCanvas(canvas);
     resize();
-    viewport.scrollTo(0, 0);
+    if (continuum?.enabled) continuum.scrollTo(index);
+    else viewport.scrollTo(0, 0);
     return true;
   } catch (error) {
     errorMessage(error, "fileError");
@@ -1627,9 +2179,16 @@ async function arrangePage(action) {
       return;
     }
     const source = page(),
-      next = action === "copy" ? structuredClone(source) : { ...source, items: [], images: [], ink: [] };
+      next =
+        action === "copy"
+          ? structuredClone(source)
+          : { ...source, items: [], images: [], ink: [], shapes: [] };
     if (action === "copy") {
-      for (const group of collections) for (const obj of next[group]) obj.id = crypto.randomUUID();
+      remapObjects(
+        collections.flatMap((group) =>
+          (next[group] || []).map((obj) => ({ group, obj })),
+        ),
+      );
       try {
         serialize({ ...data, pages: [...after, next] });
       } catch (e) {
@@ -1653,9 +2212,11 @@ async function arrangePage(action) {
           (action === "new"
             ? 256
             : collections.reduce(
-                (sum, k) => sum + before[previousPage][k].reduce((n, o) => n + weight(o), 0),
-                0
-              ))
+                (sum, k) =>
+                  sum +
+                  before[previousPage][k].reduce((n, o) => n + weight(o), 0),
+                0,
+              )),
     });
     render();
   }
@@ -1681,7 +2242,8 @@ $("#page-count").onclick = () => {
     b.disabled =
       (b.dataset.pageAction === "remove" && data.pages.length === 1) ||
       (b.dataset.pageAction === "back" && pageIndex === 0) ||
-      (b.dataset.pageAction === "forward" && pageIndex === data.pages.length - 1);
+      (b.dataset.pageAction === "forward" &&
+        pageIndex === data.pages.length - 1);
   }
   $("#page-list").showModal();
   list.children[pageIndex].focus();
@@ -1738,12 +2300,14 @@ $("#paper-form").onsubmit = async (e) => {
     return;
   }
   const spacing =
-    $("#spacing").value === "custom" ? Number($("#custom-spacing").value) : Number($("#spacing").value);
+    $("#spacing").value === "custom"
+      ? Number($("#custom-spacing").value)
+      : Number($("#spacing").value);
   const p = paperPage(
     $("#paper-size").value,
     $("#orientation").value,
     $("#pattern").value,
-    $("#pattern").value === "Blank" ? 5 : spacing
+    $("#pattern").value === "Blank" ? 5 : spacing,
   );
   flush();
   if (dirty() && !confirm(t("discard"))) return;
@@ -1790,9 +2354,11 @@ $("#print").onclick = async () => {
     const { canPrintAll } = await import("./print.js");
     if (busy || data !== current) return;
     const all = canPrintAll(data);
-    $("#print-all").textContent = t("allPages") + " (" + data.pages.length + ")";
+    $("#print-all").textContent =
+      t("allPages") + " (" + data.pages.length + ")";
     $("#print-all").disabled = !all;
-    $("#print-current").textContent = t("currentPage") + " (" + (pageIndex + 1) + ")";
+    $("#print-current").textContent =
+      t("currentPage") + " (" + (pageIndex + 1) + ")";
     $("#print-range").value = all ? "all" : "current";
     $("#print-limit").hidden = all;
     $("#print-options").showModal();
@@ -1807,7 +2373,12 @@ $("#print-form").onsubmit = (e) => {
 };
 $("#cancel-print").onclick = () => $("#print-options").close();
 showRecent();
-if (["field-guide", "review"].includes(new URLSearchParams(location.search).get("sample"))) sample();
+if (
+  ["field-guide", "review"].includes(
+    new URLSearchParams(location.search).get("sample"),
+  )
+)
+  sample();
 
 $("#whole-page").onclick = () => {
   closeMenu();
@@ -1816,3 +2387,541 @@ $("#whole-page").onclick = () => {
   resize();
 };
 $("#keep-sample").onclick = () => $("#portable").click();
+
+function allObjects() {
+  return data ? collections.flatMap((group) => page()[group] || []) : [];
+}
+function isSelected(id) {
+  return id === selected || selectionIds.has(id) || selectedGroupIds.has(id);
+}
+function selectedObjects() {
+  const group = current()?.obj.groupId;
+  return allObjects().filter(
+    (o) =>
+      o.id === selected ||
+      selectionIds.has(o.id) ||
+      Boolean(group && o.groupId === group),
+  );
+}
+function selectedRecords() {
+  return collections.flatMap((group) =>
+    (page()[group] || [])
+      .filter((o) => isSelected(o.id))
+      .map((obj) => ({ group, obj: structuredClone(obj) })),
+  );
+}
+function mutatePage(action) {
+  flush();
+  const before = structuredClone(page()),
+    after = structuredClone(before);
+  action(after);
+  serialize({
+    ...data,
+    pages: data.pages.map((p, i) => (i === pageIndex ? after : p)),
+  });
+  data.pages[pageIndex] = after;
+  record({
+    group: "batch",
+    pageIndex,
+    before,
+    after,
+    weight: JSON.stringify(before).length + JSON.stringify(after).length,
+  });
+}
+function mutateSelection(action) {
+  const ids = new Set(selectedObjects().map((o) => o.id));
+  mutatePage((p) => {
+    for (const group of collections)
+      p[group] = p[group].map((o) => (ids.has(o.id) ? action(o, group) : o));
+  });
+}
+function applyProperties(values) {
+  if (!current()) return;
+  flush();
+  mutateSelection((o, group) => {
+    const allowed =
+      group === "items"
+        ? [
+            "color",
+            "opacity",
+            "width",
+            "height",
+            "rotation",
+            "fontFamily",
+            "fontSize",
+            "bold",
+            "italic",
+            "underline",
+            "alignment",
+            "contentFormat",
+          ]
+        : group === "shapes"
+          ? [
+              "color",
+              "opacity",
+              "width",
+              "height",
+              "rotation",
+              "fillColor",
+              "strokeWidth",
+              "kind",
+              "label",
+            ]
+          : group === "images"
+            ? ["opacity", "width", "height", "rotation"]
+            : ["color", "opacity"];
+    return {
+      ...o,
+      ...Object.fromEntries(
+        Object.entries(values).filter(([key]) => allowed.includes(key)),
+      ),
+    };
+  });
+  render();
+}
+function svgObject(visual, item) {
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${page().width} ${page().height}`);
+  svg.classList.add("object-vector");
+  svg.style.zIndex = 1000001 + (item.layer || 0);
+  svg.append(visual);
+  return svg;
+}
+function renderHandles() {
+  const sel = current();
+  if (
+    !sel ||
+    sel.group === "ink" ||
+    sel.obj.isNote ||
+    draft ||
+    selectedObjects().length > 1
+  )
+    return;
+  const o = movementBase(sel.obj);
+  for (const [key, rx, ry] of [
+    ["nw", 0, 0],
+    ["n", 0.5, 0],
+    ["ne", 1, 0],
+    ["e", 1, 0.5],
+    ["se", 1, 1],
+    ["s", 0.5, 1],
+    ["sw", 0, 1],
+    ["w", 0, 0.5],
+  ]) {
+    const handle = document.createElement("button");
+    handle.className = "resize-handle";
+    handle.dataset.resize = key;
+    handle.dataset.id = o.id;
+    handle.setAttribute("aria-label", t("resize") + " " + key.toUpperCase());
+    handle.tabIndex = -1;
+    const angle = ((o.rotation || 0) * Math.PI) / 180,
+      dx = o.width * (rx - 0.5),
+      dy = o.height * (ry - 0.5);
+    handle.style.left =
+      (o.x + o.width / 2 + dx * Math.cos(angle) - dy * Math.sin(angle)) * zoom +
+      "px";
+    handle.style.top =
+      (o.y + o.height / 2 + dx * Math.sin(angle) + dy * Math.cos(angle)) *
+        zoom +
+      "px";
+    objects.append(handle);
+  }
+}
+function resized(original, handle, dx, dy) {
+  const angle = ((original.rotation || 0) * Math.PI) / 180,
+    c = Math.cos(angle),
+    s = Math.sin(angle);
+  [dx, dy] = [dx * c + dy * s, -dx * s + dy * c];
+  const o = { ...original };
+  if (handle.includes("e"))
+    o.width = Math.max(16, Math.min(100000, original.width + dx));
+  if (handle.includes("s"))
+    o.height = Math.max(16, Math.min(100000, original.height + dy));
+  if (handle.includes("w")) {
+    o.width = Math.max(16, Math.min(100000, original.width - dx));
+    o.x = original.x + original.width - o.width;
+  }
+  if (handle.includes("n")) {
+    o.height = Math.max(16, Math.min(100000, original.height - dy));
+    o.y = original.y + original.height - o.height;
+  }
+  const cx = original.x + original.width / 2,
+    cy = original.y + original.height / 2;
+  const sx = o.x + o.width / 2 - cx,
+    sy = o.y + o.height / 2 - cy;
+  o.x = cx + sx * c - sy * s - o.width / 2;
+  o.y = cy + sx * s + sy * c - o.height / 2;
+  return o;
+}
+function nodeAt(p) {
+  return [...(page().shapes || [])]
+    .filter((o) => !o.isNote && !["Line", "Arrow"].includes(o.kind))
+    .reverse()
+    .find(
+      (o) =>
+        p.x >= o.x &&
+        p.x <= o.x + o.width &&
+        p.y >= o.y &&
+        p.y <= o.y + o.height,
+    );
+}
+function groupSelection(group) {
+  if (!current() || (group && selectedObjects().length < 2)) return;
+  const groupId = group ? crypto.randomUUID() : "";
+  mutateSelection((o) => ({ ...o, groupId }));
+  selectionIds.clear();
+  render();
+}
+function remapObjects(records) {
+  const ids = new Map(records.map(({ obj }) => [obj.id, crypto.randomUUID()])),
+    groups = new Map();
+  for (const { obj } of records) {
+    obj.id = ids.get(obj.id);
+    if (obj.groupId) {
+      if (!groups.has(obj.groupId))
+        groups.set(obj.groupId, crypto.randomUUID());
+      obj.groupId = groups.get(obj.groupId);
+    }
+    if (obj.startId) obj.startId = ids.get(obj.startId) || null;
+    if (obj.endId) obj.endId = ids.get(obj.endId) || null;
+  }
+  return records;
+}
+async function insertObjects(records, fitPlacement = false) {
+  if (!data || busy) return;
+  try {
+    flush();
+    busy = true;
+    updateStatus();
+    if (!Array.isArray(records) || records.length > 12100)
+      throw new EditorError("invalid");
+    const copied = remapObjects(structuredClone(records));
+    const points = copied.flatMap(
+      ({ obj }) =>
+        obj.points || [
+          obj,
+          {
+            x: obj.x + (fitPlacement ? obj.width : 0),
+            y: obj.y + (fitPlacement ? obj.height : 0),
+          },
+        ],
+    );
+    let left = Infinity,
+      top = Infinity,
+      right = -Infinity,
+      bottom = -Infinity;
+    for (const p of points) {
+      left = Math.min(left, p.x);
+      top = Math.min(top, p.y);
+      right = Math.max(right, p.x);
+      bottom = Math.max(bottom, p.y);
+    }
+    if (!points.length) {
+      left = top = right = bottom = 0;
+    }
+    const scale = fitPlacement
+      ? Math.min(
+          1,
+          (page().width * 0.8) / Math.max(1, right - left),
+          (page().height * 0.8) / Math.max(1, bottom - top),
+        )
+      : 1;
+    const origin = fitPlacement
+      ? pasteOrigin()
+      : {
+          x:
+            left +
+            Math.max(-left, Math.min(14 / zoom, page().width - 1 - right)),
+          y:
+            top +
+            Math.max(-top, Math.min(14 / zoom, page().height - 1 - bottom)),
+        };
+    const transform = (p) => ({
+      ...p,
+      x: origin.x + (p.x - left) * scale,
+      y: origin.y + (p.y - top) * scale,
+    });
+    for (const record of copied) {
+      const o = record.obj;
+      if (o.points) {
+        o.points = o.points.map(transform);
+        o.width *= scale;
+      } else {
+        Object.assign(o, transform(o));
+        o.width *= scale;
+        o.height *= scale;
+        if (o.fontSize) o.fontSize *= scale;
+        if (o.strokeWidth) o.strokeWidth *= scale;
+      }
+    }
+    const next = structuredClone(page());
+    for (const r of copied) {
+      if (!collections.includes(r.group)) throw new EditorError("invalid");
+      next[r.group].push(r.obj);
+    }
+    await validateDocument({ ...data, pages: [next] });
+    mutatePage((p) => {
+      for (const group of collections) p[group] = next[group];
+    });
+    selectionIds = new Set(copied.map((r) => r.obj.id));
+    selected = copied[0]?.obj.id;
+    tool = "select";
+    render();
+  } catch (error) {
+    errorMessage(error, "clipboard");
+  } finally {
+    busy = false;
+    render();
+  }
+}
+async function copyObjects() {
+  if (!current()) return;
+  flush();
+  localClipboard = selectedRecords();
+  try {
+    await navigator.clipboard.writeText(
+      JSON.stringify({ format: "inklane.selection", objects: localClipboard }),
+    );
+  } catch {
+    /* Session clipboard remains available. */
+  }
+  message("copiedObjects");
+}
+async function pasteObjects() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text.length <= JSON_LIMIT) {
+      const parsed = JSON.parse(text);
+      if (parsed.format === "inklane.selection")
+        localClipboard = parsed.objects;
+    }
+  } catch {
+    /* Fall back to the current local selection. */
+  }
+  if (localClipboard) await insertObjects(localClipboard);
+  else message("clipboard", true);
+}
+function readElements() {
+  try {
+    const entries = JSON.parse(
+      localStorage.getItem("inklane.elements") || "[]",
+    );
+    return Array.isArray(entries) ? entries : [];
+  } catch {
+    return [];
+  }
+}
+function saveElement() {
+  if (!current()) return;
+  flush();
+  const name = prompt(t("elementName"));
+  if (!name?.trim()) return;
+  const category = prompt(t("elementCategory"), "") ?? "";
+  const entries = readElements(),
+    entry = {
+      id: crypto.randomUUID(),
+      name: name.trim().slice(0, 100),
+      category: category.trim().slice(0, 100),
+      objects: selectedRecords(),
+    };
+  try {
+    localStorage.setItem(
+      "inklane.elements",
+      JSON.stringify([...entries, entry]),
+    );
+    message("elementSaved");
+  } catch {
+    message("elementStorage", true);
+  }
+}
+function showElements() {
+  let dialog = $("#element-library");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "element-library";
+    document.body.append(dialog);
+  }
+  dialog.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = t("elements");
+  dialog.append(heading);
+  const entries = readElements().sort((a, b) =>
+    (a.category + a.name).localeCompare(b.category + b.name),
+  );
+  if (!entries.length) {
+    const p = document.createElement("p");
+    p.textContent = t("noElements");
+    dialog.append(p);
+  }
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "element-row";
+    const insert = document.createElement("button");
+    insert.textContent = [entry.category, entry.name]
+      .filter(Boolean)
+      .join(" / ");
+    insert.onclick = () => {
+      dialog.close();
+      insertObjects(entry.objects, true);
+    };
+    const rename = document.createElement("button");
+    rename.textContent = t("renameElement");
+    rename.onclick = () => {
+      const name = prompt(t("elementName"), entry.name);
+      if (!name?.trim()) return;
+      entry.name = name.trim().slice(0, 100);
+      try {
+        localStorage.setItem("inklane.elements", JSON.stringify(entries));
+        showElements();
+      } catch {
+        message("elementStorage", true);
+      }
+    };
+    const remove = document.createElement("button");
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", t("remove"));
+    remove.onclick = () => {
+      try {
+        localStorage.setItem(
+          "inklane.elements",
+          JSON.stringify(entries.filter((e) => e.id !== entry.id)),
+        );
+        showElements();
+      } catch {
+        message("elementStorage", true);
+      }
+    };
+    row.append(insert, rename, remove);
+    dialog.append(row);
+  }
+  const close = document.createElement("button");
+  close.textContent = t("done");
+  close.onclick = () => dialog.close();
+  dialog.append(close);
+  if (!dialog.open) dialog.showModal();
+}
+$("#note-read").onclick = () => {
+  flush();
+  notePreview = true;
+  renderCard();
+};
+$("#note-edit").onclick = () => {
+  notePreview = false;
+  renderCard();
+  $("#note-body").focus();
+};
+$("#note-resize").onpointerdown = (e) => {
+  if (!openNote || busy) return;
+  e.preventDefault();
+  flush();
+  const item = find(openNote).obj;
+  const start = {
+    x: e.clientX,
+    y: e.clientY,
+    width: card.offsetWidth,
+    height: card.offsetHeight,
+  };
+  const button = e.currentTarget;
+  button.setPointerCapture(e.pointerId);
+  button.onpointermove = (event) => {
+    card.style.width =
+      Math.max(
+        210,
+        Math.min(
+          viewport.clientWidth - 12,
+          start.width + event.clientX - start.x,
+        ),
+      ) + "px";
+    card.style.height =
+      Math.max(
+        150,
+        Math.min(
+          viewport.clientHeight - 12,
+          start.height + event.clientY - start.y,
+        ),
+      ) + "px";
+    positionCard();
+  };
+  button.onpointerup = () => {
+    button.onpointermove = null;
+    applyProperties({ width: card.offsetWidth, height: card.offsetHeight });
+  };
+  button.onpointercancel = () => {
+    button.onpointermove = null;
+    renderCard();
+  };
+};
+properties = setupProperties({
+  active: () => Boolean(data),
+  selectionCount:()=>selectedObjects().length,
+  current,
+  tool: () => tool,
+  render,
+  apply: applyProperties,
+  copy: copyObjects,
+  paste: pasteObjects,
+  group: groupSelection,
+  saveElement,
+  elements: showElements,
+  layer: (front) => {
+    if (!current()) return;
+    const layers = allObjects().map((o) => o.layer || 0);
+    const layer = Math.max(
+      -1000000,
+      Math.min(
+        1000000,
+        (front ? Math.max(...layers) : Math.min(...layers)) + (front ? 1 : -1),
+      ),
+    );
+    mutateSelection((o) => ({ ...o, layer }));
+    render();
+  },
+});
+
+$("#export-image").onclick = async () => {
+  if (!data || busy) return;
+  closeMenu();
+  flush();
+  busy = true;
+  updateStatus();
+  try {
+    const { annotatedPng } = await import("./image-export.js");
+    const png = await annotatedPng(data, image, pageIndex, strokeVisual, t);
+    await requestDownload(
+      png,
+      (image.name.replace(/\.[^.]+$/, "") || "Inklane") +
+        "-" +
+        (pageIndex + 1) +
+        "-annotated.png",
+    );
+  } catch (error) {
+    if (error?.name !== "AbortError") errorMessage(error, "imageExportFailed");
+  } finally {
+    busy = false;
+    updateStatus();
+  }
+};
+
+continuum = continuousPages({
+  mat: $("#mat"),
+  sheet,
+  viewport,
+  activate: switchPage,
+  strokeShape: strokeVisual,
+  error: (error) => errorMessage(error, "fileError"),
+});
+$("#continuous-view").onclick = () => {
+  if (!data || busy || data.kind === "Image") return;
+  closeMenu();
+  flush();
+  continuousView = !continuousView;
+  resize();
+  if (continuousView) continuum.scrollTo(pageIndex);
+  else viewport.scrollTo(0, 0);
+};
+
+function movementBase(object) {
+  if(!object || selectedObjects().length>1 || !object.startId && !object.endId)return object;
+  const [a,b]=shapeEndpoints(object,page());
+  return {...object,x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(1,Math.abs(b.x-a.x)),height:Math.max(1,Math.abs(b.y-a.y)),flipX:b.x<a.x,flipY:b.y<a.y,startId:null,endId:null};
+}
