@@ -556,7 +556,8 @@ public sealed partial class MainWindow : Window
         var path = _interaction.ChooseSavePath(this, dialog); if (path == null || !DestinationAllowed(path, ".png", true)) return;
         try
         {
-            var bitmap = _surface.RenderPage(_document.Kind == DocumentKind.Image ? 96 : 150); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            var bitmap = ReviewPresentation.WithNotes(_surface.RenderPage(_document.Kind == DocumentKind.Image ? 96 : 150), _document.Pages[_pageIndex], _pageIndex + 1);
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
             AtomicWrite(path, stream => encoder.Save(stream));
         }
         catch (Exception ex) when (IsExpected(ex)) { Error(L.T("SaveFailed"), ex); }
@@ -595,7 +596,8 @@ public sealed partial class MainWindow : Window
                     start = Math.Clamp(dialog.PageRange.PageFrom - 1,0,count - 1);
                     count = Math.Clamp(dialog.PageRange.PageTo - start,1,count - start);
                 }
-                dialog.PrintDocument(new PdfMarkupPaginator(this,_document,_pdf,sheet,printable,start,count),DisplayName);
+                dialog.PrintDocument(ReviewPresentation.AppendNotes(new PdfMarkupPaginator(this,_document,_pdf,sheet,printable,start,count),
+                    _document.Pages.Select((page, index) => (index + 1, page)).Skip(start).Take(count), sheet, printable),DisplayName);
                 return;
             }
             var pages = new FixedDocument();
@@ -607,7 +609,9 @@ public sealed partial class MainWindow : Window
                 fixedPage.Children.Add(new Image { Source = bitmap, Width = page.Width, Height = page.Height });
                 var content = new PageContent { Child = fixedPage }; pages.Pages.Add(content);
             }
-            dialog.PrintDocument(pages.DocumentPaginator, DisplayName);
+            var outputSize = new Size(dialog.PrintableAreaWidth, dialog.PrintableAreaHeight);
+            dialog.PrintDocument(ReviewPresentation.AppendNotes(pages.DocumentPaginator,
+                _document.Pages.Select((page, index) => (index + 1, page)), outputSize, new Rect(outputSize)), DisplayName);
         }
         catch (Exception ex) when (IsExpected(ex) || ex is PrintSystemException) { Error(L.T("Error"), ex); }
     }

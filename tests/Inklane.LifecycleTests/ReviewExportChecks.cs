@@ -24,11 +24,14 @@ internal static partial class Program
         }
         var hash=DocumentStore.GetFileHash(original);state.Window.OpenFile(original);
         var document=Document(state.Window);
+        var picture=state.Path("insert.png"); WriteImage(picture);
         foreach(var page in document.Pages)
         {
             page.Ink.Add(new InkData {Color="#D03040",Width=8,Points=[new(){X=40,Y=60},new(){X=180,Y=90}]});
             page.Items.Add(new TextItem {X=70,Y=110,IsNote=true,Title="Long explanation",Text=string.Concat(Enumerable.Repeat("Änderung → preserve every paragraph.\n",100))});
             page.Items.Add(new TextItem {X=45,Y=160,Width=250,Height=70,Text="Aligned review text"});
+            page.Shapes.Add(new ShapeItem { X=60,Y=240,Width=150,Height=75,Kind=ShapeKind.Diamond,FillColor="#FFF09A",Color="#7128CF",Rotation=15,Layer=-2 });
+            page.Images.Add(new ImageItem { X=230,Y=250,Width=55,Height=45,Rotation=30,Opacity=.6,Layer=2,PngData=File.ReadAllBytes(picture) });
         }
         Call(state.Window,"ShowPage",false);Call(state.Window,"DocumentChanged");
         var destination=state.Path("review.pdf");state.Interaction.SavePaths.Enqueue(destination);Call(state.Window,"ExportAnnotatedPdf");
@@ -39,9 +42,12 @@ internal static partial class Program
             Equal(4,result.PageCount);
             for(int i=0;i<4;i++)
             {
-                var page=result.Pages[i];Equal(i*90,page.Rotate);Equal(3,page.Annotations.Count);
-                Equal(document.Pages[i].Items[0].Text,page.Annotations[1].Contents);
-                var point=page.Annotations[0].Elements.GetArray("/InkList")!.Elements.GetArray(0)!;
+                var page=result.Pages[i];Equal(i*90,page.Rotate);Equal(5,page.Annotations.Count);
+                Equal(document.Pages[i].Shapes[0].Id,page.Annotations[0].Elements.GetString("/NM"));
+                Equal(document.Pages[i].Images[0].Id,page.Annotations[4].Elements.GetString("/NM"));
+                Equal(document.Pages[i].Items[0].Text,page.Annotations[2].Contents);
+                Assert(page.Annotations[0].Elements.GetDictionary("/AP") != null && page.Annotations[4].Elements.GetDictionary("/AP") != null,"Source PDF export lost vector/image appearances.");
+                var point=page.Annotations[1].Elements.GetArray("/InkList")!.Elements.GetArray(0)!;
                 double x=30,y=Units.DipToPoint(document.Pages[i].Height)-45;
                 var expected=i switch {1=>new XPoint(380-y,30+x),2=>new XPoint(380-x,470-y),3=>new XPoint(20+y,470-x),_=>new XPoint(20+x,30+y)};
                 Assert(Math.Abs(point.Elements.GetReal(0)-expected.X)<.01 && Math.Abs(point.Elements.GetReal(1)-expected.Y)<.01,"Cropped/rotated ink coordinates drifted.");

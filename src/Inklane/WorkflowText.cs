@@ -5,6 +5,8 @@ internal static class WorkflowText
     public static string T(string key) => Strings.TryGetValue(key, out var value) ? L.Language == "de" ? value.De : value.En : key;
     private static readonly Dictionary<string, (string En, string De)> Strings = new()
     {
+        ["ReviewPageNotes"] = ("Page {0} · Remarks", "Seite {0} · Anmerkungen"),
+        ["ImageNotesTooLong"] = ("The complete remarks are too long for one readable image. Export an annotated PDF, print with the notes appendix, or export feedback data instead.", "Die vollständigen Anmerkungen sind zu lang für ein lesbares Einzelbild. Exportieren Sie stattdessen ein kommentiertes PDF, drucken Sie mit Anhang oder exportieren Sie die Feedback-Daten."),
         ["OfficeRendererMissing"] = ("Install LibreOffice to open Word and PowerPoint files directly on this computer, then restart Inklane. Your files stay local. You can also use a PDF exported from the original application.", "Installieren Sie LibreOffice, um Word- und PowerPoint-Dateien direkt auf diesem Computer zu öffnen. Starten Sie Inklane danach neu. Ihre Dateien bleiben lokal. Sie können auch einen PDF-Export aus der ursprünglichen Anwendung verwenden."),
         ["GetRenderer"] = ("Get LibreOffice…", "LibreOffice herunterladen …"),
         ["ExportPdf"] = ("Export annotated PDF…", "PDF mit Anmerkungen exportieren …"),

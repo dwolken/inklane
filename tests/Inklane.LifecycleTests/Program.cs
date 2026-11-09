@@ -62,6 +62,7 @@ internal static partial class Program
         Run("Relative image sidecars travel with the source, even beside an unrelated namesake in the working directory", PortableImagePair);
         Run("Source PDF markup uses displayed page geometry, editable sidecars and source pixels", PdfMarkupJourney);
         Run("Standard PDF handoff preserves source pages, full notes and cropped rotated anchors", StandardPdfReviewExport);
+        Run("PNG and print handoffs include complete rich and long collapsed remarks", CompletePresentationRemarks);
         Run("Continuous pages scroll, render and keep annotations attached across both views", ContinuousPagesJourney);
         Run("Feedback identifies the source image, includes every mark, and protects original work", ImageFeedback);
         Run("PDF feedback uses displayed page coordinates and excludes underlying source contents", PdfFeedback);

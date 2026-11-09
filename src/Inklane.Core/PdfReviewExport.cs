@@ -48,16 +48,7 @@ public static partial class DocumentStore
             var overlay=pdf.AddPage();
             overlay.Width=XUnit.FromPoint(Units.DipToPoint(pageModel.Width));
             overlay.Height=XUnit.FromPoint(Units.DipToPoint(pageModel.Height));
-            foreach (var picture in pageModel.Images)
-            {
-                double x=Units.DipToPoint(picture.X),y=Units.DipToPoint(picture.Y),w=Units.DipToPoint(picture.Width),h=Units.DipToPoint(picture.Height);
-                var stamp=new StandardAnnotation(pdf,"/Stamp") { Rectangle=new PdfRectangle(new XRect(x,overlay.Height.Point-y-h,w,h)) };
-                stamp.Elements.SetString("/NM",picture.Id);stamp.Elements.SetInteger("/F",4);
-                SetAppearance(pdf,stamp,w,h,g => { using var bytes=new MemoryStream(picture.PngData,0,picture.PngData.Length,false,true);using var image=XImage.FromStream(bytes);g.DrawImage(image,0,0,w,h); });
-                overlay.Annotations.Add(stamp);
-            }
-            foreach (var stroke in pageModel.Ink) AddInk(pdf,overlay,stroke);
-            foreach (var item in pageModel.Items) AddText(pdf,overlay,item);
+            AddObjects(pdf, overlay, pageModel, includeImages: true);
             while (overlay.Annotations.Count>0)
             {
                 var annotation=overlay.Annotations[0];var rect=annotation.Rectangle;
