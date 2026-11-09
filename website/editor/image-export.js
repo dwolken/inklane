@@ -5,7 +5,7 @@ import { backdropCanvas } from "./documents.js";
 
 let styles;
 const ns = "http://www.w3.org/2000/svg";
-async function embeddedStyles() {
+export async function embeddedStyles() {
   if (!styles)
     styles = (async () => {
       const rich = await (
@@ -43,10 +43,15 @@ async function embeddedStyles() {
 
 // A page image includes the complete remarks in a gutter. The editable project
 // remains separate, and the source never gets overwritten by this export.
-export async function annotatedPng(doc, source, index, strokeShape, t) {
+export function annotatedPng(doc, source, index, strokeShape, t) {
+  return reviewPagePng(doc, source, index, strokeShape, t);
+}
+
+export async function reviewPagePng(doc, source, index, strokeShape, t, { includeNotes = true, signal, maxPixels = 16_000_000, maxEdge = 8192 } = {}) {
+  throwIfAborted(signal);
   const page = doc.pages[index],
     notes = page.items.filter((o) => o.isNote),
-    gutter = notes.length ? 360 : 0;
+    gutter = includeNotes && notes.length ? 360 : 0;
   const root = document.createElement("div");
   root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
   const width = page.width + (gutter ? gutter + 28 : 0);
@@ -130,7 +135,7 @@ export async function annotatedPng(doc, source, index, strokeShape, t) {
       renderText(el, item);
     }
   }
-  if (notes.length) {
+  if (includeNotes && notes.length) {
     const aside = document.createElement("aside");
     aside.className = "export-notes";
     root.append(aside);
@@ -165,36 +170,44 @@ export async function annotatedPng(doc, source, index, strokeShape, t) {
     const height = Math.max(page.height, root.scrollHeight),
       scale = Math.min(
         2,
-        8192 / Math.max(width, height),
-        Math.sqrt(16_000_000 / (width * height)),
+        maxEdge / Math.max(width, height),
+        Math.sqrt(maxPixels / (width * height)),
       );
     if (scale < 0.5 || !Number.isFinite(scale))
       throw new EditorError("imageTooTall");
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("width", width);
-    svg.setAttribute("height", height);
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    const content = document.createElementNS(ns, "foreignObject");
-    content.setAttribute("width", width);
-    content.setAttribute("height", height);
-    content.append(root.cloneNode(true));
-    svg.append(content);
-    const image = new Image();
-    image.src =
-      "data:image/svg+xml;charset=utf-8," +
-      encodeURIComponent(new XMLSerializer().serializeToString(svg));
-    await image.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(width * scale);
-    canvas.height = Math.ceil(height * scale);
-    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-    const result = await new Promise((resolve) =>
-      canvas.toBlob(resolve, "image/png"),
-    );
-    canvas.width = canvas.height = 1;
-    if (!result) throw new EditorError("imageExportFailed");
-    return result;
+    return await rasterizeElement(root, width, height, { scale, signal });
   } finally {
     host.remove();
   }
+}
+
+
+export function throwIfAborted(signal) {
+  if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+}
+
+// Reuse the same local SVG/foreignObject renderer for bounded PDF pages and PNGs.
+// The caller owns layout and must supply bounded dimensions and a finite scale.
+export async function rasterizeElement(root, width, height, { scale = 2, signal } = {}) {
+  throwIfAborted(signal);
+  if (![width, height, scale].every(v => Number.isFinite(v) && v > 0) || width * height * scale * scale > 16_100_000)
+    throw new EditorError("imageTooTall");
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", width); svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const content = document.createElementNS(ns, "foreignObject");
+  content.setAttribute("width", width); content.setAttribute("height", height);
+  content.append(root.cloneNode(true)); svg.append(content);
+  const image = new Image();
+  const canvas = document.createElement("canvas");
+  try {
+    image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await image.decode(); throwIfAborted(signal);
+    canvas.width = Math.ceil(width * scale); canvas.height = Math.ceil(height * scale);
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    const result = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    throwIfAborted(signal);
+    if (!result) throw new EditorError("imageExportFailed");
+    return result;
+  } finally { canvas.width = canvas.height = 1; image.src = ""; }
 }

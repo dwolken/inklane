@@ -280,3 +280,20 @@ The shared workspace bundles Marked 18.1.3 (MIT), DOMPurify 3.4.17
 Their license notices are included under `editor/rich-lib/` in every workspace
 build. KaTeX's bundled mathematical fonts are included with its MIT notice.
 Rendering uses these local copies; no text is sent to a hosted rendering service.
+
+
+## jsPDF 4.2.1
+
+The shared workspace's review PDF exporter uses the official jsPDF 4.2.1 browser
+bundle, published under the MIT license. The unchanged bundle and its package
+LICENSE are distributed under `editor/pdf-write/`. The bundle retains its upstream
+component notices, including Adobe's BSD notice, MIT notices and pako's MIT/Zlib
+notice. The package-level license declaration does not independently establish a
+license for each historical component: the bundled MD5 helper retains its upstream
+comment that its original author did not specify a particular license.
+
+Sources: https://github.com/parallax/jsPDF/releases/tag/v4.2.1 and
+https://github.com/parallax/jsPDF/blob/v4.2.1/LICENSE
+
+The exporter uses only generated image pages and binary Blob output. It does not
+use encryption, JavaScript actions, form generation, HTML import or window output.
