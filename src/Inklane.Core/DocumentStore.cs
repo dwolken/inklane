@@ -77,11 +77,21 @@ public static partial class DocumentStore
     public static DocumentData Clone(DocumentData data) => Deserialize(Serialize(data));
     public static string GetFileHash(string path)
     {
-        using var input = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(input));
+        // Indexers and antivirus can briefly claim a just-published file. Retry only
+        // sharing/lock violations; missing files and denied access remain real errors.
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var input = File.OpenRead(path);
+                return Convert.ToHexString(SHA256.HashData(input));
+            }
+            catch (IOException ex) when ((ex.HResult & 0xffff) is 32 or 33 && attempt < 5)
+            { Thread.Sleep(40 << attempt); }
+        }
     }
 
-    public static void SaveJson(DocumentData data, string path)
+    public static string SaveJson(DocumentData data, string path)
     {
         if (data.Kind == DocumentKind.Pdf && !Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("PDF markup must be saved to a JSON annotation file.");
@@ -91,7 +101,9 @@ public static partial class DocumentStore
             stored = data.WithSourceName(Path.GetFileName(source));
         var bytes = Encoding.UTF8.GetBytes(Serialize(stored));
         ProtectSourceImage(data, path);
+        var hash = Convert.ToHexString(SHA256.HashData(bytes));
         AtomicWrite(path, temporary => File.WriteAllBytes(temporary, bytes));
+        return hash;
     }
 
     public static DocumentData LoadJson(string path)
@@ -110,7 +122,7 @@ public static partial class DocumentStore
         return model;
     }
 
-    public static void SavePdf(DocumentData data, string path)
+    public static string SavePdf(DocumentData data, string path)
     {
         if (data.Kind == DocumentKind.Pdf)
             throw new NotSupportedException("An external PDF and its editable annotation file must be kept together.");
@@ -129,6 +141,7 @@ public static partial class DocumentStore
         pdf.Internals.Catalog.Elements["/InklaneData"] = metadata.Reference!;
 
         XImage? sourceImage = null;
+        string? writtenHash = null;
         try
         {
             if (data.Kind == DocumentKind.Image)
@@ -170,9 +183,11 @@ public static partial class DocumentStore
                 finalized.Internals.Catalog.Elements.SetString("/InklaneContentHash", ContentHash(finalized));
                 finalized.Save(temporary);
                 CheckSize(temporary, MaxPdfBytes);
+                writtenHash = GetFileHash(temporary);
             });
         }
         finally { sourceImage?.Dispose(); }
+        return writtenHash ?? throw new IOException("The PDF was not written.");
     }
 
     public static DocumentData LoadPdf(string path)

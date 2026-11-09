@@ -23,6 +23,7 @@ internal static partial class Program
     {
         output = Path.GetFullPath(args.FirstOrDefault() ?? ".scratch/test-output");
         Directory.CreateDirectory(output);
+        Run("Completed saves return their published hash and transient read locks retry safely", SavedHashAndTransientReadLock);
         Run("Schema 4 retains text style, vector connections and rejects dangling references", ExtendedObjectRoundTrip);
         Run("JSON round trip retains multiline note, pressure and coordinates", JsonRoundTrip);
         Run("PDF round trip retains two editable pages and full Unicode text", PdfRoundTrip);

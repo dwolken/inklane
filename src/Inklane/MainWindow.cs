@@ -512,9 +512,10 @@ public sealed partial class MainWindow : Window
             if (!notebook && (sourcePath == null || !File.Exists(sourcePath) || !string.Equals(DocumentStore.GetFileHash(sourcePath), identity, StringComparison.OrdinalIgnoreCase)))
             { Error(L.T(_document.Kind == DocumentKind.Pdf ? "PdfChanged" : "ImageChanged")); return false; }
             _saving = true; UpdateState();
-            if (_document.Kind == DocumentKind.Notebook) SaveProgress.WriteNotebook(this, _document, _history[_historyIndex].Data, path);
-            else DocumentStore.SaveJson(_document, path);
-            _filePath = path; _diskHash = DocumentStore.GetFileHash(path); _savedState = _history[_historyIndex].Data; ClearRecovery();
+            var writtenHash = _document.Kind == DocumentKind.Notebook
+                ? SaveProgress.WriteNotebook(this, _document, _history[_historyIndex].Data, path)
+                : DocumentStore.SaveJson(_document, path);
+            _filePath = path; _diskHash = writtenHash; _savedState = _history[_historyIndex].Data; ClearRecovery();
             if (_document.Kind == DocumentKind.Notebook) RenameViewSession(path);
             var source = SourcePath;
             RememberRecent(source != null && SamePath(path, source + ".inklane.json")

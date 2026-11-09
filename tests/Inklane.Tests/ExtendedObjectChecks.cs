@@ -7,6 +7,32 @@ namespace Inklane.Tests;
 
 internal static partial class Program
 {
+    private static void SavedHashAndTransientReadLock()
+    {
+        var data = Sample();
+        var jsonPath = Path.Combine(output,"verified-save.json");
+        var jsonHash = DocumentStore.SaveJson(data,jsonPath);
+        Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(jsonPath))),jsonHash);
+        var pdfPath = Path.Combine(output,"verified-save.pdf");
+        var pdfHash = DocumentStore.SavePdf(data,pdfPath);
+        Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(pdfPath))),pdfHash);
+        using var held = new ManualResetEventSlim();
+        var reader = new Thread(() =>
+        {
+            using var stream = new FileStream(pdfPath,FileMode.Open,FileAccess.Read,FileShare.None);
+            held.Set(); Thread.Sleep(180);
+        });
+        reader.Start(); held.Wait();
+        Equal(pdfHash,DocumentStore.GetFileHash(pdfPath)); reader.Join();
+        // A real continuing lock still reports a bounded error instead of hanging or
+        // inventing a fingerprint. The already returned save hash remains usable.
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        using (var locked = new FileStream(pdfPath,FileMode.Open,FileAccess.Read,FileShare.None))
+            Throws<IOException>(() => DocumentStore.GetFileHash(pdfPath));
+        Assert(watch.Elapsed < TimeSpan.FromSeconds(5),"File lock retry was not bounded.");
+        Equal(pdfHash,DocumentStore.GetFileHash(pdfPath));
+    }
+
     private static void ExtendedObjectRoundTrip()
     {
         var first = new ShapeItem { X = 70, Y = 75, Kind = ShapeKind.Ellipse, Color = "#1F9D81", FillColor = "#FFF5C8", Label = "Input", GroupId = "diagram" };
