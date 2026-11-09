@@ -267,3 +267,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+## Local rich-text rendering
+
+The shared workspace bundles Marked 18.1.3 (MIT), DOMPurify 3.4.17
+(Apache-2.0), KaTeX 0.19.1 (MIT), and Highlight.js 11.12.0 (BSD-3-Clause).
+Their license notices are included under `editor/rich-lib/` in every workspace
+build. KaTeX's bundled mathematical fonts are included with its MIT notice.
+Rendering uses these local copies; no text is sent to a hosted rendering service.

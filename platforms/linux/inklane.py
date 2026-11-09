@@ -27,7 +27,7 @@ MAX_BYTES = 100 * 1024 * 1024
 ASSETS = INSTALL / "workspace"
 MIME = {".html": "text/html; charset=utf-8", ".css": "text/css", ".mjs": "text/javascript",
         ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png",
-        ".json": "application/json", ".wasm": "application/wasm", ".webmanifest": "application/manifest+json"}
+        ".woff2": "font/woff2", ".json": "application/json", ".wasm": "application/wasm", ".webmanifest": "application/manifest+json"}
 
 
 class AssetRequest(BaseHTTPRequestHandler):
