@@ -30,6 +30,7 @@ import { setupProperties } from "./properties.js";
 import { renderText, textStyle } from "./rich-text.js";
 import { shapeVisual, shapeEndpoints } from "./shapes.js";
 import { continuousPages } from "./continuous.js";
+import { launchBrand } from "./startup.js";
 
 const svgNS = "http://www.w3.org/2000/svg";
 const $ = (selector) => document.querySelector(selector);
@@ -2925,3 +2926,5 @@ function movementBase(object) {
   const [a,b]=shapeEndpoints(object,page());
   return {...object,x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(1,Math.abs(b.x-a.x)),height:Math.max(1,Math.abs(b.y-a.y)),flipX:b.x<a.x,flipY:b.y<a.y,startId:null,endId:null};
 }
+
+launchBrand();

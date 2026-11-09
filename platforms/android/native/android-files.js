@@ -1,6 +1,7 @@
 /* Android transfers a private MessagePort only to the main workspace origin. */
 (() => {
   window.inklaneNativeHost = true;
+  window.inklaneLaunchMotion = false; // The OS owns the static launch screen on phones/tablets.
   window.inklaneNativePrinting = false;
   let attach;
   const ready = new Promise(resolve => { attach = resolve; });

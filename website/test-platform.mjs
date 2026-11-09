@@ -85,6 +85,13 @@ try {
   const offline=await context.newPage(); offline.on('pageerror',e=>errors.push(e.message));
   await offline.goto(origin+'/inklane/editor/?lang=de');
   await offline.locator('#start').waitFor();
+  for (const scheme of ['light', 'dark']) {
+    await offline.emulateMedia({colorScheme:scheme});
+    await offline.waitForFunction(scheme => {
+      const image=document.querySelector('.brand img');
+      return image.complete && image.naturalWidth>0 && image.currentSrc.endsWith('inklane-lockup-'+scheme+'.svg');
+    }, scheme);
+  }
   const binary=reviewPdf();
   const pixels = await offline.evaluate(async bytes=>{
     const {openPdf}=await import('./pdf-source.js');

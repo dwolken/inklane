@@ -254,11 +254,27 @@ class Inklane(Gtk.Application):
                   " && ['/editor/','/editor/index.html'].includes(location.pathname)){" + bridge + "\n}")
         manager.add_script(WebKit2.UserScript.new(scoped,WebKit2.UserContentInjectedFrames.TOP_FRAME,
             WebKit2.UserScriptInjectionTime.START,None,None))
+        self.motion_script = None
+        def update_motion(settings, _property=None):
+            source = "globalThis.inklaneReducedMotion=" + json.dumps(not settings.get_property("gtk-enable-animations")) + ";"
+            if self.motion_script:
+                manager.remove_script(self.motion_script)
+            self.motion_script = WebKit2.UserScript.new(source,WebKit2.UserContentInjectedFrames.TOP_FRAME,
+                WebKit2.UserScriptInjectionTime.START,None,None)
+            manager.add_script(self.motion_script)
+            if self.view and self.valid_document(self.view.get_uri()):
+                self.view.evaluate_javascript(source + "globalThis.dispatchEvent(new Event('inklane-motion-change'));",
+                    -1,None,None,None,None,None)
+        settings = Gtk.Settings.get_default()
+        update_motion(settings)
+        motion_handler = settings.connect("notify::gtk-enable-animations", update_motion)
+        self.window.connect("destroy", lambda *_: settings.disconnect(motion_handler))
         storage=Path(GLib.get_user_data_dir())/"inklane"/"web"
         cache=Path(GLib.get_user_cache_dir())/"inklane"/"web"
         stores=WebKit2.WebsiteDataManager(base_data_directory=str(storage),base_cache_directory=str(cache))
         context=WebKit2.WebContext.new_with_website_data_manager(stores)
         self.view=WebKit2.WebView(web_context=context,user_content_manager=manager)
+        self.view.set_background_color(self.window.get_style_context().get_background_color(Gtk.StateFlags.NORMAL))
         self.view.connect("decide-policy",self.navigation)
         self.view.connect("web-process-terminated",self.renderer_terminated)
         self.view.connect("permission-request",lambda _,request: (request.deny(),True)[1])

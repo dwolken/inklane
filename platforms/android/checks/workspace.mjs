@@ -101,6 +101,9 @@ const title = 'AndroidReview';
 try {
   await waitFor(()=>visible('#new-notebook'), 'document home');
   assert.equal(await js('isSecureContext && typeof inklaneSaveCopy === "function"'),true);
+  assert.equal(await js('globalThis.inklaneLaunchMotion === false && !document.querySelector(".brand").classList.contains("launch")'),true,
+    'Android keeps the OS-native static launch and opens the usable workspace immediately');
+  await waitFor(()=>js('document.querySelector(".brand img").complete && document.querySelector(".brand img").naturalWidth > 0'),'bundled brand asset');
   await tap('#new-notebook');
   await type('#book-title',title);
   await js('document.querySelector("#paper-form").requestSubmit()');

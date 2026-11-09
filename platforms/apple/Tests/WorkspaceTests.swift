@@ -201,6 +201,17 @@ final class WorkspaceTests: XCTestCase {
     private func restartBridge(_ host: WorkspaceHost) async throws {
         try await wait(host, "typeof document.querySelector('#sample-link')?.onclick === 'function'")
         try await wait(host, "window.isSecureContext && !!crypto.subtle && typeof window.inklaneSaveCopy === 'function'")
+        try await wait(host, "document.querySelector('.brand img')?.complete && document.querySelector('.brand img')?.naturalWidth > 0")
+        #if os(iOS)
+        let staticLaunch = try await javascript(host, "globalThis.inklaneLaunchMotion === false && !document.querySelector('.brand').classList.contains('launch')")
+        XCTAssertEqual(staticLaunch as? Bool, true, "The phone workspace must retain its native static launch behavior")
+        #else
+        let reducedMotion = try await javascript(host, "globalThis.inklaneReducedMotion")
+        XCTAssertEqual(reducedMotion as? Bool, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        _ = try await javascript(host, "globalThis.motionNotifications = 0; addEventListener('inklane-motion-change', () => globalThis.motionNotifications++); true")
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        try await wait(host, "globalThis.motionNotifications === 1")
+        #endif
         let partial = """
         globalThis.previousProcess = true;
         const bridge = window.webkit.messageHandlers.exportFile;

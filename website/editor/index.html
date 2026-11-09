@@ -12,7 +12,7 @@
     />
     <meta name="color-scheme" content="light dark" />
     <title>Inklane · Workspace</title>
-    <link rel="icon" href="../assets/inklane.svg" />
+    <link rel="icon" href="../assets/inklane-app.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="editor.css" />
     <link rel="stylesheet" href="rich-lib/katex.css" />
     <link rel="stylesheet" href="rich-text.css" />
@@ -20,11 +20,14 @@
   </head>
   <body>
     <header>
-      <a class="brand" href="../" aria-label="Inklane"
-        ><img src="../assets/inklane.svg" alt="" width="30" height="30" /><span
-          >Inklane</span
-        ></a
-      >
+      <a class="brand" href="../" aria-label="Inklane">
+        <picture>
+          <source media="(max-width: 660px) and (prefers-color-scheme: dark)" srcset="../assets/inklane-symbol-dark.svg" />
+          <source media="(max-width: 660px)" srcset="../assets/inklane-symbol-light.svg" />
+          <source media="(prefers-color-scheme: dark)" srcset="../assets/inklane-lockup-dark.svg" />
+          <img src="../assets/inklane-lockup-light.svg" alt="" width="124" height="32" />
+        </picture>
+      </a>
       <div id="document">
         <strong id="name" data-i="workspace">Workspace</strong
         ><small id="state" data-i="browser">Browser edition</small>

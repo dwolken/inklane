@@ -21,19 +21,25 @@ def build_workspace(output):
         files.append(path)
 
     for name in ("index.html", "editor.js", "editor.css", "language.js", "model.js", "pdf-source.js",
-                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "continuous.js", "register-offline.js", "manifest.webmanifest"):
+                 "documents.js", "drafts.js", "print.js", "rich-text.js", "shapes.js", "properties.js", "rich-text.css", "image-export.js", "continuous.js", "startup.js", "register-offline.js", "manifest.webmanifest"):
         stage(SOURCE / "editor" / name, name)
     for size in [180, 192, 512]:
         name = f"icons/app-{size}.png"
         stage(SOURCE / "editor" / name, name)
     stage(SOURCE.parent / "src/Inklane/Assets/inklane.svg", "../assets/inklane.svg")
+    stage(SOURCE.parent / "src/Inklane/Assets/inklane-app.svg", "../assets/inklane-app.svg")
+    for form in ("symbol", "lockup", "wordmark"):
+        for theme in ("light", "dark"):
+            name = f"inklane-{form}-{theme}.svg"
+            stage(SOURCE.parent / "src/Inklane/Assets" / name, "../assets/" + name)
     for lang in ("en", "de"):
         name = f"field-guide-{lang}.png"
         stage(SOURCE / "assets" / name, "../assets/" + name)
 
     page = editor / "index.html"
     html = page.read_text(encoding="utf-8").replace("</head>", """
-    <meta name="theme-color" content="#29253e">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1c21">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="icons/app-180.png">
     <script type="module" src="register-offline.js"></script>

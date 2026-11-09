@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
+import android.util.TypedValue;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebMessage;
@@ -43,6 +44,13 @@ public final class WorkspaceActivity extends Activity {
         getWindow().setDecorFitsSystemWindows(false);
         web = new WebView(this);
         FrameLayout host = new FrameLayout(this);
+        TypedValue launchBackground = new TypedValue();
+        if (getTheme().resolveAttribute(android.R.attr.windowBackground, launchBackground, true)
+                && launchBackground.type >= TypedValue.TYPE_FIRST_COLOR_INT
+                && launchBackground.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+            web.setBackgroundColor(launchBackground.data);
+            host.setBackgroundColor(launchBackground.data);
+        }
         host.addView(web, new FrameLayout.LayoutParams(-1, -1));
         setContentView(host);
         host.setOnApplyWindowInsetsListener((view, insets) -> {

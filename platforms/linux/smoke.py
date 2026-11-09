@@ -83,6 +83,14 @@ class Check(Inklane):
         try:
             view=self.view
             until(view,"typeof window.inklaneSaveCopy === 'function' && !!document.querySelector('#start')?.onclick","native shell")
+            assert evaluate(view,"globalThis.inklaneReducedMotion") == json.dumps(not Gtk.Settings.get_default().get_property("gtk-enable-animations"))
+            until(view,"document.querySelector('.brand img')?.complete && document.querySelector('.brand img')?.naturalWidth > 0","local brand asset")
+            settings=Gtk.Settings.get_default()
+            original_motion=settings.get_property("gtk-enable-animations")
+            settings.set_property("gtk-enable-animations",False)
+            until(view,"globalThis.inklaneReducedMotion === true && !document.querySelector('.brand').classList.contains('launch')","live native reduced-motion preference")
+            settings.set_property("gtk-enable-animations",original_motion)
+            until(view,"globalThis.inklaneReducedMotion === " + json.dumps(not original_motion),"restored native motion preference")
             xid=GdkX11.X11Window.get_xid(self.window.get_window())
             self.view.grab_focus()
             def open_file(path):

@@ -5,30 +5,30 @@
     system-ui,
     sans-serif;
   color-scheme: light dark;
-  --bg: #f7f6f3;
-  --paper: #fffeff;
-  --fg: #292535;
-  --muted: #625d70;
-  --line: #dad6df;
-  --accent: #503d78;
+  --bg: #f7f7f9;
+  --paper: #ffffff;
+  --fg: #17171c;
+  --muted: #60606c;
+  --line: #dedee5;
+  --accent: #5633ff;
   --on: #fff;
-  --pressed: #ebe7f6;
-  --desk: #e8e6e4;
+  --pressed: #eeebff;
+  --desk: #e9e9ee;
   --card: #fff9ea;
   --card-fg: #4b3415;
   --amber: #d7a653;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #201f27;
-    --paper: #292733;
-    --fg: #f6f3fa;
-    --muted: #c5bfce;
-    --line: #524c5d;
-    --accent: #c8b5fb;
-    --on: #25202e;
-    --pressed: #494058;
-    --desk: #17161c;
+    --bg: #151518;
+    --paper: #1c1c21;
+    --fg: #f7f7fa;
+    --muted: #bdbdc9;
+    --line: #44444f;
+    --accent: #9b87ff;
+    --on: #111114;
+    --pressed: #302943;
+    --desk: #101013;
   }
 }
 * {
@@ -111,16 +111,24 @@ header {
 }
 .brand {
   display: flex;
-  gap: 8px;
+  flex-shrink: 0;
   align-items: center;
   text-decoration: none;
   color: inherit;
-  font-weight: 680;
-  font-size: 18px;
-  letter-spacing: -0.035em;
 }
+.brand picture,
 .brand img {
   display: block;
+}
+.brand.launch img {
+  animation: brand-arrive 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+@keyframes brand-arrive {
+  from { transform: translateX(-3px); opacity: 0.85; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand.launch img { animation: none; }
 }
 #document {
   border-left: 1px solid var(--line);
@@ -302,7 +310,7 @@ h1 {
   pointer-events: visibleStroke;
 }
 .ink-selected {
-  filter: drop-shadow(0 0 2px white) drop-shadow(0 0 2px #61429a);
+  filter: drop-shadow(0 0 2px white) drop-shadow(0 0 2px #5633ff);
 }
 .placed,
 .marker {
@@ -331,7 +339,7 @@ h1 {
 }
 .placed.selected,
 .placed:focus-visible {
-  outline: 2px solid #8763bf;
+  outline: 2px solid #5633ff;
   outline-offset: 1px;
 }
 .marker {
@@ -509,9 +517,6 @@ dialog p {
     padding: 7px 8px;
     min-height: 52px;
   }
-  .brand span {
-    display: none;
-  }
   .brand img {
     width: 25px;
     height: 25px;
@@ -629,7 +634,7 @@ dialog p {
   pointer-events: auto;
 }
 .picture.selected {
-  outline: 2px solid #8763bf;
+  outline: 2px solid #5633ff;
 }
 #source {
   pointer-events: none;
@@ -744,13 +749,13 @@ summary {
 
 /* A document occupies the window. Its library sits at a comfortable reading width. */
 :root {
-  --wash: #f2f0f5;
-  --rail: #fbfafc;
+  --wash: #f1f1f5;
+  --rail: #fafafb;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --wash: #2b2834;
-    --rail: #24222c;
+    --wash: #24242b;
+    --rail: #19191e;
   }
 }
 body {
