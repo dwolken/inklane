@@ -150,7 +150,7 @@ public sealed partial class DocumentSurface
             var (a, b) = ShapeGeometry.Endpoints(_page, connector);
             connector.X = Math.Min(a.X, b.X); connector.Y = Math.Min(a.Y, b.Y);
             connector.Width = Math.Max(1, Math.Abs(a.X - b.X)); connector.Height = Math.Max(1, Math.Abs(a.Y - b.Y));
-            connector.FlipX = a.X > b.X; connector.FlipY = a.Y > b.Y;
+            connector.FlipX = a.X > b.X; connector.FlipY = a.Y > b.Y; connector.Rotation = 0;
             if (connector.StartId == item.Id) connector.StartId = null;
             if (connector.EndId == item.Id) connector.EndId = null;
         }

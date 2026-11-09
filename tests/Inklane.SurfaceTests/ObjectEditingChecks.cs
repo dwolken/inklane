@@ -109,7 +109,10 @@ internal static partial class Program
         var copy = page.Shapes.Last(); Assert(copy.StartId != first.Id && copy.EndId != second.Id, "Duplication retained original node IDs.");
         Assert(page.Shapes.Any(s => s.Id == copy.StartId && s.GroupId == copy.GroupId), "Duplicate group cannot resolve connector.");
         surface.DeleteSelection(); Equal(3, page.Shapes.Count);
-        Call(surface, "SelectObject", first.Id); Call(surface, "GroupSelection", true); Call(surface, "ClearObjectSelection"); Call(surface, "SelectObject", first.Id); surface.DeleteSelection();
+        Call(surface, "SelectObject", first.Id); Call(surface, "GroupSelection", true); Call(surface, "ClearObjectSelection"); Call(surface, "SelectObject", first.Id);
+        before=ShapeGeometry.Endpoints(page,connector);surface.DeleteSelection();
+        Near(before.Start.X,ShapeGeometry.Endpoints(page,connector).Start.X);Near(before.Start.Y,ShapeGeometry.Endpoints(page,connector).Start.Y);
+        Near(before.End.X,ShapeGeometry.Endpoints(page,connector).End.X);Near(before.End.Y,ShapeGeometry.Endpoints(page,connector).End.Y);
         Equal(null, connector.StartId); DocumentStore.Validate(new DocumentData { Pages = [page] });
         Save(surface.RenderPage(), "editable-diagram.png");
     }
