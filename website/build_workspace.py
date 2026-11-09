@@ -26,6 +26,9 @@ def build_workspace(output):
     for size in [180, 192, 512]:
         name = f"icons/app-{size}.png"
         stage(SOURCE / "editor" / name, name)
+    for size in [192, 512]:
+        name = f"icons/app-maskable-{size}.png"
+        stage(SOURCE / "editor" / name, name)
     stage(SOURCE.parent / "src/Inklane/Assets/inklane.svg", "../assets/inklane.svg")
     stage(SOURCE.parent / "src/Inklane/Assets/inklane-app.svg", "../assets/inklane-app.svg")
     for form in ("symbol", "lockup", "wordmark"):

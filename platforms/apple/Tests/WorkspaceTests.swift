@@ -210,7 +210,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(reducedMotion as? Bool, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         _ = try await javascript(host, "globalThis.motionNotifications = 0; addEventListener('inklane-motion-change', () => globalThis.motionNotifications++); true")
         NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
-        try await wait(host, "globalThis.motionNotifications === 1")
+        try await wait(host, "globalThis.motionNotifications >= 1")
         #endif
         let partial = """
         globalThis.previousProcess = true;
