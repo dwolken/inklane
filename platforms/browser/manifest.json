@@ -3,10 +3,39 @@
   "name": "Inklane Web Review",
   "version": "0.1.0",
   "description": "Place local remarks, text and ink directly on webpages. Export an editable review or a printable report.",
-  "permissions": ["activeTab", "scripting", "storage"],
-  "action": { "default_title": "Annotate this page with Inklane", "default_icon": "icon-192.png" },
-  "icons": { "192": "icon-192.png" },
-  "background": { "service_worker": "background.js" },
-  "options_ui": { "page": "help.html", "open_in_tab": true },
-  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "action": {
+    "default_title": "Annotate this page with Inklane",
+    "default_icon": "icon-192.png"
+  },
+  "icons": {
+    "192": "icon-192.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "help.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "editor.html",
+        "editor.js",
+        "editor.css"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ]
 }

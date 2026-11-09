@@ -1,3 +1,4 @@
+import './background.test.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -8,8 +9,8 @@ const { chromium } = require('playwright-core');
 const root = resolve('platforms/browser'), output = resolve(process.argv[2] || '.scratch/browser-tests');
 await mkdir(output, { recursive: true });
 const profile = await mkdtemp(join(output, 'profile-'));
-const fixture = `<!doctype html><html><meta charset="utf-8"><title>Field study review</title><style>body{margin:0;font:20px/1.6 system-ui;background:#fbfaf7;color:#333}main{width:760px;margin:150px 80px}h1{font-size:42px}p{padding:20px 30px;background:#fff;border:1px solid #dedbd3}#spacer{height:40px}footer{margin-top:1200px;padding:60px}button{padding:15px}</style><main><h1>Field study</h1><div id="spacer"></div><p id="target">The meadow supports native plants. Review the sampling method and identify the missing observations.</p><p id="second">Keep each explanation beside the material it describes.</p><button id="dynamic">Add context above</button></main><footer>End of the field notes</footer><script>document.querySelector('#dynamic').onclick=()=>document.querySelector('#spacer').style.height='190px';</script></html>`;
-const server = createServer((req, res) => res.writeHead(200, { 'Content-Type': 'text/html' }).end(fixture));
+const fixture = `<!doctype html><html><meta charset="utf-8"><title>Field study review</title><style>body{margin:0;font:20px/1.6 system-ui;background:#fbfaf7;color:#333}main{width:760px;margin:150px 80px}h1{font-size:42px}p{padding:20px 30px;background:#fff;border:1px solid #dedbd3}#spacer{height:40px}footer{margin-top:1200px;padding:60px}button{padding:15px}</style><main><h1>Field study</h1><div id="spacer"></div><p id="target">The meadow supports native plants. Review the sampling method and identify the missing observations.</p><p id="second">Keep each explanation beside the material it describes.</p><button id="dynamic">Add context above</button></main><footer>End of the field notes</footer><script>window.capturedKeys=[];document.addEventListener('keydown',e=>capturedKeys.push(e.key),true);document.querySelector('#dynamic').onclick=()=>document.querySelector('#spacer').style.height='190px';</script></html>`;
+const server = createServer((req, res) => res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Security-Policy': "frame-src 'none'" }).end(fixture));
 await new Promise(done => server.listen(0, '127.0.0.1', done));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const context = await chromium.launchPersistentContext(profile, { executablePath: process.env.BROWSER_PATH || undefined, channel: process.env.BROWSER_PATH ? undefined : 'chromium', headless: true, ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'], viewport: { width: 1280, height: 900 }, acceptDownloads: true, locale: 'en-US' });
@@ -35,7 +36,12 @@ try {
     shadowId = (await session.send('DOM.resolveNode', { backendNodeId: host.shadowRoots[0].backendNodeId })).object.objectId;
   }
   await connectShadow();
+  async function editorFrame() {
+    for(let i=0;i<100;i++){const frame=page.frames().find(f=>f.url().includes('/editor.html#'));if(frame && await frame.locator('body[data-ready=true]').count())return frame;await new Promise(r=>setTimeout(r,40));}
+    throw Error('Secure editor did not load');
+  }
   async function ui(selector, operation = 'rect') {
+    if(['#title','#body'].includes(selector))return(await editorFrame()).locator(selector).evaluate((e,op)=>{if(op==='focus'){e.focus();return true;}return op==='value'?e.value:e.textContent;},operation);
     const response = await session.send('Runtime.callFunctionOn', { objectId: shadowId, functionDeclaration: `function(selector,operation){const e=this.querySelector(selector);if(!e)return null;if(operation==='text')return e.textContent;if(operation==='value')return e.value;if(operation==='focus'){e.focus();return true;}const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}`, arguments: [{ value: selector }, { value: operation }], returnByValue: true });
     return response.result.value;
   }
@@ -52,7 +58,11 @@ try {
   assert.equal(saved.data.url, origin + '/study?chapter=2');
   const noteId = saved.data.objects[0].id;
   assert.equal(saved.data.objects[0].anchor.selector, '#target');
-  results.push('Actual Chromium action activation, closed shadow UI, long remark creation, local save, URL credential/tracking removal');
+  await click(`[data-object="${noteId}"]`);
+  await page.evaluate(()=>window.capturedKeys=[]);await ui('#body','focus');await page.keyboard.type('PRIVATEKEYTEST');
+  assert.deepEqual(await page.evaluate(()=>window.capturedKeys),[],'Page capture listener must not observe editor keystrokes');
+  await fill('#body',explanation);await waitSaved(d=>d.objects[0].text===explanation);await page.screenshot({path:join(output,'secure-editor.png')});await click('[data-action=finish]');
+  results.push('Actual Chromium action activation, extension-origin editor rejects page key logging, long remark creation, local save and URL cleanup');
   const before = await ui(`[data-object="${noteId}"]`);
   await page.evaluate(() => document.querySelector('#spacer').style.height = '190px');
   await new Promise(r => setTimeout(r, 150));
@@ -127,6 +137,22 @@ try {
   }, { url: page.url(), copy: storedCopy });
   assert.equal(races.filter(x => x.conflict).length, 1); assert.equal(races.filter(x => x.revision).length, 1);
   results.push('Concurrent saves serialize; stale revision is rejected without overwriting');
+  const originalReview=await stored();let downloads=0;const onDownload=()=>downloads++;page.on('download',onDownload);
+  await page.evaluate(()=>{history.pushState({},'', '/different-document');document.querySelector('h1').textContent='A different document';});
+  await click('summary');await click('[data-action=visible]');await new Promise(r=>setTimeout(r,500));assert.equal(downloads,0);assert((await ui('#status','text')).includes('address changed'));
+  const refused=await worker.evaluate(async({url,copy})=>{const tab=(await chrome.tabs.query({})).find(t=>t.url===url);return(await chrome.scripting.executeScript({target:{tabId:tab.id},func:copy=>chrome.runtime.sendMessage({target:'inklane-web',command:'save',data:copy.data,revision:copy.revision}),args:[copy]}))[0].result;},{url:page.url(),copy:originalReview});
+  assert.equal(refused.error,'changed');await click('[data-action=reload]');for(let i=0;i<50 && await ui('#count','text');i++)await new Promise(r=>setTimeout(r,30));assert.equal(await ui('#count','text'),'');page.off('download',onDownload);
+  results.push('Same-origin SPA navigation rejects wrong-source capture and save; explicit reopen loads current review');
+  await page.goto(origin+'/quota');
+  const quota=await worker.evaluate(async url=>{const data=InklaneWeb.create(url,'Quota review'),obj=InklaneWeb.object('ink',{selector:'',quote:'',tag:'',rx:0,ry:0,x:300,y:300});obj.points=Array.from({length:60000},(_,i)=>({x:i%2?100:0,y:0,pressure:0}));data.objects=[obj];InklaneWeb.validate(data);const key=await InklaneWeb.keyFor(url);await chrome.storage.local.set({[key]:{data,revision:1}});return{key,data,revision:1};},page.url());
+  await activate();await connectShadow();await new Promise(r=>setTimeout(r,100));await click('[data-tool=select]');await page.mouse.click(350,300);await click('[data-action=duplicate]');
+  assert((await ui('#status','text')).includes('full'));const remaining=await worker.evaluate(async key=>(await chrome.storage.local.get(key))[key],quota.key);assert.equal(remaining.data.objects.length,1);assert.equal(remaining.revision,1);
+  results.push('Duplicate preflights total point and byte limits without changing valid saved work');
+  const help=await context.newPage();await help.goto('chrome-extension://'+id+'/help.html');help.once('dialog',d=>d.accept());await help.locator('.review').filter({hasText:'Quota review'}).getByRole('button',{name:'Delete',exact:true}).click();
+  await help.waitForFunction(()=>!document.querySelector('#saved').textContent.includes('Quota review'));
+  const tombstone=await worker.evaluate(async key=>(await chrome.storage.local.get(key))[key],quota.key);assert.equal(tombstone.deleted,true);assert.equal(tombstone.revision,2);
+  const stale=await worker.evaluate(async({url,copy})=>{const tab=(await chrome.tabs.query({})).find(t=>t.url===url);return(await chrome.scripting.executeScript({target:{tabId:tab.id},func:copy=>chrome.runtime.sendMessage({target:'inklane-web',command:'save',data:copy.data,revision:copy.revision}),args:[copy]}))[0].result;},{url:page.url(),copy:quota});assert.equal(stale.conflict,true);
+  results.push('Help deletion keeps a revision tombstone and rejects stale open-tab recreation');
   assert.deepEqual(errors, []);
   await writeFile(join(output, 'results.json'), JSON.stringify({ browser: await context.browser().version(), results, errors }, null, 2));
   console.log(JSON.stringify({ results, errors }, null, 2));

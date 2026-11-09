@@ -24,7 +24,7 @@ async function list() {
       const link = document.createElement('a'); link.href = data.url; link.textContent = data.title || data.url; link.target = '_blank'; link.rel = 'noopener';
       const count = document.createElement('small'); count.textContent = `${data.objects.length} ${text.count}`;
       const remove = document.createElement('button'); remove.textContent = text.remove;
-      remove.addEventListener('click', async () => { if (confirm(text.confirm)) { await api.storage.local.remove(key); list(); } });
+      remove.addEventListener('click', async () => { if (confirm(text.confirm)) { const result=await api.runtime.sendMessage({target:'inklane-web',command:'delete',key,revision:value.revision});if(result?.conflict)alert(de?'Die Anmerkungen wurden inzwischen geändert. Prüfe den aktuellen Stand vor dem Löschen.':'The review changed. Check the current copy before deleting.');else if(!result?.ok)alert(de?'Löschen fehlgeschlagen. Die gespeicherte Kopie bleibt erhalten.':'Delete failed. The saved copy was preserved.');list(); } });
       row.append(link, count, remove); saved.append(row);
     } catch { /* Preserve unknown data. It is never rendered as active markup. */ }
   }

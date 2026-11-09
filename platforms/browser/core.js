@@ -8,7 +8,8 @@
     const url = new URL(value);
     if (!['http:', 'https:'].includes(url.protocol)) throw Error('page');
     url.username = ''; url.password = ''; url.hash = '';
-    for (const key of [...url.searchParams.keys()]) {
+    const keys=[];url.searchParams.forEach((_,key)=>keys.push(key));
+    for (const key of keys) {
       if (/^(utm_|fbclid$|gclid$|msclkid$|token$|access_token$|auth$|authorization$|api_?key$|password$|passwd$|session|code$|sig(nature)?$)/i.test(key)) url.searchParams.delete(key);
     }
     url.searchParams.sort();
@@ -77,7 +78,11 @@
     let excluded = 0;
     for (const obj of record.objects) {
       const p = positions[obj.id];
-      const visible = p && (obj.type === 'ink' ? obj.points.some(pt => p.x + pt.x >= 0 && p.x + pt.x <= viewportWidth && p.y + pt.y >= 0 && p.y + pt.y <= viewportHeight) : p.x >= 0 && p.y >= 0 && p.x < viewportWidth && p.y < viewportHeight);
+      const inside=pt=>pt.x>=0 && pt.y>=0 && pt.x<=viewportWidth && pt.y<=viewportHeight;
+      function crosses(a,b){let start=0,end=1;const dx=b.x-a.x,dy=b.y-a.y;for(const [direction,distance] of [[-dx,a.x],[dx,viewportWidth-a.x],[-dy,a.y],[dy,viewportHeight-a.y]]){if(direction===0){if(distance<0)return false;continue;}const t=distance/direction;if(direction<0)start=Math.max(start,t);else end=Math.min(end,t);if(start>end)return false;}return true;}
+      const visible = p && (obj.type === 'ink' ? obj.points.some((pt,i)=>{const at={x:p.x+pt.x,y:p.y+pt.y};return inside(at) || i>0 && crosses({x:p.x+obj.points[i-1].x,y:p.y+obj.points[i-1].y},at);})
+        : obj.type === 'text' ? p.x<viewportWidth && p.y<viewportHeight && p.x+obj.width>0 && p.y+obj.height>0
+        : p.x>-14 && p.y>-14 && p.x<viewportWidth+14 && p.y<viewportHeight+14);
       if (!visible) { excluded++; continue; }
       if (obj.type === 'ink') ink.push({ id: obj.id, color: obj.color, width: obj.strokeWidth * sx, points: obj.points.map(pt => ({ x: (p.x + pt.x) * sx, y: (p.y + pt.y) * sy, pressure: pt.pressure })) });
       else items.push({ id: obj.id, title: obj.title, text: obj.text, x: p.x * sx, y: p.y * sy, width: obj.width * sx, height: obj.height * sy, fontSize: obj.fontSize * sx, color: obj.color, isNote: obj.type === 'note', isExpanded: false });
