@@ -60,7 +60,7 @@ try {
     do {
         if ($launch.HasExited) { throw 'Inklane closed during startup from Start.' }
         $launch.Refresh()
-        if ($launch.Path -ieq $exe -and $launch.MainWindowHandle) {
+        if ($launch.Path -ieq $exe -and $launch.MainWindowHandle -ne [IntPtr]::Zero) {
             Write-Host "Installed and launched Inklane $version from $exe"
             return
         }
